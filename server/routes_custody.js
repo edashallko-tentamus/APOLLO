@@ -25,10 +25,14 @@ module.exports = function registerCustody({ route, signedTx, tx, checkSite, hasP
   route('GET', '/api/orders/:id/custody', async (c) => {
     const o = await orderSite(c, c.params.id);
     const doc = await c.db.one('SELECT * FROM custody_document WHERE lab_order_id = $1', [o.id]);
-    const events = doc ? await c.db.rows('SELECT id, event_no, kind, event_at, delivered_by, tracking_no, temperature::text AS temperature, condition, seals, note, by_name, sample_codes, sample_count, document_id, created_at FROM custody_event_view WHERE custody_document_id = $1 ORDER BY event_no', [doc.id]) : [];
+    const events = doc ? await c.db.rows('SELECT id, event_no, kind, event_at, delivered_by, tracking_no, temperature::text AS temperature, thermometer_code, thermometer_name, condition, seals, note, by_name, sample_codes, sample_count, document_id, created_at FROM custody_event_view WHERE custody_document_id = $1 ORDER BY event_no', [doc.id]) : [];
     const me = await c.db.one('SELECT title, signature_document_id IS NOT NULL AS has_sig FROM app_user WHERE id = $1', [c.userId]);
     const lab = await c.db.one('SELECT custody_signature_required FROM lab_site WHERE id = $1', [o.site_id]);
-    return { document: doc, events, can_receive: await hasPermission(c, 'orders.edit'), my_signature: !!(me && me.has_sig && me.title), required: !!(lab && lab.custody_signature_required) };
+    // the lab's thermometers that may be used (057): available and in calibration; those named or typed as thermometers first
+    const thermometers = await c.db.rows(`SELECT id, equipment_code, equipment_name, type_name FROM equipment_view
+      WHERE site_id = $1 AND availability = 'Available' AND calibration_status <> 'Deficient'
+      ORDER BY (type_name ILIKE '%thermometer%' OR equipment_name ILIKE '%thermometer%') DESC, equipment_code`, [o.site_id]);
+    return { document: doc, events, thermometers, can_receive: await hasPermission(c, 'orders.edit'), my_signature: !!(me && me.has_sig && me.title), required: !!(lab && lab.custody_signature_required) };
   });
   // the chain of custody as it stands now (printed to travel with the samples)
   route('GET', '/api/orders/:id/custody.pdf', async (c) => {
@@ -47,8 +51,10 @@ module.exports = function registerCustody({ route, signedTx, tx, checkSite, hasP
     const temp = b.temperature === '' || b.temperature === null || b.temperature === undefined ? null : Number(b.temperature);
     if (temp !== null && !Number.isFinite(temp)) throw new Error('The temperature is a number (°C)');
     return signedTx({ ...c, reason: null }, { meaning: 'Received by', action: `Received ${ids.length} sample(s) of ${o.order_code} and signed the chain of custody`, module: 'Intake' }, async (t) => {
-      const ev = await t.one('SELECT receive_samples($1, $2::uuid[], $3::timestamptz, $4, $5, $6, $7, $8, $9) AS id',
-        [o.id, ids, b.received_at || null, b.delivered_by || null, b.tracking_no || null, temp, b.condition || null, b.seals || null, b.note || null]);
+      // the thermometer (057): from the register, required with a temperature
+      const ev = await t.one('SELECT receive_samples($1, $2::uuid[], $3::timestamptz, $4, $5, $6, $7, $8, $9, $10::uuid) AS id',
+        [o.id, ids, b.received_at || null, b.delivered_by || null, b.tracking_no || null, temp, b.condition || null, b.seals || null, b.note || null,
+          isUuid(b.thermometer_id) ? b.thermometer_id : null]);
       const d = await CUS.data(t, o.id, { verifyBase: base() });
       const p = await CUS.pdf(d);
       const f = await t.one(`INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES ($1, 'application/pdf', $2, $3, decode($4, 'base64')) RETURNING id`,

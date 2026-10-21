@@ -37,7 +37,7 @@ css.textContent = `
 .tbmenu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 7px 14px; font: inherit; cursor: pointer; }
 .tbmenu button:hover { background: #EEF6F1; }
 table.grid td.tbpass { color: var(--green-700); font-weight: 600; } table.grid td.tbfail { color: var(--err-ink); font-weight: 700; }
-table.grid td.tbwait { color: var(--muted); } table.grid tr.tbsup td { color: #9AA3AC; text-decoration: line-through; }
+table.grid td.tbwait { color: var(--muted); } table.grid tr.tbsup td { color: #7A848E; background: #F4F5F6; font-style: italic; }
 table.grid tr.tbrerun td { background: #FBFAF2; }
 .rvbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; background: #EEF4FB; border: 1px solid #C9DAF0; border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 13.5px; }
 .rvbar.ok { background: var(--green-50); border-color: #BFE6D6; }
@@ -310,8 +310,23 @@ const lastReadingStep = (d) => [...d.steps].filter((x) => x.step_type === 'Data 
 // Values recorded at a step, by entry / analyte / reading
 const valueOf = (d, run, entry, analyte, rn) => d.values.find((v) => v.step_run_id === run && v.entry_id === entry && (v.analyte_id || null) === (analyte || null) && Number(v.run_no) === Number(rn));
 const runsOf = (d, run, entry) => Number(d.run_counts.find((x) => x.step_run_id === run && x.entry_id === entry)?.runs || 1);
-const active = (d) => d.entries.filter((e) => e.status === 'Active' && !e.daily_of_entry_id);   // a linked daily control's data is in its own batch
-const benchEntries = (d) => active(d).filter((e) => e.entry_type === 'Sample' || e.qc_class === 'Prep');
+// a linked daily control's data is in its own batch. past: also the re-prepped entries (0.28.1, Alex: kept in the batch
+// with their data, read only, nothing needed from them; the server leaves out entries removed before the batch started)
+const active = (d, past = false) => d.entries.filter((e) => (e.status === 'Active' || (past && e.status === 'Superseded')) && !e.daily_of_entry_id);
+const benchEntries = (d, past = false) => active(d, past).filter((e) => e.entry_type === 'Sample' || e.qc_class === 'Prep');
+const isPast = (e) => e.status === 'Superseded';
+// where a re-prepped entry went, and where a re-prep came from
+function reprepNote(e) {
+  if (isPast(e)) {
+    const why = e.reprep_to_reason || String(e.superseded_reason || '').replace(/^Re-prep: /, '');
+    const where = e.reprep_to_batch_code ? `now in ${e.reprep_to_batch_code}` : e.reprep_to_status === 'Cancelled' ? 're-prep cancelled' : 'waiting in the backlog';
+    return { text: `Re-prepped${why ? ' (' + why + ')' : ''}: ${where}`, href: e.reprep_to_batch_id ? '#/testing/batches/' + e.reprep_to_batch_id : null };
+  }
+  if (e.reprep_of_batch_code) return { text: `Re-prep of ${e.reprep_of_label || 'a sample'} in ${e.reprep_of_batch_code}`, href: '#/testing/batches/' + e.reprep_of_batch_id };
+  return null;
+}
+const reprepCol = { field: 'reprep_note', title: 'Re-prep', type: 'readonly', width: 300, help: 'A re-prepped sample stays here with what was recorded, read only; nothing more is needed from it',
+  compute: (r) => reprepNote(r)?.text || '', href: (r) => reprepNote(r)?.href || null, cellClass: (r) => (isPast(r) ? 'tbmuted' : '') };
 // The sample's product category drives the bench (migration 039): its row of a step's "per product category" setting
 const catSetting = (c, e) => ((e && e.product_category_id && Array.isArray(c.by_category)) ? c.by_category.find((x) => x.category_id === e.product_category_id) || null : null);
 const isWeighed = (c, e) => (e.entry_type === 'Sample' ? !(c.target_mode === 'By product category' && catSetting(c, e)?.not_weighed) : !c.qc_not_weighed);
@@ -417,14 +432,17 @@ function stepPanel(el, ctx, s) {
   // loads its own data: a failure (e.g. the session ended meanwhile) shows in the panel, not as a stray page error
   else if (T === 'QC Review') reviewPanel(body, ctx, s).catch((e) => { body.innerHTML = `<div class="card err">${esc(e.message)}</div>`; });
   else body.innerHTML = `<div class="tbnote">${esc(T)} steps are done at the bench from WD-4 (micro).</div>`;
-  const selected = () => (grid ? [...new Set(grid.selectedRows().map((r) => r.entry_id).filter(Boolean))] : []);
+  // re-prepped entries (shown read only since 0.28.1) take no more work
+  const selected = () => (grid ? [...new Set(grid.selectedRows().filter((r) => !isPast(r)).map((r) => r.entry_id).filter(Boolean))] : []);
+  // only re-prepped rows selected: say so (an empty selection would otherwise mean the whole batch)
+  const onlyPast = () => { const rs = grid ? grid.selectedRows() : []; if (rs.length && rs.every(isPast)) { toast('The selected samples were re-prepped: they take no more work in this batch.', 'err'); return true; } return false; };
   const handlers = {
-    eq: () => addEquipment(ctx, s, selected(), curRun),
-    mat: () => addMaterial(ctx, s, selected()),
+    eq: () => onlyPast() || addEquipment(ctx, s, selected(), curRun),
+    mat: () => onlyPast() || addMaterial(ctx, s, selected()),
     file: () => attachFile(ctx, s, curRun),
-    rean: () => reanalysis(ctx, s, selected()),
+    rean: () => onlyPast() || reanalysis(ctx, s, selected()),
     pick: () => pickReading(ctx, s, grid ? grid.selectedRows()[0] : null),
-    reprep: () => reprep(ctx, selected()),
+    reprep: () => onlyPast() || reprep(ctx, selected()),
     complete: async () => {
       // anything typed and not yet autosaved is saved first (0.27.0)
       for (const g of ctx.benchGrids || []) { if (!(await g.flush())) { toast('Some values are not saved yet (see the note above the grid): save them before completing the step.', 'err'); return; } }
@@ -493,10 +511,15 @@ const markHad = (had, ch) => {
   return true;
 };
 function benchGrid(host, ctx, s, { rows, columns, canWork, toValues, toolbar }) {
+  // re-prepped entries (0.28.1) are shown read only, with where they went in a last column
+  rows.forEach((r) => { r.sup = isPast(r); });
+  if (rows.some((r) => r.sup)) {
+    columns = [...columns.map((c) => (c.type === 'readonly' || c.type === 'link' ? c : { ...c, editable: (r) => !r.sup && (c.editable ? c.editable(r) : true) })), reprepCol];
+  }
   const orig = new Map(rows.map((r) => [r.key, r]));
   const g = editableGrid({
     el: host, rows, columns, readOnly: !canWork, needReason: false, toolbar, emptyText: 'Nothing to record here.',
-    rowClass: (r) => (r.run_no > 1 ? 'tbrerun' : ''),
+    rowClass: (r) => (r.sup ? 'tbsup' : r.run_no > 1 ? 'tbrerun' : ''),
     // saved as it is typed (0.27.0); a correction still asks for its reason first
     autosave: true,
     autosaved: (changes) => { for (const ch of changes) { const o = orig.get(ch.key); if (o) orig.set(ch.key, { ...o, ...ch, had: markHad(o.had, ch) }); } },
@@ -535,8 +558,8 @@ function batchingGrid(host, ctx, s, canWork) {
       { field: 'rush_status', title: 'Rush', type: 'readonly', width: 95, format: (v) => (v && v !== 'None' ? v : '') },
       { field: 'parent_entry_id', title: 'Spiked sample', type: 'select', width: 160, help: 'The sample a matrix spike (and its duplicate) is made from',
         options: samples.map((x) => ({ value: x.id, label: x.label })), editable: (r) => ['Matrix Spike', 'Matrix Spike Duplicate'].includes(r.qc_type) },
-      { field: 'status', title: 'Status', type: 'readonly', width: 200, compute: (r) => (r.status === 'Superseded' ? r.superseded_reason || 'Superseded' : r.daily_batch_code ? `The day's control, recorded in ${r.daily_batch_code}` : ''),
-        href: (r) => (r.daily_batch_id && r.status !== 'Superseded' ? '#/testing/batches/' + r.daily_batch_id : null) },
+      { field: 'status', title: 'Status', type: 'readonly', width: 300, compute: (r) => (reprepNote(r)?.text || (r.status === 'Superseded' ? r.superseded_reason || 'Superseded' : r.daily_batch_code ? `The day's control, recorded in ${r.daily_batch_code}` : '')),
+        href: (r) => (reprepNote(r)?.href || (r.daily_batch_id && r.status !== 'Superseded' ? '#/testing/batches/' + r.daily_batch_id : null)) },
     ],
     save: async (changes) => {
       for (const ch of changes) await api(`/testing/entries/${ch.key}/parent`, { method: 'POST', body: { parent_entry_id: ch.parent_entry_id || null } });
@@ -555,7 +578,7 @@ function weighingGrid(host, ctx, s, canWork) {
   // replicate weighings (migration 033): one column per weighing, and their average (the step's weight)
   const reps = Math.max(1, Math.min(10, Number(c.replicates) || 1));
   if (reps > 1) return replicateWeighingGrid(host, ctx, s, canWork, reps, unit);
-  const rows = benchEntries(d).map((e) => {
+  const rows = benchEntries(d, true).map((e) => {
     const v = valueOf(d, s.id, e.id, null, 1);
     return { key: e.id, entry_id: e.id, ...e, kind: kindOf(e), weight: v ? (v.value_num === null ? null : Number(v.value_num)) : null, had: !!(v && v.value_num !== null), entered_by: v?.entered_by || '',
       aliquot: v && v.logbook_entry_id ? (v.data || {}).aliquot || 'aliquot' : '', aliquot_id: v ? v.logbook_entry_id : null,
@@ -589,7 +612,7 @@ function weighingGrid(host, ctx, s, canWork) {
 function replicateWeighingGrid(host, ctx, s, canWork, reps, unit) {
   const { d } = ctx;
   const ks = Array.from({ length: reps }, (_, i) => i + 1);
-  const rows = benchEntries(d).map((e) => {
+  const rows = benchEntries(d, true).map((e) => {
     const r = { key: e.id, entry_id: e.id, ...e, kind: kindOf(e), had: {} };
     for (const k of ks) { const v = valueOf(d, s.id, e.id, null, k); r['w' + k] = v && v.value_num !== null ? Number(v.value_num) : null; r.had[k] = !!(v && v.value_num !== null); }
     return r;
@@ -631,7 +654,7 @@ function dilutionGrid(host, ctx, s, canWork) {
   const { d } = ctx; const c = s.config || {}; const n = Math.min(Math.max(Number(c.fields_per_entry) || 1, 1), 4);
   const factor = (r) => { let f = null; for (let i = 1; i <= n; i++) { const a = Number(r['a' + i]); if (r['a' + i] !== null && r['a' + i] !== undefined && r['a' + i] !== '' && a > 0) f = (f || 1) * (a + (Number(r['d' + i]) || 0)) / a; } return f; };
   const finalVol = (r) => { let v = null; for (let i = 1; i <= n; i++) { const a = Number(r['a' + i]); if (r['a' + i] !== null && r['a' + i] !== undefined && r['a' + i] !== '' && a > 0) v = a + (Number(r['d' + i]) || 0); } return v; };
-  const rows = benchEntries(d).map((e) => {
+  const rows = benchEntries(d, true).map((e) => {
     const v = valueOf(d, s.id, e.id, null, 1); const f = v?.data?.fields || []; const r = { key: e.id, entry_id: e.id, ...e, kind: kindOf(e), had: !!(v && f.length), entered_by: v?.entered_by || '', expected: dilutionExpected(c, e) };
     for (let i = 1; i <= n; i++) { r['a' + i] = f[i - 1]?.aliquot ?? null; r['d' + i] = f[i - 1]?.diluent ?? null; }
     return r;
@@ -661,7 +684,7 @@ function dilutionGrid(host, ctx, s, canWork) {
   host.addEventListener('click', (ev) => {
     if (ev.target.id !== 'dl_std') return;
     const ai = g.cols.findIndex((x) => x.field === 'a1'); const di = g.cols.findIndex((x) => x.field === 'd1');
-    g.rows.forEach((r, ri) => { if ((r.a1 === null || r.a1 === undefined || r.a1 === '') && r.expected) { g.setCell(ri, ai, String(r.expected.aliquot)); g.setCell(ri, di, String(r.expected.diluent)); } });
+    g.rows.forEach((r, ri) => { if (!r.sup && (r.a1 === null || r.a1 === undefined || r.a1 === '') && r.expected) { g.setCell(ri, ai, String(r.expected.aliquot)); g.setCell(ri, di, String(r.expected.diluent)); } });
     g.render(); g._changed();
   });
   return g;
@@ -689,6 +712,7 @@ async function pickReading(ctx, s, row) {
   if (!row) { toast('Select the reading to report first (click its row).', 'err'); return; }
   const e = d.entries.find((x) => x.id === row.entry_id);
   if (!e || e.entry_type !== 'Sample') { toast('Pick a sample\'s reading (QC readings are judged, not picked).', 'err'); return; }
+  if (isPast(e)) { toast(`${e.label} was re-prepped: its readings are kept here but cannot be reported.`, 'err'); return; }
   const f = readingDilution(d, s, row);
   const m = await modal({ title: `Report ${rlabel(e.label, row.run_no)}`, okText: 'Pick it',
     intro: `Reading ${row.run_no} of ${esc(e.label)}${f ? `, made at ×${esc(nfmt(+f.toPrecision(6)))}` : ''}. QC Review reports it unless the reviewer chooses otherwise; your note goes with it.`,
@@ -704,7 +728,7 @@ function readingGrid(host, ctx, s, canWork, curRun = 1) {
   const ids = c.analyte_ids && c.analyte_ids.length ? c.analyte_ids : null;
   const ans = d.analytes.filter((a) => !ids || ids.includes(a.analyte_id));
   const rows = [];
-  for (const e of active(d)) {
+  for (const e of active(d, true)) {
     const runs = runsOf(d, s.id, e.id);
     for (let rn = 1; rn <= runs; rn++) {
       if (runOfReading(d, s.id, e.id, rn) !== curRun) continue;
@@ -750,7 +774,7 @@ function readingGrid(host, ctx, s, canWork, curRun = 1) {
 // ---------------------------------------------------------------- micro (WD-4)
 function platingGrid(host, ctx, s, canWork) {
   const { d } = ctx; const c = s.config || {};
-  const rows = benchEntries(d).map((e) => {
+  const rows = benchEntries(d, true).map((e) => {
     const v = valueOf(d, s.id, e.id, null, 1);
     return { key: e.id, entry_id: e.id, ...e, kind: kindOf(e), plates: v && v.value_num !== null ? Number(v.value_num) : null, levels: v?.data?.levels || null, had: !!(v && v.value_num !== null), entered_by: v?.entered_by || '' };
   });
@@ -773,7 +797,7 @@ function platingGrid(host, ctx, s, canWork) {
   host.addEventListener('click', (ev) => {
     if (ev.target.id !== 'pl_std') return;
     const pi = g.cols.findIndex((x) => x.field === 'plates');
-    g.rows.forEach((r, ri) => { if (r.plates === null || r.plates === undefined || r.plates === '') g.setCell(ri, pi, String(c.plates_per_entry || 1)); });
+    g.rows.forEach((r, ri) => { if (!r.sup && (r.plates === null || r.plates === undefined || r.plates === '')) g.setCell(ri, pi, String(c.plates_per_entry || 1)); });
     g.render(); g._changed();
   });
   return g;
@@ -782,26 +806,30 @@ function platingGrid(host, ctx, s, canWork) {
 function incubationPanel(host, ctx, s, canWork) {
   const { d, opts } = ctx;
   const loads = d.loads.filter((l) => l.step_run_id === s.id);
-  const ents = benchEntries(d);
+  const ents = benchEntries(d, true);
   const label = (id) => d.entries.find((e) => e.id === id)?.label || '';
   const loadsOf = (id) => loads.filter((l) => !l.entry_ids || l.entry_ids.includes(id));
   host.innerHTML = `<h3 style="margin:4px 0 6px">Entries</h3><div id="inc_e"></div><h3 style="margin:16px 0 6px">Incubator loads</h3><div id="inc_l"></div>`;
   const cfg = s.config || {}; const unitW = cfg.duration_unit === 'days' ? 'd' : 'h';
   const eg = new Grid(host.querySelector('#inc_e'), { readOnly: true, keyField: 'key', rows: ents.map((e) => ({ ...e, key: e.id, entry_id: e.id, kind: kindOf(e), win: incubationWindowOf(cfg, e) })),
     toolbar: canWork ? '<button class="mini" data-inc="new">Put in an incubator (the selected rows, or all)</button>' : '',
+    rowClass: (r) => (isPast(r) ? 'tbsup' : ''),
     columns: [
       { field: 'position', title: '#', type: 'readonly', width: 40 },
       { field: 'label', title: 'Entry', type: 'link', width: 170, href: sampleHref },
       { field: 'kind', title: 'Type', type: 'readonly', width: 160 },
       { field: 'window', title: 'Window', type: 'readonly', width: 170, help: 'The acceptable time: the sample\'s product category (its matrix) when the step sets one, else the step\'s',
         compute: (r) => (r.win.min === null || r.win.min === undefined ? '' : `${nfmt(r.win.min)} to ${nfmt(r.win.max)} ${unitW}${r.win.from ? ' (' + r.win.from + ')' : ''}`) },
-      { field: 'load', title: 'Load', type: 'readonly', width: 380, compute: (r) => loadsOf(r.entry_id).map((l) => `${l.equipment_code} in ${loc(l.time_in)}${l.time_out ? ', out ' + loc(l.time_out) : ''}`).join('; ') || 'Not in an incubator yet',
+      { field: 'load', title: 'Load', type: 'readonly', width: 380, compute: (r) => loadsOf(r.entry_id).map((l) => `${l.equipment_code} in ${loc(l.time_in)}${l.time_out ? ', out ' + loc(l.time_out) : ''}`).join('; ') || (isPast(r) ? '' : 'Not in an incubator yet'),
         links: (r) => loadsOf(r.entry_id).map((l) => eqLink(l, `in ${loc(l.time_in)}${l.time_out ? ', out ' + loc(l.time_out) : ''}`)),
-        cellClass: (r) => (loadsOf(r.entry_id).length ? '' : 'flag') },
+        cellClass: (r) => (loadsOf(r.entry_id).length || isPast(r) ? '' : 'flag') },
+      ...(ents.some(isPast) ? [reprepCol] : []),
     ] });
   host.addEventListener('click', async (ev) => {
     if (ev.target.dataset.inc !== 'new') return;
-    const ids = [...new Set(eg.selectedRows().map((r) => r.entry_id))];
+    const sel = eg.selectedRows();
+    if (sel.length && sel.every(isPast)) { toast('Those samples were re-prepped: they go into an incubator with their new batch.', 'err'); return; }
+    const ids = [...new Set(sel.filter((r) => !isPast(r)).map((r) => r.entry_id))];
     const types = (s.equipment_types || []).map((t) => t.equipment_type_id);
     const list = opts.equipment.filter((e) => !types.length || types.includes(e.equipment_type_id));
     if (!list.length) { toast('This lab has no incubator of the type this step uses.', 'err'); return; }
@@ -959,6 +987,8 @@ async function reviewPanel(host, ctx, s) {
     ${can ? `<div class="tbacts" style="margin:6px 0 12px"><button class="btn primary" id="rv_ok" ${r.problems.length ? 'disabled title="Resolve the items listed first"' : ''}>Approve batch</button><button class="btn" id="rv_ret">Return to the analyst</button></div>` : ''}
     ${(d.invalid_readings || []).length ? `<div class="tbnote"><b>Readings that are not results</b> (never reported; each needs a valid reading in a later analytical run):
       ${d.invalid_readings.map((x) => `${esc(x.label)} ${esc(x.analyte_name)}: ${esc(x.value_text)} (run ${x.analytical_run})${x.replaced ? ', read again' : ', <b>not read again yet</b>'}`).join(' · ')}</div>` : ''}
+    ${d.entries.some(isPast) ? `<div class="tbnote" id="rv_repreps"><b>Re-prepped samples</b> (kept in this batch with what was recorded; their results are not reported from it):
+      ${d.entries.filter(isPast).map((e) => { const n = reprepNote(e); return `${esc(e.label)}: ${n.href ? link(n.href, n.text) : esc(n.text)}${e.reprep_by_name ? ` (asked by ${esc(e.reprep_by_name)} ${esc(dt(e.reprep_at))})` : ''}`; }).join(' · ')}</div>` : ''}
     ${(r.timepoints || []).length ? `<div class="tbnote"><b>Timepoint reviews</b> (released on their own as preliminary results; carried into the final results unchanged):
       ${r.timepoints.map((x) => `${link(`#/testing/batches/${b.id}?step=${x.step_key}`, x.step_name)}: ${x.released ? `released by ${esc(x.released_by_name || '')} ${esc(dt(x.released_at))}` : x.ready ? 'ready for review' : 'waiting for its steps'}`).join(' · ')}</div>` : ''}
     ${marks.length && b.status !== 'Cancelled' ? `<h3 style="margin:14px 0 6px">Steps ${b.status === 'Awaiting Review' ? `<small class="tbmuted">${unmarked ? `${unmarked} of ${marks.length} still to approve: open each step, check it, then approve it` : 'all approved'}</small>` : ''}</h3><div id="rv_steps"></div>` : ''}
@@ -1289,7 +1319,7 @@ async function markStep(ctx, stepRunId, undo) {
 }
 
 // ---------------------------------------------------------------- actions
-function contextMenu(x, y, items) {
+export function contextMenu(x, y, items) {
   document.querySelectorAll('.tbmenu').forEach((m) => m.remove());
   const m = document.createElement('div'); m.className = 'tbmenu';
   m.innerHTML = items.map(([l], i) => `<button data-i="${i}">${esc(l)}</button>`).join('');

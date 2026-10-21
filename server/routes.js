@@ -123,7 +123,7 @@ route('GET', '/api/clients/:id', async (c) => {
   const children = await c.db.rows('SELECT id, client_code, legal_name, account_status FROM client WHERE parent_client_id = $1', [c.params.id]);
   const orderable = await c.db.rows(`SELECT ol.*, pv.project_id, pv.id AS project_version_id, pv.version_no FROM orderable_lines($1) ol
     JOIN quoted_test_configuration q ON q.id = ol.line_id JOIN project_version pv ON pv.id = q.project_version_id ORDER BY ol.project_code, ol.test_name`, [c.params.id]);
-  const licenses = await c.db.rows(`SELECT * FROM client_license_view WHERE client_id = $1 ORDER BY (status = 'Retired'), license_type, expires_on DESC NULLS FIRST`, [c.params.id]);
+  const licenses = labLicenses(await c.db.rows(`SELECT v.*, ${LIC_ON('$2')} FROM client_license_view v WHERE client_id = $1 ORDER BY (status = 'Retired'), license_type, expires_on DESC NULLS FIRST`, [c.params.id, labOf(c)]));
   return { client, contacts, projects, children, orderable, licenses, can_edit: await hasPermission(c, 'master.clients') };
 });
 
@@ -169,8 +169,13 @@ route('GET', '/api/licenses/:id/file', async (c) => {
 });
 // every client's licenses, for the expiry list (Intake > Client licenses)
 route('GET', '/api/licenses', async (c) => ({
-  rows: await c.db.rows(`SELECT * FROM client_license_view WHERE status = 'Active' ORDER BY (state = 'Expired') DESC, (state = 'Expiring soon') DESC, expires_on NULLS LAST, client_name`),
+  rows: labLicenses(await c.db.rows(`SELECT * FROM (SELECT v.*, ${LIC_ON('$1')} FROM client_license_view v WHERE status = 'Active') x
+    ORDER BY (lab_state = 'Expired') DESC, (lab_state = 'Expiring soon') DESC, expires_on NULLS LAST, client_name`, [labOf(c)])),
 }));
+// a license's state and days left on the lab's date (057), not the server's
+function labOf(c) { return isUuid(c.siteId) ? c.siteId : null; }
+function LIC_ON(p) { return `license_state_on(v.expires_on, v.status::text, site_today(${p}::uuid)) AS lab_state, v.expires_on - site_today(${p}::uuid) AS lab_days_left`; }
+function labLicenses(rows) { return rows.map(({ lab_state, lab_days_left, ...r }) => ({ ...r, state: lab_state, days_left: lab_days_left })); }
 const CLIENT_FIELDS = ['legal_name', 'display_name', 'parent_client_id', 'account_status', 'is_gmp_client', 'allow_partial_reports', 'billing_address', 'site_address', 'default_report_delivery'];
 route('POST', '/api/clients', (c) => tx(c, (t) => upsertRows(t, 'client', [c.body.row], CLIENT_FIELDS)).then((r) => r[0]));
 route('PUT', '/api/clients/:id', (c) => tx(c, (t) => upsertRows(t, 'client', [{ ...c.body.row, id: c.params.id }], CLIENT_FIELDS)));
@@ -491,8 +496,8 @@ route('GET', '/api/orders/:id', async (c) => {
   const attachments = await c.db.rows(`SELECT a.id, a.kind, a.label, a.sample_id, f.file_name, a.created_at FROM sample_attachment a JOIN document_file f ON f.id = a.document_id
     WHERE a.lab_order_id = $1 AND a.status = 'Active' ORDER BY a.created_at`, [c.params.id]);
   // the client's licenses the order can name (0.32.0, migration 055): current first; the order's own even if retired
-  const licenses = await c.db.rows(`SELECT id, license_code, license_type, license_number, issuing_authority, expires_on, state, status_text FROM client_license_view
-    WHERE client_id = $1 AND (status = 'Active' OR id = $2) ORDER BY (state = 'Expired'), license_type, expires_on DESC NULLS FIRST`, [order.client_id, order.client_license_id || null]);
+  const licenses = await c.db.rows(`SELECT id, license_code, license_type, license_number, issuing_authority, expires_on, license_state_on(expires_on, status::text, site_today($3::uuid)) AS state, status_text FROM client_license_view
+    WHERE client_id = $1 AND (status = 'Active' OR id = $2) ORDER BY (license_state_on(expires_on, status::text, site_today($3::uuid)) = 'Expired'), license_type, expires_on DESC NULLS FIRST`, [order.client_id, order.client_license_id || null, order.site_id]);
   return { order, samples, tests, orderable, packages, tiers, contacts, emails, matrices: matrices.map((m) => m.matrix_name), categories: categories.map((m) => m.category_name), attachments, units, elsewhere, licenses };
 });
 route('GET', '/api/samples/:id', async (c) => {
@@ -569,6 +574,30 @@ route('POST', '/api/orders/:id/rush', (c) => tx(c, async (t) => {
   return { changed: n };
 }));
 route('POST', '/api/orders/:id/log', (c) => tx(c, (t) => t.one('SELECT log_samples($1::uuid[]) AS logged', [c.body.sample_ids])));
+// Cancel samples and tests (0.34.0, migration 057): nothing is deleted; always with a reason. The database refuses a
+// test with results or in a batch (and a sample holding one), saying why; cancelling a sample cancels its tests.
+route('POST', '/api/orders/:id/cancel', async (c) => {
+  if (!isUuid(c.params.id)) throw new Error('Order not found');
+  const o = await c.db.one('SELECT id, site_id FROM lab_order WHERE id = $1', [c.params.id]);
+  if (!o) throw new Error('Order not found');
+  await checkSite(c, o.site_id);
+  const b = c.body || {};
+  const samples = (Array.isArray(b.sample_ids) ? b.sample_ids : []).filter(isUuid);
+  const tests = (Array.isArray(b.test_ids) ? b.test_ids : []).filter(isUuid);
+  if (!samples.length && !tests.length) throw new Error('Choose the samples or tests to cancel');
+  if (!String(b.reason || '').trim()) throw new Error('Say why they are cancelled');
+  return tx({ ...c, reason: b.reason }, async (t) => {
+    let s = 0; let n = 0;
+    for (const id of samples) {
+      s += (await t.rows(`UPDATE sample SET status = 'Cancelled' WHERE id = $1 AND lab_order_id = $2 AND status <> 'Cancelled' RETURNING id`, [id, o.id])).length;
+    }
+    for (const id of tests) {
+      n += (await t.rows(`UPDATE requested_test SET status = 'Cancelled' WHERE id = $1 AND status <> 'Cancelled'
+        AND sample_id IN (SELECT id FROM sample WHERE lab_order_id = $2) RETURNING id`, [id, o.id])).length;
+    }
+    return { samples: s, tests: n };
+  });
+});
 route('GET', '/api/requested-tests/:id/analytes', async (c) => {
   if (!isUuid(c.params.id)) throw new Error('Test not found');
   const r = await c.db.one('SELECT o.site_id FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id WHERE rt.id = $1', [c.params.id]);

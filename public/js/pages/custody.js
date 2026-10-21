@@ -23,6 +23,7 @@ export async function custodyCard(el, orderId, { onChange, data } = {}) {
       { field: 'sample_codes', title: 'Samples', type: 'readonly', width: 220 },
       { field: 'delivered_by', title: 'Delivered by', type: 'readonly', width: 140, format: (v, r) => [v, r.tracking_no].filter(Boolean).join(', ') },
       { field: 'temperature', title: 'Temp. °C', type: 'readonly', width: 80, format: (v) => (v === null || v === undefined ? '' : String(Number(v))) },
+      { field: 'thermometer_code', title: 'Thermometer', type: 'readonly', width: 120, help: 'The thermometer that took the temperature (from the equipment register)' },
       { field: 'condition', title: 'Condition', type: 'readonly', width: 120, format: (v, r) => [v, r.seals ? `seals ${r.seals.toLowerCase()}` : ''].filter(Boolean).join(', ') },
       { field: 'document_id', title: 'Document', type: 'link', width: 150, label: (r) => (r.kind === 'Received' ? 'Signed copy (PDF)' : 'Scan'),
         format: (v, r) => (v ? (r.kind === 'Received' ? 'Signed copy (PDF)' : 'Scan') : ''), onClick: (r) => { if (r.document_id) window.open(`/api/custody/events/${r.id}/file?s=${site()}`, '_blank'); } },
@@ -58,12 +59,18 @@ export async function receiveDialog(order, samples, custody, onDone) {
       { name: 'delivered_by', label: 'Delivered by', help: 'Courier (e.g. FedEx, UPS) or the client in person' },
       { name: 'tracking_no', label: 'Tracking number' },
       { name: 'temperature', label: 'Temperature on arrival (°C)', type: 'number' },
+      // the thermometer (0.34.0, migration 057): from the register, available and in calibration; needed with a temperature
+      { name: 'thermometer_id', label: 'Thermometer', type: 'select', blank: false, value: '', options: [{ value: '', label: 'None (no temperature taken)' },
+        ...((custody && custody.thermometers) || []).map((t) => ({ value: t.id, label: `${t.equipment_code} ${t.equipment_name}` }))],
+        help: (custody && custody.thermometers && custody.thermometers.length) ? 'Needed when a temperature is recorded. Only thermometers available and in calibration are listed.'
+          : 'No thermometer of this lab is available and in calibration: add one to the equipment register to record a temperature.' },
       { name: 'condition', label: 'Condition', type: 'select', value: 'Acceptable', options: ['Acceptable', 'Damaged', 'Temperature excursion', 'Short shipped', 'Leaking', 'Other (see note)'] },
       { name: 'seals', label: 'Custody seals', type: 'select', value: 'None', options: ['Intact', 'Broken', 'None'] },
       { name: 'note', label: 'Note', type: 'textarea' },
     ] });
   if (!v) return;
-  const body = { ...v, received_at: v.received_at ? new Date(v.received_at).toISOString() : null, sample_ids: samples.map((s) => s.id) };
+  if (v.temperature !== '' && v.temperature !== null && v.temperature !== undefined && !v.thermometer_id) { toast('Say which thermometer took the temperature.', 'err'); return; }
+  const body = { ...v, thermometer_id: v.thermometer_id || null, received_at: v.received_at ? new Date(v.received_at).toISOString() : null, sample_ids: samples.map((s) => s.id) };
   const r = await signDialog({ title: 'Sign the chain of custody', what: `receipt of ${samples.length} sample${samples.length === 1 ? '' : 's'} on ${order.order_code}`, meaning: 'Received by', needReason: false,
     submit: ({ signature }) => api(`/orders/${order.id}/receive`, { method: 'POST', body: { ...body, signature } }) });
   if (!r) return;

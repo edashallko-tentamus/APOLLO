@@ -83,16 +83,16 @@ SELECT pg_temp.expect_error_like('Runs and months go together', $$UPDATE trainin
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('tc.ana');
 SELECT pg_temp.expect_error_like('A trainee does not start their own training (no training.record)',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Read the SOP', current_date)$$, 'may not start training');
+  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Read the SOP', site_today(pg_temp.tr_site('CFL')))$$, 'may not start training');
 SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('A record says what was done', $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', '', current_date)$$, 'Describe the training');
+SELECT pg_temp.expect_error_like('A record says what was done', $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', '', site_today(pg_temp.tr_site('CFL')))$$, 'Describe the training');
 SELECT pg_temp.expect_error_like('Continuing competency needs a qualification to keep up',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly check', current_date)$$, 'has none');
+  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly check', site_today(pg_temp.tr_site('CFL')))$$, 'has none');
 SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Read the SOP; observed 3 runs; ran 3 supervised', current_date - 2);
 CREATE TEMP TABLE tr_a1 AS SELECT attempt_code AS code, id FROM competency_attempt WHERE user_id = pg_temp.tr_uid('tc.ana') ORDER BY created_at DESC LIMIT 1;
 SELECT pg_temp.expect_true('The attempt is TA-..., Initial, by record, in progress', (SELECT attempt_code LIKE 'TA-%' AND kind = 'Initial' AND route = 'Record' AND status = 'In progress' FROM competency_attempt WHERE id = (SELECT id FROM tr_a1)));
 SELECT pg_temp.expect_error_like('One open attempt per person and test',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Again', current_date)$$, 'already has an open');
+  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Again', site_today(pg_temp.tr_site('CFL')))$$, 'already has an open');
 SELECT pg_temp.expect_error_like('An attempt changes only through its steps', $$UPDATE competency_attempt SET status = 'Approved' WHERE id = (SELECT id FROM tr_a1)$$, 'only through its steps');
 SELECT pg_temp.expect_error_like('A record is evaluated with its evidence attached', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Pass', NULL)$$, 'evidence');
 INSERT INTO competency_evidence (attempt_id, document_id, title) VALUES ((SELECT id FROM tr_a1), pg_temp.tr_doc(), 'Signed training form');
@@ -115,7 +115,7 @@ SELECT pg_temp.expect_true('QA''s approval grants the qualification: AQ-, from t
 SELECT pg_temp.expect_error_like('A qualification is never typed in', $$INSERT INTO analyst_qualification (user_id, test_id, site_id, source) VALUES (pg_temp.tr_uid('tc.ana2'), (SELECT test_id FROM tr_fx), pg_temp.tr_site('CFL'), 'Legacy')$$, 'granted by approving');
 SELECT pg_temp.as_user('tc.sup');
 SELECT pg_temp.expect_error_like('Someone qualified is not given an initial competency again',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'x', current_date)$$, 'already qualified');
+  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'x', site_today(pg_temp.tr_site('CFL')))$$, 'already qualified');
 
 -------------------------------------------------------------------------------
 -- 3. DEPARTMENT TRAINED AND WHAT IT UNLOCKS
@@ -160,7 +160,7 @@ UPDATE lab_site SET require_training = false WHERE site_code = 'CFL';
 -- 5. CONTINUING COMPETENCY BY RECORD (A CONDITIONAL PASS)
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('tc.sup');
-SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly observed run', current_date);
+SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly observed run', site_today(pg_temp.tr_site('CFL')));
 CREATE TEMP TABLE tr_a2 AS SELECT id FROM competency_attempt WHERE user_id = pg_temp.tr_uid('tc.ana') AND kind = 'Continuing' ORDER BY created_at DESC LIMIT 1;
 INSERT INTO competency_evidence (attempt_id, document_id, title) VALUES ((SELECT id FROM tr_a2), pg_temp.tr_doc(), 'Observation sheet');
 SELECT pg_temp.expect_error_like('A conditional pass says what it is conditional on', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a2), 'Conditional pass', NULL)$$, 'conditional on');

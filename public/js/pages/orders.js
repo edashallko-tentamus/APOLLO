@@ -6,6 +6,7 @@ import { section, specDialog } from './common.js';
 import { printLabels } from '../labels.js';
 import { orderBillingCard } from './billing.js';
 import { custodyCard, receiveDialog, openPhotoDialog, photosCard } from './custody.js';
+import { contextMenu } from './testing.js';
 
 const CONDITIONS = ['Acceptable', 'Damaged', 'Temperature excursion', 'Short shipped', 'Leaking', 'Other'];
 const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -58,7 +59,6 @@ export async function newOrder(clientId) {
 }
 
 const hiddenTests = new Map(); // order id -> sample ids whose tests are hidden (tests show by default)
-
 export async function detail(main, id) {
   const d = await api('/orders/' + id);
   const o = d.order;
@@ -87,7 +87,7 @@ export async function detail(main, id) {
   <div class="card">${section('Samples and tests', 'Add rows, paste from Excel, fill down with Ctrl+D. Several bottles or bags can be one sample (Containers). Each sample\'s tests are listed under it (▾ shows or hides them). Logging assigns the sample ID and starts the clock (Day 0).',
     `<button class="btn" id="applyP" ${projects.length ? '' : 'disabled'}>Apply project to ticked samples</button> <button class="btn" id="addT" ${d.orderable.length ? '' : 'disabled'}>Add a test to ticked samples</button>
      ${(d.packages || []).length ? '<button class="btn" id="addPk">Add a package to ticked samples</button>' : ''}
-     <button class="btn" id="rushAll">Rush the whole order</button> <button class="btn ghost" id="toggleAll"></button>`)}
+     <button class="btn" id="rushAll">Rush the whole order</button> <button class="btn ghost" id="cancelS" title="Cancel the ticked samples and their tests (kept, greyed; a reason is asked)">Cancel ticked samples…</button> <button class="btn ghost" id="toggleAll"></button>`)}
     ${(d.elsewhere || []).length ? `<p class="help" id="subc">Quoted tests that belong to another lab are subcontracted from ${esc(o.site_code)} and cannot be ordered here yet: ${esc(d.elsewhere.map((x) => `${x.test_name} (${x.site_code})`).join(', '))}. Order them at that lab.</p>` : ''}
     <div class="savebar" id="tsb"><span class="pending"></span><button class="btn ghost" id="tundo">Discard test changes</button><button class="btn primary" id="tsave">Save tests</button></div>
     <div id="sg"></div></div>
@@ -146,6 +146,9 @@ export async function detail(main, id) {
     // packages (P-1, migration 047): the test's price is its share of the package price
     { field: 'package', title: 'Package', type: 'readonly', width: 200, compute: (r) => (r.ordered_package_id ? `${r.package_code} ${r.package_name}${r.package_status && r.package_status !== 'Intact' ? ' (' + r.package_status.toLowerCase() + ')' : ''}` : ''),
       help: 'The package this test was ordered in. Its price is its share of the package price; cancelling it takes off only that share.' },
+    // cancelling (0.34.0, migration 057): kept, greyed, with a reason; refused once the test has results or is in a batch
+    { field: '_cancel', title: '', type: 'button', width: 80, label: (r) => (r.id && r.status !== 'Cancelled' ? 'Cancel…' : ''),
+      help: 'Cancel this test (it stays on the order, greyed). Not possible once it has results or is in a batch.', onClick: (r) => { if (r.id && r.status !== 'Cancelled') cancelItems({ tests: [r] }); } },
   ];
   const testsBySample = new Map();
   d.tests.forEach((t) => { if (!testsBySample.has(t.sample_id)) testsBySample.set(t.sample_id, []); testsBySample.get(t.sample_id).push({ ...t, _origOverride: t.tat_override }); });
@@ -156,6 +159,14 @@ export async function detail(main, id) {
     const g = new Grid(el.querySelector('.stests'), { rows: testsBySample.get(s.id) || [], emptyText: 'No tests yet: add a test or apply a project.', onChange: tBar,
       rowClass: (r) => (r.status === 'Cancelled' ? 'mutedrow' : r.rush_status === 'Pending Approval' ? 'warnrow' : ''), columns: testColumns });
     testGrids.push(g);
+    // right-click a selection of tests: cancel them
+    el.querySelector('.stests').addEventListener('contextmenu', (e) => {
+      if (!e.target.closest('td')) return;
+      const sel = g.selectedRows().filter((r) => r.id && r.status !== 'Cancelled');
+      if (!sel.length) return;
+      e.preventDefault();
+      contextMenu(e.clientX, e.clientY, [[`Cancel ${sel.length === 1 ? sel[0].test_name : sel.length + ' selected tests'}…`, () => cancelItems({ tests: sel })]]);
+    });
     el.querySelector('[data-addt]').onclick = () => addTest([s.id]);
     el.querySelector('[data-applyp]').onclick = () => applyProject([s.id]);
     const pkb = el.querySelector('[data-addpk]'); if (pkb) pkb.onclick = () => addPackage([s.id]);
@@ -218,7 +229,17 @@ export async function detail(main, id) {
       // cannabis samples (0.32.0, migration 055): the METRC package tag; optional, printed on the COA and the chain of custody
       { field: 'metrc_id', title: 'METRC ID', width: 230, help: 'Cannabis samples: the METRC package tag (24 letters and digits, starting 1A). Printed on the COA and the chain of custody.',
         validate: (v) => { const s = String(v ?? '').replace(/\s/g, '').toUpperCase(); return s && !/^1A[0-9A-Z]{22}$/.test(s) ? 'A METRC tag is 24 letters and digits, starting 1A' : null; } },
+      { field: '_cancel', title: '', type: 'button', width: 80, label: (r) => (r.id && r.status !== 'Cancelled' ? 'Cancel…' : ''),
+        help: 'Cancel this sample and its tests (kept, greyed). Not possible once a test has results or is in a batch.', onClick: (r) => { if (r.id && r.status !== 'Cancelled') cancelItems({ samples: [r] }); } },
     ],
+  });
+  // right-click a selection of samples: cancel them
+  main.querySelector('#sg').addEventListener('contextmenu', (e) => {
+    const td = e.target.closest('td'); if (!td || td.closest('.stests')) return;
+    const sel = sg.selectedRows().filter((r) => r.id && r.status !== 'Cancelled');
+    if (!sel.length) return;
+    e.preventDefault();
+    contextMenu(e.clientX, e.clientY, [[`Cancel ${sel.length === 1 ? (sel[0].sample_code || sel[0].client_sample_id || 'sample') : sel.length + ' selected samples'} and their tests…`, () => cancelItems({ samples: sel })]]);
   });
   const sbar = document.createElement('div'); sbar.className = 'savebar'; sbar.innerHTML = '<span class="pending"></span><button class="btn ghost">Discard</button><button class="btn primary">Save samples</button>';
   main.querySelector('#sg').before(sbar);
@@ -298,6 +319,25 @@ export async function detail(main, id) {
     if (!v) return;
     try { const r = await api(`/orders/${id}/add-package`, { method: 'POST', body: { sample_ids: ids, quoted_package_id: v.qp } }); ids.forEach((x) => hidden.delete(x)); toast(`Package added to ${r.added} sample${r.added === 1 ? '' : 's'}.`); detail(main, id); } catch (e) { toast(e.message, 'err'); }
   }
+  // Cancel samples or tests (0.34.0, Alex: "you can't remove tests or samples once they have been added"): nothing is
+  // deleted; they stay on the order, greyed, with the reason. The database refuses a test with results or in a batch.
+  async function cancelItems({ samples = [], tests = [] }) {
+    if (!ready()) return;
+    if (!samples.length && !tests.length) { toast('Tick or select the samples or tests to cancel.', 'err'); return; }
+    const name = (s) => s.sample_code || s.client_sample_id || 'a sample';
+    const sampleName = (sid) => name(d.samples.find((x) => x.id === sid) || {});
+    const lines = [...samples.map((s) => `<li>Sample ${esc(name(s))} and its ${Number(s.test_count) || 0} test${Number(s.test_count) === 1 ? '' : 's'}</li>`),
+      ...tests.map((t) => `<li>${esc(t.test_name)} on ${esc(sampleName(t.sample_id))}${t.ordered_package_id ? ' (part of a package: only its share comes off)' : ''}</li>`)];
+    if (!(await confirmBox(`Cancel ${samples.length ? samples.length + ' sample' + (samples.length === 1 ? '' : 's') : tests.length + ' test' + (tests.length === 1 ? '' : 's')}`,
+      `<ul>${lines.join('')}</ul><p>They stay on the order, greyed out, and can be ordered again later. A test that has results or is in a batch cannot be cancelled: take it out of the batch first.</p>`, 'Next: reason'))) return;
+    const reason = await askReason('cancelling on ' + o.order_code); if (!reason) return;
+    try {
+      const r = await api(`/orders/${id}/cancel`, { method: 'POST', body: { sample_ids: samples.map((s) => s.id), test_ids: tests.map((t) => t.id), reason } });
+      toast(r.samples ? `${r.samples} sample${r.samples === 1 ? '' : 's'} cancelled with their tests.` : `${r.tests} test${r.tests === 1 ? '' : 's'} cancelled.`);
+      detail(main, id);
+    } catch (e) { toast(e.message, 'err'); }
+  }
+  main.querySelector('#cancelS').onclick = () => cancelItems({ samples: picked().filter((r) => r.status !== 'Cancelled') });
   const apk = main.querySelector('#addPk'); if (apk) apk.onclick = () => addPackage(picked().map((r) => r.id));
   main.querySelector('#applyP').onclick = () => applyProject(picked().map((r) => r.id));
   main.querySelector('#addT').onclick = () => addTest(picked().map((r) => r.id));

@@ -102,10 +102,16 @@ module.exports = function registerTesting({ route, tx, signedTx, currentSite, ch
     const [entries, steps, analytes, values, materials, equipmentUsed, attachments, reanalyses, results, verdicts, deps] = await Promise.all([
       q(`SELECT e.*, s.id AS sample_id, s.sample_code, s.client_sample_id, s.matrix, s.description,
              entry_product_category(e.id) AS product_category_id, (SELECT category_name FROM product_category WHERE id = entry_product_category(e.id)) AS product_category, rt.due_date, rt.rush_status::text AS rush_status,
-             p.label AS parent_label, rp.reason AS reprep_reason, dl.label AS daily_label, db.batch_code AS daily_batch_code, db.id AS daily_batch_id, rt.media_lot_id
+             p.label AS parent_label, rp.reason AS reprep_reason, dl.label AS daily_label, db.batch_code AS daily_batch_code, db.id AS daily_batch_id, rt.media_lot_id,
+             -- 0.28.1: a re-prepped entry stays on show: where its re-prep went; a re-prep entry: where it came from
+             rr.status AS reprep_to_status, rr.reason AS reprep_to_reason, rb.batch_code AS reprep_to_batch_code, rb.id AS reprep_to_batch_id, ru.full_name AS reprep_by_name, rr.created_at AS reprep_at,
+             oe.label AS reprep_of_label, ob.batch_code AS reprep_of_batch_code, ob.id AS reprep_of_batch_id
            FROM batch_entry e LEFT JOIN requested_test rt ON rt.id = e.requested_test_id LEFT JOIN sample s ON s.id = rt.sample_id
            LEFT JOIN batch_entry p ON p.id = e.parent_entry_id LEFT JOIN reprep_request rp ON rp.id = e.reprep_request_id
            LEFT JOIN batch_entry dl ON dl.id = e.daily_of_entry_id LEFT JOIN test_batch db ON db.id = dl.batch_id
+           LEFT JOIN LATERAL (SELECT x.* FROM reprep_request x WHERE x.origin_entry_id = e.id ORDER BY x.created_at DESC LIMIT 1) rr ON e.status = 'Superseded'
+           LEFT JOIN test_batch rb ON rb.id = rr.batch_id LEFT JOIN app_user ru ON ru.id = rr.created_by
+           LEFT JOIN batch_entry oe ON oe.id = rp.origin_entry_id LEFT JOIN test_batch ob ON ob.id = oe.batch_id
           WHERE e.batch_id = $1 AND e.removed_at IS NULL ORDER BY e.position`),
       q(`SELECT r.id, r.status, r.fields, r.notes, r.completed_at, r.performed_by, pu.full_name AS performed_name, r.witness_id, wu.full_name AS witness_name,
              ws.id AS step_id, ws.step_key, ws.step_name, ws.step_type, ws.sort_order, ws.config, ws.instructions,

@@ -82,6 +82,8 @@ async function as(who, lab = 'CFL') {
   await page.click('#receive'); await page.waitForSelector('.modal #f_received_at');
   check('The receive dialog names the sample being received', /COC-A/.test(await page.locator('.modal .intro').innerText()) && !/COC-B/.test(await page.locator('.modal .intro').innerText()));
   await page.fill('.modal #f_delivered_by', 'FedEx'); await page.fill('.modal #f_tracking_no', '7712 3456 0001'); await page.fill('.modal #f_temperature', '3.8');
+  // since 0.34.0 a temperature names its thermometer (seed_039's demo receiving thermometer)
+  await page.evaluate(() => { const s = document.querySelector('.modal #f_thermometer_id'); s.value = [...s.options].find((o) => /Receiving thermometer/.test(o.text)).value; s.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.evaluate(() => { const s = document.querySelector('.modal #f_seals'); s.value = 'Intact'; s.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.fill('.modal #f_note', 'Cooler with two ice packs');
   await page.click('.modal [data-ok]');

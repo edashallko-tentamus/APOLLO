@@ -14,12 +14,15 @@ async function data(db, orderId, { verifyBase = '' } = {}) {
   if (!o) throw new Error('Order not found');
   const doc = await db.one('SELECT * FROM custody_document WHERE lab_order_id = $1', [orderId]);
   const samples = await db.rows(`SELECT s.id, s.sample_code, s.client_sample_id, s.description, s.matrix, s.lot, s.metrc_id, s.number_of_units, s.quantity_received::text AS quantity, s.quantity_unit,
+      s.serving_count::text AS serving_count, s.serving_count_unit, s.serving_size::text AS serving_size, s.serving_unit,
       s.preservation, s.condition, s.receipt_temperature::text AS temperature, s.received_at, s.logged_at, s.status::text AS status,
       (SELECT string_agg(t.test_name, ', ' ORDER BY t.test_name) FROM requested_test rt JOIN test t ON t.id = rt.test_id WHERE rt.sample_id = s.id AND rt.status <> 'Cancelled') AS tests
     FROM sample s WHERE s.lab_order_id = $1 AND s.status <> 'Cancelled' ORDER BY s.created_at, s.client_sample_id`, [orderId]);
   const events = doc ? await db.rows(`SELECT e.id, e.event_no, e.kind, e.event_at, e.sample_ids, e.delivered_by, e.tracking_no, e.temperature::text AS temperature, e.temperature_unit,
-      e.condition, e.seals, e.note, e.signer_title, e.created_at, u.full_name AS by_name, f.mime_type AS sig_type, encode(f.content, 'base64') AS sig_b64, se.signed_at
+      e.condition, e.seals, e.note, e.signer_title, e.created_at, u.full_name AS by_name, f.mime_type AS sig_type, encode(f.content, 'base64') AS sig_b64, se.signed_at,
+      th.equipment_code AS thermometer_code, th.equipment_name AS thermometer_name
     FROM custody_event e JOIN app_user u ON u.id = e.created_by LEFT JOIN document_file f ON f.id = e.signature_image_id LEFT JOIN signature_event se ON se.id = e.signature_id
+    LEFT JOIN equipment th ON th.id = e.thermometer_id
     WHERE e.custody_document_id = $1 ORDER BY e.event_no`, [doc.id]) : [];
   const receipts = events.filter((e) => e.kind === 'Received');
   const receiptNo = new Map(); receipts.forEach((e, i) => (e.sample_ids || []).forEach((sid) => receiptNo.set(sid, i + 1)));
@@ -36,7 +39,10 @@ async function data(db, orderId, { verifyBase = '' } = {}) {
 
 function html(d) {
   const tz = d.time_zone;
-  const rows = d.samples.map((s, i) => `<tr><td class="r">${i + 1}</td><td>${esc(s.client_sample_id || '')}${s.description ? `<div class="sub">${esc(s.description)}</div>` : ''}</td>
+  // the serving size the client shared (0.34.0)
+  const num = (v) => (v === null || v === undefined || v === '' ? '' : String(Number(v)));
+  const reporting = (s) => [s.serving_size ? `Serving ${s.serving_count ? `${num(s.serving_count)} ${s.serving_count_unit || ''} = ` : ''}${num(s.serving_size)} ${s.serving_unit || ''}`.replace(/\s+/g, ' ').trim() : ''].filter(Boolean);
+  const rows = d.samples.map((s, i) => `<tr><td class="r">${i + 1}</td><td>${esc(s.client_sample_id || '')}${s.description ? `<div class="sub">${esc(s.description)}</div>` : ''}${reporting(s).map((x) => `<div class="sub">${esc(x)}</div>`).join('')}</td>
     <td>${esc(s.matrix || '')}${s.lot ? `<div class="sub">Lot ${esc(s.lot)}</div>` : ''}${s.metrc_id ? `<div class="sub">METRC ${esc(s.metrc_id)}</div>` : ''}</td><td class="r">${esc(s.number_of_units ?? '')}</td>
     <td>${s.quantity ? esc(`${Number(s.quantity)} ${s.quantity_unit || ''}`) : ''}</td><td>${esc(s.preservation || '')}</td><td class="t">${esc(s.tests || '')}</td>
     <td><b>${esc(s.sample_code || '')}</b>${s.receipt ? `<div class="sub">Receipt ${s.receipt}</div>` : s.logged_at ? '<div class="sub">Logged, no signed receipt</div>' : ''}</td>
@@ -46,7 +52,7 @@ function html(d) {
       <div class="sig">${e.signature ? `<img src="${e.signature}" alt="Signature of ${esc(e.by_name)}">` : ''}</div>
       <div class="line filled"><b>${esc(e.by_name)}</b>${e.signer_title ? `, ${esc(e.signer_title)}` : ''}<span>Signed electronically ${esc(fmtDateTime(e.signed_at || e.created_at, tz))}</span></div>
       <div class="kv2"><div><span>Received</span>${esc(fmtDateTime(e.event_at, tz))}</div><div><span>Delivered by</span>${esc(e.delivered_by || '')}${e.tracking_no ? ` (${esc(e.tracking_no)})` : ''}</div>
-      <div><span>Temperature</span>${e.temperature ? esc(`${Number(e.temperature)} ${e.temperature_unit}`) : ''}</div><div><span>Condition</span>${esc(e.condition || '')}</div><div><span>Custody seals</span>${esc(e.seals || '')}</div></div>
+      <div><span>Temperature</span>${e.temperature ? esc(`${Number(e.temperature)} ${e.temperature_unit}`) : ''}${e.thermometer_code ? `<div class="sub">Thermometer ${esc(e.thermometer_code)} ${esc(e.thermometer_name || '')}</div>` : ''}</div><div><span>Condition</span>${esc(e.condition || '')}</div><div><span>Custody seals</span>${esc(e.seals || '')}</div></div>
       ${e.note ? `<div class="sub">${esc(e.note)}</div>` : ''}</div>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.coc_code)}</title><style>
     body { font: 9pt/1.3 "Helvetica Neue", Arial, sans-serif; color: #1d2329; margin: 0; }

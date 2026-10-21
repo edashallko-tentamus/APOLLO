@@ -90,7 +90,16 @@ SELECT pg_temp.expect_error_like('Custody seals are Intact, Broken or None',
   $$SELECT receive_samples((SELECT id FROM cu_o), ARRAY[(pg_temp.cu_samples((SELECT id FROM cu_o)))[1]], now(), 'FedEx', NULL, 4, 'Acceptable', 'Taped', NULL)$$, 'Intact, Broken or None');
 SELECT pg_temp.expect_error_like('Only the order''s own samples are received',
   $$SELECT receive_samples((SELECT id FROM cu_o), ARRAY(SELECT id FROM sample WHERE lab_order_id <> (SELECT id FROM cu_o) AND status = 'Expected' LIMIT 1), now(), NULL, NULL, NULL, NULL, NULL, NULL)$$, 'still expected');
-CREATE TEMP TABLE cu_ev AS SELECT receive_samples((SELECT id FROM cu_o), ARRAY[(pg_temp.cu_samples((SELECT id FROM cu_o)))[1]], now() - interval '1 hour', 'FedEx', '7712', 4.2, 'Acceptable', 'Intact', 'Ice packs') AS id;
+-- since 057 a temperature names its thermometer (from the register): a fixture one, needing no calibration
+SELECT pg_temp.as_user('akiddle');
+INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.cu_site('CFL'), 'CU Thermometer');
+INSERT INTO equipment (site_id, equipment_name, equipment_type_id, department_id, calibration_required, in_service_date)
+  SELECT pg_temp.cu_site('CFL'), 'CU receiving thermometer', (SELECT id FROM equipment_type WHERE type_name = 'CU Thermometer'),
+         (SELECT id FROM department WHERE site_id = pg_temp.cu_site('CFL') AND status = 'Active' ORDER BY department_code LIMIT 1), false, current_date - 10;
+INSERT INTO equipment_owner (equipment_id, group_id) SELECT id, pg_temp.cu_grp('CFL', 'Intake') FROM equipment WHERE equipment_name = 'CU receiving thermometer';
+SELECT pg_temp.as_user('cu.in');
+CREATE TEMP TABLE cu_ev AS SELECT receive_samples((SELECT id FROM cu_o), ARRAY[(pg_temp.cu_samples((SELECT id FROM cu_o)))[1]], now() - interval '1 hour', 'FedEx', '7712', 4.2, 'Acceptable', 'Intact', 'Ice packs',
+  (SELECT id FROM equipment WHERE equipment_name = 'CU receiving thermometer')) AS id;
 SELECT pg_temp.expect_true('The receipt logs the sample (sample ID, Logged), puts its time, temperature and condition on it',
   (SELECT status = 'Logged' AND sample_code IS NOT NULL AND receipt_temperature = 4.2 AND condition = 'Acceptable' AND received_at < now() - interval '50 minutes'
    FROM sample WHERE id = (pg_temp.cu_samples((SELECT id FROM cu_o)))[1]));

@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.33.0** (2026-10-20) |
+| Current version | **0.34.0** (2026-10-20) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1834 database rule tests (0.33.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and 37 browser test suites (0.33.0 on PostgreSQL 16 in the cloud, the app connected as the restricted app account). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.34.0 | 2026-10-20 | Cancelling, receipt thermometer | Claude Code | 057, seed 039 | Cancel… for samples and tests with a reason (refused with results or in a batch); the thermometer from the register at receipt; the serving size on the chain of custody; license dates on the lab's date; 0.28.1 restored (potency units built, then put on hold) |
 | 0.33.0 | 2026-10-20 | Security hardening SEC-1 | Claude in the cloud | 056 | Encrypted database connection (TLS, SCRAM); two database accounts for GxP servers (the app's cannot delete, change tables or triggers, or write the audit trail); files shown only when really a PDF or picture; security headers and a Content-Security-Policy; per-computer limits on wrong passwords and public pages; audit trail pages and seven routes scoped to the person's labs; seven escaping fixes |
 | 0.32.0 | 2026-10-20 | Alex's notes: training per department, METRC ID, client licenses, photos | Claude Code | 055 | Each department sets its own trained-test count; a METRC ID on samples (optional, checked, on the COA and chain of custody); client licenses (type, number, issuer, dates, scanned copy) added over time, picked on the lab order, printed on the COA, with expiry warnings and Intake > Client licenses; the photo dialog shows the photos already attached |
 | 0.31.1 | 2026-10-20 | Audit labels routed; waste save on PGlite; re-prepped samples stay in their batch | Claude Code | 054 | Audit labels go straight to the layer that knows the table (PGlite crashed on the 37-layer chain); waste classifications save on PGlite; 0.28.1 merged |
@@ -144,11 +145,40 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 "Not recorded": `CLAUDE.md` records the design source (Claude chat) for these slices but not which Claude built them. Alex can fill this in.
 
-**Test counts over time:** 478 rule tests at 0.6.1; 652 at 0.8.0; 659 at 0.8.1; 693 at 0.9.0; 702 at 0.9.1; 735 at 0.10.0; 778 at 0.11.0; 786 at 0.12.0; 825 at 0.13.0; 873 at 0.14.0; 898 at 0.14.1; 922 at 0.15.0; 958 at 0.16.0; 987 at 0.16.1; 1034 at 0.17.0; 1060 at 0.17.1; 1189 at 0.18.0; 1682 at 0.28.0; 1721 at 0.29.0; 1741 at 0.30.0; 1787 at 0.31.0; 1793 at 0.31.1; 1819 at 0.32.0.
+**Test counts over time:** 478 rule tests at 0.6.1; 652 at 0.8.0; 659 at 0.8.1; 693 at 0.9.0; 702 at 0.9.1; 735 at 0.10.0; 778 at 0.11.0; 786 at 0.12.0; 825 at 0.13.0; 873 at 0.14.0; 898 at 0.14.1; 922 at 0.15.0; 958 at 0.16.0; 987 at 0.16.1; 1034 at 0.17.0; 1060 at 0.17.1; 1189 at 0.18.0; 1682 at 0.28.0; 1721 at 0.29.0; 1741 at 0.30.0; 1787 at 0.31.0; 1793 at 0.31.1; 1819 at 0.32.0; 1834 at 0.33.0; 1851 at 0.34.0.
 
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.34.0: cancelling samples and tests, the receipt thermometer (2026-10-20, Claude Code; migration 057, seed 039)
+
+- **Why.** Alex (2026-10-20) listed more information on the lab's COCs: potency reporting units chosen by the client (mg/serving, mg/g, %, mg/mL), the serving size the client shares, and the thermometer ID recorded at receipt. He also noticed "you can't remove tests or samples once they have been added". His choices:
+  - a clear Cancel… (button and right-click) with a reason;
+  - a logged sample can be cancelled while none of its tests has results, and a test in a started batch is taken out first;
+  - the thermometer comes from the register, available and in calibration.
+  Vault: `Decision - Cancelling Samples and Tests and the Receipt Thermometer` (build choices Proposed).
+- **Potency units: on hold.** It was built (sample potency unit, catalogue "Potency test" tick, `potency_value()`, the COA converting with a release block) and passed its tests. Alex then said "let's wait on the potency unit. I think we might not need to make another field if we have the specifications and serving size units already in the system. I'll check with the lab first." It was taken out before anything was applied. The tested version is kept in `parked-potency-unit-2026-10-20`, next to the project folder.
+- **What.**
+  - **Cancelling:** the database now refuses to cancel a test with results or in a batch, and a sample holding one, saying why (before, it allowed it). A cancelled sample cancels its tests. The order page has "Cancel ticked samples…", a Cancel… button on every sample and test row, and right-click on a selection; it confirms what goes, then asks the reason. Route `POST /api/orders/:id/cancel`.
+  - **Thermometer:** required with a temperature at receipt; this lab's, available and in calibration. The receive dialog lists usable equipment, thermometers first. The custody card and PDF show it. Seed 039 adds a demo receiving thermometer per lab (Alex's register had none).
+  - **Serving size:** printed under each sample on the chain of custody.
+  - **License dates:** a license's state and days left use the lab's date (`license_state_on`), not the server's.
+  - **0.28.1 restored:** the re-prepped sample stays visible in its batch (lost in 0.33.0; see the line under 0.33.0).
+- **Files.**
+  - New: `db/migrations/057_cancel_thermometer.sql`, `db/seed_039_receiving_thermometers.sql`, `db/tests/test_050_cancel_thermometer.sql`, `tests/e2e_cancel_thermometer.js`, the vault note.
+  - Changed:
+    - Database tests: `db/tests/test_044_custody_photos.sql` (a thermometer fixture), `db/tests/test_046_training.sql` (the lab's date).
+    - Server: `server/routes.js`, `server/routes_custody.js`, `server/custody.js`, `server/routes_testing.js`.
+    - Screens: `public/js/pages/orders.js`, `custody.js`, `testing.js`.
+    - Browser tests: `tests/e2e_custody.js`, `tests/e2e_equipment.js` (one more item in the register).
+    - Records: `package.json` (0.34.0, test:cancel), CLAUDE.md, this log, both `00 Home.md`.
+- **Checked.**
+  - 1851 rule tests on PGlite (17 new). The known intermittent `test_031` catch-up check failed in one run (it fails about 1 run in 4, on 0.31.1 too).
+  - On fresh databases, with potency still in, all 40 browser suites passed, `test:security` last (29/29).
+  - After potency was taken out: `test:cancel` 15/15, `test:custody` 33/33, `test:reports` 36/36, `test:oos` 33/33, `test:licenses` 28/28, `test:browser2` 12/12, `test:serving` 21/21, `test:pricing` 15/15, `test:dialogs`. Before that: `test:testing` 55/55 (0.28.1 restored), `test:equipment` 25/25.
+  - Fresh copy of Alex's data: 056, 057 and seed 039 apply in 0.2 s. They write only the two demo thermometers (EQ-00166 CFL, EQ-00167 TPS), their owners and calibrations. No sample or test changed status. 1,579 of his 1,679 open tests can no longer be cancelled because they have results or are in a batch. The switches are as he set them.
+  - **Applied** on Alex's go (2026-10-20), together with 0.33.0. Backup `backup-before-0.34.0-2026-10-20` (data folder, 4083 files, identical). The project was unchanged since the "Baseline 0.33.0" commit. Only 056, 057 and seed 039 were waiting, and the start printed "Applied: 056_database_roles.sql, 057_cancel_thermometer.sql, seed_039_receiving_thermometers.sql". Committed to Git.
 
 ### 0.33.0: security hardening SEC-1 (2026-10-20, Claude in the cloud; migration 056)
 
@@ -164,6 +194,14 @@ A living record of how LIMS3 is designed and built: what changed in each version
 - **Found while testing:** the Content-Security-Policy broke the logbook page's live calculation (it used `Function()`), so a failing balance check was not asked for its reason before signing (the database still judged it on save). Fixed with `calcExpr`; caught by `e2e_logbooks`.
 - **Not done:** Git (Claude Code, on the laptop); single sign-on; a penetration test before production.
 - **Alex's data:** not applied. Only 056 waits. Copy test first; apply only on his go.
+- **On the laptop (Claude Code, 2026-10-20):**
+  - **Git:** portable MinGit 2.47.1 (Alex approved the download) installed in his user folder; repository in the project folder (branch main, .gitignore for data/, backup folders, node_modules/, tests/screens/, logs); first commit "Baseline 0.33.0" (930 files).
+  - **PGlite:** 1834 rule tests pass (after a test-only fix: `test_046` dated the training it records with `current_date`, which is the next day for the lab after 17:00 Pacific; it now uses `site_today`).
+  - **Browser suites on fresh databases:** 37 of 39 passed at first, with `test:security` last at 29/29.
+    - `test:licenses`: "expires in 11 days" instead of 12 in the evening. 055 worked the license state out on the server's date; fixed in 0.34.0.
+    - `test:testing`: 3 re-prep checks failed every time. **0.33.0 had dropped 0.28.1's re-prepped-samples-stay-visible work** from `public/js/pages/testing.js` and `server/routes_testing.js`: built from an older copy of those two files, though the entry above says 0.31.1 was merged. 0.33.0's only other change in those files (escaping in "Remove from batch", the witness rate limit) is kept. Restored in 0.34.0, where `test:testing` passes 55/55. The other laptop files of 0.31.1 and 0.32.0 were checked and are intact.
+  - **Copy of Alex's data:** 056 applies in 0.1 s. It writes no row in any of the 177 tables and adds no audit entry. The audit trail keeps all 49,395 entries (CFL 25,679, TPS 18,227, shared 5,489; none pointing at no lab). A CFL-only person (the demo GM) now sees 31,168 of them (CFL and shared), and people in both labs see both. `database_account_problems()` reports the expected three on PGlite (one account for everything in the Sandbox). The lab switches are as Alex set them (Signed receipt on at CFL).
+  - **Not applied** until Alex says go. 056 sat in the project while port 3000 ran on his data: he was told not to restart it.
 
 ### 0.32.0: training counts per department, the METRC ID, client licenses, photos in the photo dialog (2026-10-20, Claude Code; migration 055)
 

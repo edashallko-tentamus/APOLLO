@@ -1,0 +1,6 @@
+# Alex's data and local copies: never in Git
+data/
+backup*/
+node_modules/
+tests/screens/
+*.log

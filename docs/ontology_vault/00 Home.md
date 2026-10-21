@@ -1,0 +1,215 @@
+---
+type: Navigation
+status: Current
+---
+
+# LIMS Ontology — Connected Knowledge Graph
+
+## Start here
+- [[Ontology Principles]]
+- [[Business Object Standard]]
+- [[Value Ownership]]
+- [[Object Classification]]
+- [[Relationship Types]]
+- [[Grid Data Entry Standard]]
+
+## Core domains
+- [[Commercial]]
+- [[Sample Management]]
+- [[Laboratory Operations]]
+- [[Inventory and Laboratory Resources]]
+- [[Quality Review and Reporting]]
+- [[Master Data and Configuration]]
+- [[Security Compliance and Audit]]
+- [[Business Intelligence and AI]]
+- [[System Integration]]
+
+## Key end-to-end workflows
+- [[Commercial to Sample Intake Workflow]]
+- [[Requested Test Execution Workflow]]
+- [[Auto-Batching and Analyst Assignment Workflow]]
+- [[Electronic Logbook Calculation Workflow]]
+- [[Pathogen Spike Recovery Workflow]]
+- [[In-House Material Preparation Workflow]]
+- [[Inventory Receiving and Use Workflow]]
+- [[Negative Inventory Reconciliation Workflow]]
+- [[Waste Disposal Decision Workflow]]
+- [[Equipment Tag-Out Maintenance and TAT Workflow]]
+- [[Training and Competency Workflow]]
+- [[Report Review and Release Workflow]]
+- [[Report Amendment Workflow]]
+
+## Governing rules
+- [[Backlog Rule]]
+- [[Auto-Batching Rule]]
+- [[Expired Inventory Blocking Rule]]
+- [[Negative Inventory Rule]]
+- [[Calculated Disposal Date Rule]]
+- [[Waste Compatibility Rule]]
+- [[Equipment Automatic Tag-Out Rule]]
+- [[Equipment Return-to-Service Rule]]
+- [[Delayed TAT Rule]]
+- [[Workflow Step Authorization Rule]]
+- [[Four-Test SME Rule]]
+- [[Report Release Blocking Rule]]
+- [[Part 11 Logbook Rule]]
+- [[Client Account Status Rule]]
+- [[Client Hierarchy Rule]]
+- [[Primary Contact Rule]]
+- [[Quoted-Only Ordering Rule]]
+- [[List Price Snapshot Rule]]
+- [[Analyte Removal Pricing Rule]]
+- [[TAT Clock Start Rule]]
+- [[Rush Approval Rule]]
+- [[Rush Fee Calculation Rule]]
+- [[Stability Pull Generation Rule]]
+- [[Stability Material Sufficiency Rule]]
+- [[Stability Price Escalation Rule]]
+- [[OOS Investigation Rule]]
+- [[Retest Billing Rule]]
+- [[Partial Reporting Rule]]
+- [[Logbook Failure Flag Rule]]
+- [[Logbook Value Approval Rule]]
+- [[Logbook Correction Flag Rule]]
+- [[Aliquot Weight Review Rule]]
+
+## AI scenarios
+- [[Why is this Requested Test delayed|Why is this Requested Test delayed?]]
+- [[How can today's Backlog be reduced|How can today's Backlog be reduced?]]
+- [[Can this material be used|Can this material be used?]]
+- [[How should this material be disposed|How should this material be disposed?]]
+- [[Why can't this report be released|Why can't this report be released?]]
+- [[Who can perform this workflow step|Who can perform this workflow step?]]
+- [[Which Tests should be batched together|Which Tests should be batched together?]]
+- [[What work is affected by equipment downtime|What work is affected by equipment downtime?]]
+- [[Where is this Sample|Where is this Sample?]]
+- [[Which lot was used for this Result|Which lot was used for this Result?]]
+- [[Can this analyst gain SME status|Can this analyst gain SME status?]]
+- [[What does this test cost in labor|What does this test cost in labor?]]
+
+## Approved decisions
+- [[Decision - Test Equals Test Method]] (superseded)
+- [[Decision - Multiple Submitted Units Form One Sample]]
+- [[Decision - Shipment Is Not a Core Object]]
+- [[Decision - Sample Subdivides Only into Aliquots]]
+- [[Decision - Worklist Is Analyst Specific]]
+- [[Decision - Backlog Is Derived]]
+- [[Decision - Inventory May Become Negative]]
+- [[Decision - Workflow Authorization Is Step Specific]]
+- [[Decision - Four Tests May Grant SME Status]]
+- [[Decision - Electronic Logbooks Are Computational]]
+- [[Decision - All Ordering Is Quoted]]
+- [[Decision - Analyte Is Independent Static Master Data]]
+- [[Decision - Client Account Status Is Active, On Hold or Inactive]]
+- [[Decision - Client Hierarchy Does Not Cascade]]
+- [[Decision - Client Order Renamed Lab Order]]
+- [[Decision - Contacts Link to Many Clients With Roles Per Client]]
+- [[Decision - Grid Data Entry Standard Adopted]]
+- [[Decision - GxP Record Controls Are Enforced by the Database]]
+- [[Decision - One Primary Contact Plus Secondary Contacts]]
+- [[Decision - Project Is a Reusable Client-Specific Quoted Test Package]]
+- [[Decision - Removing Analytes Keeps the Negotiated Discount Percent]]
+- [[Decision - Requested Test Pins Test Version]]
+- [[Decision - Rush Fee Schedules Are Reusable and Assigned Per Test]]
+- [[Decision - Rush Fees Are Quoted Per Tier With Their Own Discount]]
+- [[Decision - Stability Studies Are Quoted Whole and Pulled as Lab Orders]]
+- [[Decision - TAT Clock Starts on Day 0 With Per-Test Cutoff]]
+- [[Decision - Test Pricing Is Defined in the Workflow Designer]]
+- [[Decision - OOS Investigations Use a Procedure Matched to the Work]]
+- [[Decision - Client OOS Retests Are Re-preps Billed by QA Determination]]
+- [[Decision - An OOS Result Holds Only Itself]]
+- [[Decision - TAT Clock Starts When the Sample Is Logged]]
+- [[Decision - Sample ID Format Is Site-YYMMDD-Sequence]] (superseded)
+- [[Decision - Lab Order Statuses]]
+- [[Decision - Applying a Project Orders All Its Tests]]
+- [[Decision - Sandbox Emails Go to an Outbox]]
+- [[Decision - Sample ID Format Is SITEyymmdd Three-Digit Sequence]] (supersedes the hyphenated format)
+- [[Decision - Lab Access Is Assigned Per User by Administrators]]
+- [[Decision - Matrix Is a Controlled List]]
+- [[Decision - Requested Test TAT Can Be Overridden With a Reason]]
+- [[Decision - Audit Trail Is Shown Per Record With Readable References]]
+- [[Decision - CFL Site Time Zone Is Pacific]]
+- [[Decision - Cross-Site Access Comes From Roles]]
+- [[Decision - Build Order Is Inventory Before the Workflow Designer]]
+- [[Decision - Supplier COA Is Not Required to Receive a Lot]]
+- [[Decision - AI Reads Uploaded Supplier COAs and Proposes Values]] (proposed)
+- [[Decision - Chemical List Is Maintained by Supervisors, QA, GMs and Administrators]]
+- [[Decision - Inventory Belongs to a Lab and Transfers Are Re-Logged]]
+- [[Decision - Lab Supervisor Approves Reorders Until Purchasing Exists]]
+- [[Decision - Sample Storage and Retained Quantity Are in the Inventory Slice]]
+- [[Decision - Inventory Slice Build Choices]] (proposed)
+- [[Decision - Requested Tests Are Shown Under Each Sample]]
+- [[Decision - Pick Lists Are Smart Dropdowns]]
+- [[Decision - Every ID Is a Link to Its Record]]
+- [[Decision - Users Work in One Lab at a Time]]
+- [[Decision - Chemical List Retired, Inventory Items Name Their Analytes]]
+- [[Decision - Units and Unit Conversions Are Controlled Tables]]
+- [[Decision - ppm Is mg per L for Liquids and mg per kg for Solids]]
+- [[Decision - Mixture Quantity and Concentration Are Calculated From Components]]
+- [[Decision - Every Inventory Tab Exports and Uploads Excel]]
+- [[Decision - Inventory List and Item Pages Follow Alex's Mock-ups]]
+- [[Decision - Users Sign In With Their Own User ID and Password]]
+- [[Decision - Inventory Changes Are Electronically Signed]]
+- [[Decision - Reasons for Change Are Picked From Canned Reasons per Module]]
+- [[Decision - Molar Mass Lives on the Analytes List]]
+- [[Decision - Mixture Components Can Be Entered in Any Convertible Unit]]
+- [[Decision - Excel Upload to the Inventory List Is QA or Administrator Only]]
+- [[Decision - Phase 1 Is Finished Before the Workflow Designer]]
+- [[Decision - Permissions Are Granted Through Lab Groups]]
+- [[Decision - Permissions Slice Build Choices]] (proposed)
+- [[Decision - Equipment Slice Scope and Rules]]
+- [[Decision - Equipment Slice Build Choices]] (proposed)
+- [[Decision - Equipment Belongs to a Department and Analysts Edit It]]
+- [[Decision - Purchasing Slice Scope and Rules]]
+- [[Decision - Purchasing Slice Build Choices]] (approved in part)
+- [[Decision - Logbooks Wait for the Workflow Designer]]
+- [[Decision - Workflow Designer Slice Scope and Rules]]
+- [[Decision - Workflow Designer Build Choices]] (proposed)
+- [[Decision - Workflow Designer Micro Definitions]]
+- [[Decision - QC Criteria Are Set Per Analyte]]
+- [[Decision - Test Workflow Changes Are Electronically Signed]]
+- [[Decision - Chemistry Execution Scope and Rules]]
+- [[Decision - Chemistry Execution Build Choices]] (proposed)
+- [[Decision - QC Review Build Choices]]
+- [[Decision - QC Review Approves Each Step]]
+- [[Decision - System Administrators Do Setup, Testing Rights Come From Groups]]
+- [[Decision - Micro Bench Build Choices]] (proposed)
+- [[Decision - Order Status Waits for the Report]]
+- [[Decision - Analytical Runs, Preliminary Results and Order Statuses]]
+- [[Decision - Media Qualification, Batch Edits and Barcode Labels]]
+- [[Decision - Workflow Verification]]
+- [[Decision - Result Finalization and the Certificate of Analysis]]
+- [[Decision - OOS Investigation Build Choices]] (proposed)
+- [[Decision - Report Finalization Follow-up]] (build choices proposed)
+- [[Decision - Quote Pricing, Catalogue Updates and Serving Sizes]] (build choices proposed)
+- [[Decision - Standalone Quotes]]
+- [[Proposal - Quick Design Items for the Next Slice]] (answered 2026-10-14)
+- [[Decision - Report Templates, Lab Images and Accreditation Placeholders]]
+- [[Decision - Stability Studies S-1]]
+- [[Decision - Stability Studies S-2 Scope]]
+- [[Decision - Stability Studies S-2]] (built 0.23.0; build choices proposed)
+- [[Decision - Trending and Control Charts T-1]] (built 0.24.0 without Alex's input; all proposed)
+- [[Decision - Trend Chart QA Approval and Limits for Tests]] (Alex's notes; built 0.24.1)
+- [[Proposal - iMonnit Sensor Feed for Logbooks and Workflows]] (built 0.25.0 on the pretend service; the real connection waits for production)
+- [[Proposal - Multi-Instrument Pesticide Panel]] (tabled until Alex meets the lab; not built)
+- [[Decision - Run Dilutions, the Analyst's Pick and Bench Autosave]] (built 0.27.0)
+- [[Decision - Test Packages and Dated Price Changes P-1]] (built 0.26.0; option B for a cancelled test; each test priced in the package since 0.27.1; build choices proposed)
+- [[Decision - Re-prepped Samples Stay Visible in Their Batch]] (built 0.28.1, installed with 0.31.1)
+- [[Decision - Vendor Approvals, Local and Corporate V-1]] (built 0.28.0; build choices proposed)
+- [[Decision - Chain of Custody, Receipt Photos and Photo Reports]] (built 0.29.0; build choices proposed)
+- [[Decision - Waste Classifications W-1]] (built 0.30.0; build choices proposed)
+- [[Decision - Training and Competency C-1]] (built 0.31.0; build choices proposed)
+- [[Decision - Department Training Counts, METRC IDs and Client Licenses]] (built 0.32.0; build choices proposed)
+- [[Decision - Security Hardening SEC-1]] (built 0.33.0; build choices proposed)
+- [[Decision - Invoicing Is Done in the LIMS]]
+- [[Decision - Invoicing I-1]] (built 0.19.0; build choices proposed)
+- [[Decision - Dashboards and the Executive Dashboard D-1]] (built 0.20.0; build choices proposed)
+- [[Decision - Matrix-Driven Bench, Presumptive Alerts and Invalid Readings]] (built 0.21.0; build choices proposed)
+- [[Decision - QA Testing of Inventory Before Use]] (built 0.22.0; build choices proposed)
+- [[Decision - Electronic Logbooks L-1 and L-2]]
+- [[Open Items for QA Review]] (for Jake Teller)
+- [[Decision - Logbook Values Feed Results Through Scanned Materials]]
+- [[Context - AAL Irvine Micro SOP Review]] (context only)
+
+## Graph navigation
+Open Obsidian **Graph View**. Nearly every note now contains direct wiki links to its domain, capability, related objects, workflows, rules, and compliance controls.

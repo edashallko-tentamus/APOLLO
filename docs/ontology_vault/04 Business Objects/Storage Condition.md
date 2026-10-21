@@ -1,0 +1,55 @@
+---
+type: Business Object
+domain: Sample Management
+capability: Sample Storage
+object_classification: Definition Object
+status: Reviewed
+---
+
+# Storage Condition
+
+## Definition
+Required storage condition such as ambient, refrigerated, frozen, controlled humidity, or protected from light.
+
+## Ownership
+- **Core domain:** [[Sample Management]]
+- **Capability:** [[Sample Storage]]
+- **Object classification:** [[Definition Object]]
+- **Value model:** [[Value Ownership]]
+
+## User Values
+- To be refined
+
+## Derived Values
+- To be refined
+
+## System Values
+- Record UUID
+- Created date
+- Created by
+- Last modified date
+- Last modified by
+- Record version
+- Audit trail reference
+
+## Relationships
+- **governs** [[Storage Location]]
+- **required by** [[Sample]]
+- **required by** [[Inventory Lot]]
+
+## Governing Rules
+- Governed by [[Ontology Principles]]
+
+## Related Workflows
+- See related capability and relationships
+
+## AI Questions
+- What is the current status of this Storage Condition?
+- What is blocking or affecting this Storage Condition?
+- Which related records explain this Storage Condition?
+
+## Compliance
+- [[Audit Trail]]
+- [[Record Version]]
+- [[Role]]
+- [[Permission]]

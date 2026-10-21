@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify a Certificate of Analysis</title>
+<style>
+  :root { --ink: #1d2329; --muted: #5c6773; --line: #d9e0e4; --green: #1f3a2c; --ok: #1e7a4a; --bad: #b42318; --warn: #9a6700; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #f4f6f7; }
+  main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; margin-bottom: 14px; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: var(--green); } p { margin: 6px 0; } .muted { color: var(--muted); font-size: 13.5px; }
+  form { display: flex; gap: 8px; margin-top: 12px; } input[type=text] { flex: 1; font: 600 16px ui-monospace, Menlo, Consolas, monospace; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; text-transform: uppercase; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--green); background: var(--green); color: #fff; cursor: pointer; }
+  dl { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 10px 0 0; } dt { color: var(--muted); } dd { margin: 0; word-break: break-all; }
+  .res { font-weight: 700; font-size: 16px; } .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 16px; text-align: center; color: var(--muted); margin-top: 10px; }
+</style></head>
+<body><main>
+  <div class="card">
+    <h1>Verify a Certificate of Analysis</h1>
+    <p class="muted">Enter the verification code printed at the bottom of the certificate. You will see when the lab issued that version and its fingerprint; you can then check your PDF against it. The PDF never leaves your computer.</p>
+    <form id="f"><input type="text" id="code" placeholder="XXXX-XXXX-XXXX" autocomplete="off"><button>Check</button></form>
+  </div>
+  <div class="card" id="out" hidden></div>
+</main>
+<script src="/js/public/verify.js"></script>
+</body></html>

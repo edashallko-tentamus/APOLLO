@@ -3,6 +3,7 @@
 // issued versions, the public verification check, sample attachments, email templates and compliance categories.
 // The rules (who may finalize, GMP, holds, independence, the content matching the record) live in the database.
 'use strict';
+const { page, wantsPage } = require('./paging');
 const crypto = require('crypto');
 const COA = require('./coa');
 const { verifySignature } = require('./auth');
@@ -60,14 +61,19 @@ module.exports = function registerReports({ route, tx, upsertRows, currentSite, 
     return tx({ ...c, reason: c.body.reason || 'Finalization released' }, (t) => t.one('SELECT release_finalization_claim($1, $2::uuid[]) AS n', [c.params.id, tests.length ? tests : null]));
   });
   // issued COAs (newest first): the archive of what was sent
-  r('GET', '/api/reports/issued', async (c) => {
-    const site = await currentSite(c);
-    const days = Math.min(Math.max(Number(c.query.days) || 90, 1), 3650);
-    return { rows: await c.db.rows(`SELECT v.id, v.version_no, v.is_final, v.issued_at, v.group_code, v.verify_code, u.full_name AS issued_by_name, s.id AS sample_id, s.sample_code,
+  const ISSUED_SQL = `SELECT v.id, v.version_no, v.is_final, v.issued_at, v.group_code, v.verify_code, u.full_name AS issued_by_name, s.id AS sample_id, s.sample_code,
         s.sample_code || '-R' || v.version_no AS report_id, s.client_sample_id, o.id AS lab_order_id, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, cl.id AS client_id,
         (SELECT count(*) FROM email_outbox e WHERE e.coa_version_id = v.id)::int AS emails
       FROM coa_version v JOIN coa ON coa.id = v.coa_id JOIN sample s ON s.id = coa.sample_id JOIN lab_order o ON o.id = s.lab_order_id JOIN client cl ON cl.id = o.client_id
-      JOIN app_user u ON u.id = v.issued_by WHERE coa.site_id = $1 AND v.issued_at > clock_timestamp() - make_interval(days => $2) ORDER BY v.issued_at DESC LIMIT 2000`, [site, days]) };
+      JOIN app_user u ON u.id = v.issued_by WHERE coa.site_id = $1`;
+  r('GET', '/api/reports/issued', async (c) => {
+    const site = await currentSite(c);
+    // one page at a time, newest first (0.35.0); a report, sample, order or verification code typed or scanned opens it
+    if (wantsPage(c)) return page(c, { sql: ISSUED_SQL, params: [site], filters: { all: 'true', final: 'is_final', interim: 'NOT is_final' },
+      search: ['report_id', 'sample_code', 'client_sample_id', 'order_code', 'client_name', 'verify_code', 'issued_by_name', 'group_code'],
+      ids: ['report_id', 'sample_code', 'verify_code'], order: 'ORDER BY issued_at DESC' });
+    const days = Math.min(Math.max(Number(c.query.days) || 90, 1), 3650);
+    return { rows: await c.db.rows(ISSUED_SQL + ' AND v.issued_at > clock_timestamp() - make_interval(days => $2) ORDER BY v.issued_at DESC LIMIT 2000', [site, days]) };
   });
   // the COAs of an order's samples (the order page)
   r('GET', '/api/orders/:id/coas', async (c) => {

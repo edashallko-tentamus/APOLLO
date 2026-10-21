@@ -2,6 +2,7 @@
 // only, never approving your own request, second approval above the lab's amount, one supplier per order, partial
 // receipts and back-orders, equipment received into the register) live in the database.
 'use strict';
+const { page, wantsPage } = require('./paging');
 
 const MESSAGES = {
   purchase_receipt_note: 'Describe the problem with the delivery (what was damaged, how warm it arrived, what was missing).',
@@ -56,8 +57,18 @@ module.exports = function registerPurchasing({ route, tx, signedTx, upsertRows, 
   r('GET', '/api/purchasing/lines', async (c) => {
     const site = await currentSite(c);
     const setting = await c.db.one('SELECT * FROM purchasing_setting WHERE site_id = $1', [site]);
-    const rows = await c.db.rows(`SELECT v.*, (v.requested_by = $2) AS mine, pl.scope_ids, scope_names(pl.scope_ids) AS scope_text
-      FROM purchase_line_view v JOIN purchase_line pl ON pl.id = v.id WHERE v.site_id = $1
+    const sql = `SELECT v.*, (v.requested_by = $2) AS mine, pl.scope_ids, scope_names(pl.scope_ids) AS scope_text
+      FROM purchase_line_view v JOIN purchase_line pl ON pl.id = v.id WHERE v.site_id = $1`;
+    if (wantsPage(c)) {
+      // one page at a time (0.35.0), newest first
+      const d = await page(c, { sql, params: [site, c.userId],
+        filters: { approve: `status::text IN ('Requested','Awaiting second approval')`, order: `status::text = 'Approved'`,
+          receive: `status::text IN ('Ordered','Partly received')`, mine: 'mine', all: 'true' },
+        search: ['line_code', 'description', 'supplier_name', 'catalog_number', 'po_code', 'external_po_number', 'lot_code', 'equipment_code', 'requested_by_name'],
+        ids: ['line_code', 'po_code', 'external_po_number'], order: 'ORDER BY requested_at DESC, line_code DESC' });
+      return { ...d, setting };
+    }
+    const rows = await c.db.rows(sql + `
       ORDER BY CASE v.status WHEN 'Awaiting second approval' THEN 0 WHEN 'Requested' THEN 1 WHEN 'Approved' THEN 2 WHEN 'Ordered' THEN 3 WHEN 'Partly received' THEN 4 ELSE 5 END, v.requested_at DESC`, [site, c.userId]);
     return { rows, setting };
   });
@@ -111,12 +122,16 @@ module.exports = function registerPurchasing({ route, tx, signedTx, upsertRows, 
   });
   r('GET', '/api/purchasing/orders', async (c) => {
     const site = await currentSite(c);
-    return c.db.rows(`SELECT o.*, s.supplier_name, u.full_name AS ordered_by,
+    const sql = `SELECT o.*, s.supplier_name, u.full_name AS ordered_by,
         (SELECT count(*) FROM purchase_line l WHERE l.purchase_order_id = o.id) AS line_count,
         (SELECT sum(l.quantity * l.unit_price) FROM purchase_line l WHERE l.purchase_order_id = o.id) AS amount,
         (SELECT CASE WHEN bool_and(l.status IN ('Received','Cancelled')) THEN 'Received' WHEN bool_or(l.status IN ('Partly received','Received')) THEN 'Partly received' ELSE 'Open' END
            FROM purchase_line l WHERE l.purchase_order_id = o.id) AS receipt_state
-      FROM purchase_order o JOIN supplier s ON s.id = o.supplier_id JOIN app_user u ON u.id = o.created_by WHERE o.site_id = $1 ORDER BY o.ordered_at DESC`, [site]);
+      FROM purchase_order o JOIN supplier s ON s.id = o.supplier_id JOIN app_user u ON u.id = o.created_by WHERE o.site_id = $1`;
+    if (!wantsPage(c)) return c.db.rows(sql + ' ORDER BY o.ordered_at DESC', [site]);
+    return page(c, { sql, params: [site], filters: { open: `receipt_state <> 'Received'`, received: `receipt_state = 'Received'`, all: 'true' },
+      search: ['po_code', 'external_po_number', 'supplier_name', 'confirmation_number', 'ordered_by'], ids: ['po_code', 'external_po_number'],
+      order: 'ORDER BY ordered_at DESC, po_code DESC' });
   });
   r('GET', '/api/purchasing/orders/:id', async (c) => {
     if (!isUuid(c.params.id)) throw new Error('Order not found');

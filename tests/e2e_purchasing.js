@@ -33,7 +33,7 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 
   // ---- The queue: Alex (General Manager rights) gives the second approval to the HPLC oven
   await signIn(page, BASE, 'Alex Kiddle', '#/purchasing');
   await page.waitForSelector('#g tbody tr');
-  check('Purchasing is in the menu; the queue opens on To approve', (await page.locator('nav a[href="#/purchasing"]').count()) === 1 && /To approve\s*3/.test(await page.locator('.pubar').innerText()));
+  check('Purchasing is in the menu; the queue opens on To approve', (await page.locator('nav a[href="#/purchasing"]').count()) === 1 && /To approve\s*3/.test(await page.locator('.pgtabs').innerText()));
   check('Over the lab\'s 5,000 USD: the oven waits for a second approval, marked *', /Awaiting second approval/.test(await row('#g', 'HPLC column oven').innerText()) && /\*/.test(await row('#g', 'HPLC column oven').innerText()));
   await shot('80_purchasing_queue');
   await tick('#g', 'HPLC column oven'); await page.click('#approve'); await sign(page); await page.waitForTimeout(900);

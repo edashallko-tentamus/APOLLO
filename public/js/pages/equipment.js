@@ -4,7 +4,7 @@
 // documents, release to service, out of service / retire, and transfer to another lab.
 import { api, esc, pageHeader, toast, modal, state, currentSite, badge, link, signDialog, setDirtyCheck } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { equipmentCard } from './logbooks.js';
 import { equipmentCard as sensorCard } from './sensors.js';
 import { bulkButtons, wireBulk, printTable } from '../bulkio.js';
@@ -101,39 +101,44 @@ const PRINT_COLS = [
 
 export async function list(main) {
   if (!needLab(main)) return;
-  const [rows, me] = await Promise.all([api('/equipment'), api('/equipment/me')]);
+  const me = await api('/equipment/me');
   const site = currentSite();
   const f = FILTERS[state.query.get('show')] ? state.query.get('show') : 'active';
-  main.innerHTML = pageHeader(`Equipment: ${site.site_code}`, `Every instrument and small item in ${esc(site.site_name)}, from the HPLC to each pipette. Availability and calibration status are worked out from tags and calibration records; nobody types them. Click an ID to open it.`,
+  main.innerHTML = pageHeader(`Equipment: ${site.site_code}`, `Every instrument and small item in ${esc(site.site_name)}, from the HPLC to each pipette. Availability and calibration status are worked out from tags and calibration records; nobody types them. Newest first, 50 at a time; scan or type an ID or serial number and press Enter to open it.`,
     '', { kind: 'equipmentlist' }) + tabs('#/equipment') + `
     <div class="eqbar">
-      ${Object.entries(FILTERS).map(([k, [l, fn]]) => `<a class="tab ${k === f ? 'on' : ''}" href="#/equipment?show=${k}" style="text-decoration:none">${esc(l)} <small>${rows.filter(fn).length}</small></a>`).join('')}
       <span class="sp"></span>${bulkButtons('equipment')}<button class="btn" id="print">Print</button>
       ${me.can_edit ? '<button class="btn" id="many">Add many (paste)</button><button class="btn primary" id="new">+ New equipment</button>' : ''}
     </div><div id="g"></div>`;
-  const shown = rows.filter(FILTERS[f][1]).map((r) => ({ ...r, _pick: false }));
-  const g = new Grid(main.querySelector('#g'), {
-    rows: shown, search: true, filter: state.query.get('find') || '', emptyText: 'No equipment here yet.',
-    onRowOpen: (r) => { location.hash = '#/equipment/' + r.id; },
-    rowClass: (r) => (r.admin_status === 'Retired' ? 'mutedrow' : ''),
-    columns: [
-      ...(me.can_edit ? [{ field: '_dup', title: '', type: 'button', width: 82, label: 'Duplicate', onClick: (r) => { location.hash = '#/equipment/new?from=' + r.id; } }] : []),
-      { field: 'equipment_code', title: 'ID', type: 'link', width: 82, href: (r) => '#/equipment/' + r.id },
-      { field: 'equipment_name', title: 'Name', type: 'readonly', width: 190 },
-      { field: 'type_name', title: 'Type', type: 'readonly', width: 115 },
-      { field: 'department_code', title: 'Dept', type: 'readonly', width: 58 },
-      { field: 'mfr', title: 'Manufacturer / model', type: 'readonly', width: 165, compute: (r) => [r.manufacturer, r.model].filter(Boolean).join(' ') },
-      { field: 'serial_number', title: 'Serial', type: 'readonly', width: 100 },
-      { field: 'cal_expires', title: 'Calibration expires', type: 'readonly', width: 100, format: (v, r) => (r.calibration_required ? d8(v) || 'None' : 'Not required'), cellClass: (r) => calCls(r.calibration_status) },
-      { field: 'maintenance_due', title: 'Next maintenance', type: 'readonly', width: 100, format: (v) => d8(v) || '–', cellClass: (r) => mntCls(r.maintenance_status) },
-      { field: 'availability', title: 'Availability', type: 'readonly', width: 150, format: (v, r) => v + (r.tagged_for ? `: ${r.tagged_for}` : ''), cellClass: (r) => (r.availability === 'Tagged out' ? 'cbad' : r.availability === 'Available' ? 'cok' : '') },
-      { field: 'owners', title: 'Owners', type: 'readonly', width: 150, format: (v) => v || 'Nobody (fix this)' },
-      { field: '_pick', title: '☐', type: 'bool', width: 40, help: 'Tick rows to export or print only those' },
-    ],
+  const list = pagedList({
+    el: main.querySelector('#g'), url: '/equipment', filter: f, q: state.query.get('find') || '',
+    filters: Object.entries(FILTERS).map(([k, [l]]) => [k, l]),
+    placeholder: 'Search by ID, name, type, maker, model, serial or owner; scan or type an ID and press Enter',
+    open: (r) => { location.hash = '#/equipment/' + r.id; },
+    render: (body, rows) => new Grid(body, {
+      rows: rows.map((r) => ({ ...r, _pick: false })), emptyText: 'No equipment here yet.',
+      onRowOpen: (r) => { location.hash = '#/equipment/' + r.id; },
+      rowClass: (r) => (r.admin_status === 'Retired' ? 'mutedrow' : ''),
+      columns: [
+        ...(me.can_edit ? [{ field: '_dup', title: '', type: 'button', width: 82, label: 'Duplicate', onClick: (r) => { location.hash = '#/equipment/new?from=' + r.id; } }] : []),
+        { field: 'equipment_code', title: 'ID', type: 'link', width: 82, href: (r) => '#/equipment/' + r.id },
+        { field: 'equipment_name', title: 'Name', type: 'readonly', width: 190 },
+        { field: 'type_name', title: 'Type', type: 'readonly', width: 115 },
+        { field: 'department_code', title: 'Dept', type: 'readonly', width: 58 },
+        { field: 'mfr', title: 'Manufacturer / model', type: 'readonly', width: 165, compute: (r) => [r.manufacturer, r.model].filter(Boolean).join(' ') },
+        { field: 'serial_number', title: 'Serial', type: 'readonly', width: 100 },
+        { field: 'cal_expires', title: 'Calibration expires', type: 'readonly', width: 100, format: (v, r) => (r.calibration_required ? d8(v) || 'None' : 'Not required'), cellClass: (r) => calCls(r.calibration_status) },
+        { field: 'maintenance_due', title: 'Next maintenance', type: 'readonly', width: 100, format: (v) => d8(v) || '–', cellClass: (r) => mntCls(r.maintenance_status) },
+        { field: 'availability', title: 'Availability', type: 'readonly', width: 150, format: (v, r) => v + (r.tagged_for ? `: ${r.tagged_for}` : ''), cellClass: (r) => (r.availability === 'Tagged out' ? 'cbad' : r.availability === 'Available' ? 'cok' : '') },
+        { field: 'owners', title: 'Owners', type: 'readonly', width: 150, format: (v) => v || 'Nobody (fix this)' },
+        { field: '_pick', title: '☐', type: 'bool', width: 40, help: 'Tick rows to export or print only those' },
+      ],
+    }),
   });
-  const picked = () => g.rows.filter((r) => r._pick);
-  wireBulk(main, { selected: () => picked().map((r) => r.id), done: () => list(main) });
-  main.querySelector('#print').onclick = () => { const p = picked(); printTable(`Equipment: ${site.site_code} (${FILTERS[f][0]})`, PRINT_COLS, p.length ? p : g.v.map((i) => g.rows[i])); };
+  const g = () => list.grid();
+  const picked = () => (g() ? g().rows.filter((r) => r._pick) : []);
+  wireBulk(main, { selected: () => picked().map((r) => r.id), done: () => list.reload() });
+  main.querySelector('#print').onclick = () => { const p = picked(); printTable(`Equipment: ${site.site_code} (${FILTERS[list.state.f][0]})`, PRINT_COLS, p.length ? p : (g() ? g().v.map((i) => g().rows[i]) : [])); };
   if (me.can_edit) {
     main.querySelector('#new').onclick = () => { location.hash = '#/equipment/new'; };
     main.querySelector('#many').onclick = () => { location.hash = '#/equipment/add'; };

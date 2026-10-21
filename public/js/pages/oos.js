@@ -5,7 +5,7 @@
 // the client's answers (from the link in the OOS email) and QA's retest determination are on the same page.
 import { api, esc, pageHeader, toast, modal, badge, link, signDialog, state } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid } from './common.js';
+import { editableGrid, pagedList } from './common.js';
 
 const css = document.createElement('style');
 css.textContent = `
@@ -43,11 +43,15 @@ export async function openOos(ctx) {
 
 // ---------------------------------------------------------------- the list
 export async function list(main) {
-  const d = await api('/oos');
   main.innerHTML = pageHeader('OOS investigations', 'Out-of-specification results under investigation in this lab. An investigation is opened from QC Review or the sample page ("Open OOS…"); GMP samples follow Full Phase I, the others Check and Acknowledge. A result under investigation is held from the COA until it is concluded.',
     '<a class="btn ghost" href="#/oos/config">Checklists and target times</a>', { kind: 'oos_list' })
     + '<div class="card"><div id="g"></div></div>';
-  new Grid(main.querySelector('#g'), { readOnly: true, search: true, rows: d.rows, emptyText: 'No OOS investigations in this lab.',
+  // one page at a time from the server (0.35.0), newest first
+  pagedList({ el: main.querySelector('#g'), url: '/oos', q: state.query.get('find') || '', filter: state.query.get('show') || 'open',
+    filters: [['open', 'Open'], ['overdue', 'Overdue'], ['closed', 'Closed'], ['all', 'All']],
+    placeholder: 'Search by investigation, sample, client, test, analyte or batch; type an OOS code and press Enter to open it',
+    open: (r) => { location.hash = '#/oos/' + r.id; },
+    render: (el, rows) => new Grid(el, { readOnly: true, rows, emptyText: 'No OOS investigations here.',
     rowClass: (r) => (r.overdue ? 'tbnc' : ['Closed', 'Cancelled'].includes(r.status) ? 'mutedrow' : ''),
     columns: [
       { field: 'oos_code', title: 'Investigation', type: 'link', width: 115, href: (r) => '#/oos/' + r.id },
@@ -64,7 +68,7 @@ export async function list(main) {
       { field: 'responses_waiting', title: 'Client answers', type: 'readonly', width: 105, compute: (r) => (r.responses_waiting ? `${r.responses_waiting} to handle` : ''), cellClass: (r) => (r.responses_waiting ? 'tbwait' : '') },
       { field: 'opened_by_name', title: 'Opened by', type: 'readonly', width: 140 },
       { field: 'opened_at', title: 'Opened', type: 'readonly', width: 145, format: dt },
-    ] });
+    ] }) });
 }
 
 // ---------------------------------------------------------------- one investigation

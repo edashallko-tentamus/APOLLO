@@ -1,7 +1,7 @@
 // Home, Contacts, Analytes, Rush fee schedules, Audit trail
 import { api, esc, pageHeader, toast, modal, state, money, currentSite, currentUser, auditColumns, can } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 
 export async function dashboard(main) {
   const d = await api('/dashboard');
@@ -35,10 +35,12 @@ export async function dashboard(main) {
 }
 
 export async function contacts(main) {
-  const rows = await api('/contacts');
-  main.innerHTML = pageHeader('Contacts', 'One record per person. Link contacts to clients (and set their roles) from each client page.', '', { kind: 'contacts' }) + '<div id="g"></div>';
-  editableGrid({
-    el: main.querySelector('#g'), rows, allowAdd: true, search: true, filter: state.query.get('find') || '', what: 'contact records',
+  main.innerHTML = pageHeader('Contacts', 'One record per person. Link contacts to clients (and set their roles) from each client page. Newest first, 50 at a time; search finds anyone.', '', { kind: 'contacts' }) + '<div id="g"></div>';
+  // one page at a time from the server (0.35.0); the page shown is edited as before (paste, fill down)
+  const list = pagedList({ el: main.querySelector('#g'), url: '/contacts', q: state.query.get('find') || '', filter: state.query.get('show') || 'active',
+    filters: [['active', 'Active'], ['inactive', 'Inactive'], ['all', 'All']], remember: true,
+    placeholder: 'Search by name, email, phone or client', render: (body, rows) => editableGrid({
+    el: body, rows, allowAdd: true, what: 'contact records',
     newRow: () => ({ status: 'Active', portal_access: false }),
     columns: [
       { field: 'contact_code', title: 'Code', type: 'link', width: 90, href: (r) => (r.contact_code ? '#/contacts?find=' + encodeURIComponent(r.contact_code) : null) },
@@ -52,8 +54,8 @@ export async function contacts(main) {
       { field: 'clients', title: 'Linked clients', type: 'readonly', width: 220 },
     ],
     save: (rows, reason) => api('/contacts/bulk', { method: 'POST', body: { rows, reason } }),
-    afterSave: () => contacts(main),
-  });
+    afterSave: () => list.reload(),
+  }) });
 }
 
 export async function analytes(main) {

@@ -360,6 +360,17 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
     const ws = await q(c.db, 'SELECT * FROM dashboard_widget WHERE $1 = ANY (boards) ORDER BY sort_order', [board]);
     return ws.sort((a, b) => (order.indexOf(a.code) + 1 || 99) - (order.indexOf(b.code) + 1 || 99));
   }
+  // Refreshing (0.35.0, Alex): the widgets people act on during the day are live (the page asks again every 5 minutes);
+  // every other widget is worked out when first opened and then only when someone asks (its refresh icon, or Refresh
+  // all), because those are the heavy ones. Their last figures are kept in memory per person, board, lab and widget,
+  // with the time they were worked out; a server restart forgets them.
+  const LIVE = ['my_work', 'intake', 'rush', 'backlog', 'batches', 'overdue', 'signing'];
+  const cache = new Map();
+  const cacheKey = (board, sites, code, user) => `${board}|${[...sites].sort().join(',')}|${code}|${user}`;
+  function remember(key, v) {
+    cache.set(key, v);
+    if (cache.size > 5000) { const old = Date.now() - 24 * 3600e3; for (const [k, x] of cache) if (Date.parse(x.at) < old) cache.delete(k); }
+  }
   r('GET', '/api/dashboard/:board', async (c) => {
     const board = c.params.board;
     if (!['home', 'gm', 'executive'].includes(board)) throw new Error('Dashboard not found');
@@ -367,13 +378,22 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
     const ws = await widgetsFor(c, board, sites);
     const layout = await one(c.db, 'SELECT layout, hidden FROM user_dashboard_layout WHERE user_id = $1 AND board = $2', [c.userId, board]);
     const only = c.query.only ? String(c.query.only).split(',') : null;
+    // refresh=1: work out again the widgets asked for in `only` (or, without `only`, every widget that is not live)
+    const refresh = c.query.refresh === '1';
     const out = [];
     for (const w of ws) {
       if (only && !only.includes(w.code)) continue;
       if (layout && (layout.hidden || []).includes(w.code) && !only) { out.push({ code: w.code, title: w.title, hidden: true, description: w.description }); continue; }
-      let data; let error = null;
-      try { data = W[w.code] ? await W[w.code](c.db, sites, c) : {}; } catch (e) { error = e.message; }
-      out.push({ code: w.code, title: w.title, category: w.category, description: w.description, w: w.default_w, h: w.default_h, data, error });
+      const live = LIVE.includes(w.code);
+      const key = cacheKey(board, sites, w.code, c.userId);
+      let got = live || refresh ? null : cache.get(key);
+      if (!got) {
+        let data; let error = null;
+        try { data = W[w.code] ? await W[w.code](c.db, sites, c) : {}; } catch (e) { error = e.message; }
+        got = { data, error, at: new Date().toISOString() };
+        if (!live && !error) remember(key, got);
+      }
+      out.push({ code: w.code, title: w.title, category: w.category, description: w.description, w: w.default_w, h: w.default_h, data: got.data, error: got.error, live, at: got.at });
     }
     const labs = board === 'home' ? [] : await q(c.db, 'SELECT id, site_code, site_name FROM lab_site WHERE id = ANY($1) ORDER BY site_code', [await sitesFor(c, board)]);
     return { board, widgets: out, layout: layout ? layout.layout : [], hidden: layout ? layout.hidden : [], labs, lab: isUuid(c.query.lab) ? c.query.lab : null,
@@ -496,6 +516,227 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
       rows: rows.map((x) => [x.site_code, x.month, x.plan, x.revenue === null ? '' : Number(x.revenue), x.costs === null ? '' : Number(x.costs)]) });
     return { __raw: true, body: buf, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers: { 'Content-Disposition': `attachment; filename="Forecasts ${year}.xlsx"` } };
   });
+  // ---------------------------------------------------------------- the performance report (0.35.0, Alex)
+  // One Excel workbook for a date range: a Summary a General Manager or executive reads in a minute (headline by lab,
+  // by month, top clients, quality), then the raw data behind it, one tab per LIMS record type, with the LIMS's own
+  // column names. Revenue and costs on the Summary are SUMIFS formulas over the raw tabs (cached values written too),
+  // so a reader can trace every figure. Labs: those the person types finance for, or sees on the GM or executive board.
+  const reportLabs = async (c) => {
+    const all = await q(c.db, `SELECT id, site_code, site_name FROM lab_site WHERE status = 'Active' ORDER BY site_code`);
+    const out = [];
+    for (const s of all) {
+      if (await hasPermission(c, 'finance.enter', s.id) || await hasPermission(c, 'dashboard.executive', s.id) || await hasPermission(c, 'dashboard.gm', s.id)) out.push(s);
+    }
+    if (!out.length) throw new Error('The performance report is for General Managers, the Executive and Finance groups and system administrators.');
+    return out;
+  };
+  const isoDate = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v || '').slice(0, 10));
+  r('GET', '/api/finance/report.xlsx', async (c) => {
+    let labs = await reportLabs(c);
+    if (c.query.labs) { const want = String(c.query.labs).toUpperCase().split(',').map((x) => x.trim()); labs = labs.filter((l) => want.includes(l.site_code)); }
+    if (!labs.length) throw new Error('None of those labs is one you may report on.');
+    const from = String(c.query.from || ''); let to = String(c.query.to || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('From and To: dates (YYYY-MM-DD)');
+    if (from > to) throw new Error('From must be on or before To');
+    if ((Date.parse(to) - Date.parse(from)) / 864e5 > 731) throw new Error('Choose at most two years');
+    // nothing has happened after today: a period running into the future ends today (budgets are not counted ahead)
+    const now = isoDate((await one(c.db, 'SELECT site_today($1) AS d', [labs[0].id])).d);
+    if (from > now) throw new Error('From is in the future');
+    if (to > now) to = now;
+    const ids = labs.map((l) => l.id); const P = [ids, from, to];
+    const me = await one(c.db, 'SELECT full_name FROM app_user WHERE id = $1', [c.userId]);
+
+    // ---- the raw data (LIMS column names)
+    const invoices = await q(c.db, `SELECT i.invoice_number, i.kind, i.site_code, i.order_code, i.client_name, i.po_number, i.invoice_date, i.due_date, i.payment_terms_days,
+        i.list_total, i.discount_total, i.rush_total, i.total, i.credits_number, i.catchup, i.line_count, i.sample_count, i.late_rush_count, i.issued_at, i.issued_by_name, i.sent_at, i.push_status
+      FROM invoice_view i WHERE i.status = 'Issued' AND i.site_id = ANY($1) AND i.invoice_date BETWEEN $2 AND $3 ORDER BY i.invoice_date, i.invoice_number`, P);
+    const lines = await q(c.db, `SELECT i.invoice_number, i.site_code, i.client_name, i.invoice_date, l.line_no, l.kind, l.sample_code, l.client_sample_id, l.test_code, l.test_name,
+        l.completed_on, l.due_date, l.late_days, l.list_price, l.quoted_price, l.price, l.rush_billed, l.rush_fee, l.amount, l.price_note, l.rush_note, l.line_note
+      FROM invoice_line l JOIN invoice_view i ON i.id = l.invoice_id WHERE i.status = 'Issued' AND i.site_id = ANY($1) AND i.invoice_date BETWEEN $2 AND $3
+      ORDER BY i.invoice_date, i.invoice_number, l.line_no`, P);
+    const weeks = await q(c.db, `SELECT s.site_code, w.week_ending, lims_week_revenue(w.site_id, w.week_ending) AS lims_revenue, w.costs, w.revenue AS books_revenue, w.note
+      FROM finance_week w JOIN lab_site s ON s.id = w.site_id WHERE w.site_id = ANY($1) AND w.status = 'Active' AND w.week_ending BETWEEN $2 AND $3 ORDER BY w.week_ending, s.site_code`, P);
+    const plans = await q(c.db, `SELECT s.site_code, p.month, p.plan, p.revenue, p.costs FROM finance_plan p JOIN lab_site s ON s.id = p.site_id
+      WHERE p.site_id = ANY($1) AND p.status = 'Active' AND p.month BETWEEN date_trunc('month', $2::date) AND $3 ORDER BY p.month, s.site_code, p.plan`, P);
+    const samples = await q(c.db, `SELECT s.sample_code, s.client_sample_id, ls.site_code, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, s.matrix, s.received_at, s.logged_at,
+        t.day0, t.due_date, t.tests, t.completed_on, t.all_reported, t.hold_days, t.on_time, t.days_late,
+        (s.logged_at AT TIME ZONE ls.time_zone)::date AS logged_on
+      FROM sample s JOIN lab_order o ON o.id = s.lab_order_id JOIN lab_site ls ON ls.id = o.site_id JOIN client cl ON cl.id = o.client_id
+      LEFT JOIN sample_tat_view t ON t.sample_id = s.id
+      WHERE o.site_id = ANY($1) AND NOT cl.is_internal AND s.logged_at IS NOT NULL AND (s.logged_at AT TIME ZONE ls.time_zone)::date BETWEEN $2 AND $3
+      ORDER BY s.logged_at, s.sample_code`, P);
+    const tests = await q(c.db, `SELECT t.sample_code, ls.site_code, t.order_code, t.test_name, d.department_name, t.is_rush, t.day0, t.due_date, t.received_at, t.logged_at, t.approved_at,
+        t.reported_at, t.reported_on, t.login_days, t.lab_days, t.qa_days, t.hold_days, t.on_time, t.days_late
+      FROM test_tat_view t JOIN lab_site ls ON ls.id = t.site_id LEFT JOIN department d ON d.id = t.department_id
+      WHERE t.site_id = ANY($1) AND t.reported_on BETWEEN $2 AND $3 ORDER BY t.reported_at, t.sample_code`, P);
+    const wip = await q(c.db, `SELECT ls.site_code, w.order_code, w.sample_code, w.client_name, w.test_name, w.due_date, w.wip_state, w.value
+      FROM wip_view w JOIN lab_site ls ON ls.id = w.site_id WHERE w.site_id = ANY($1) ORDER BY ls.site_code, w.due_date NULLS LAST, w.sample_code`, [ids]);
+    const oos = await q(c.db, `SELECT x.oos_code, ls.site_code, s.sample_code, a.analyte_name, x.procedure::text AS procedure, x.is_gmp, x.reported, x.unit, x.spec_text, x.status,
+        x.opened_at, x.due_date, x.conclusion, x.assignable_cause, x.concluded_at, x.retest_determination, x.phase2_decision,
+        (x.opened_at AT TIME ZONE ls.time_zone)::date AS opened_on
+      FROM oos_investigation x JOIN lab_site ls ON ls.id = x.site_id JOIN sample s ON s.id = x.sample_id JOIN analyte a ON a.id = x.analyte_id
+      WHERE x.site_id = ANY($1) AND (x.opened_at AT TIME ZONE ls.time_zone)::date BETWEEN $2 AND $3 ORDER BY x.opened_at`, P);
+    const retests = await q(c.db, `SELECT ls.site_code, count(*) AS n FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id JOIN lab_site ls ON ls.id = o.site_id
+      WHERE rt.retest_of_id IS NOT NULL AND o.site_id = ANY($1) AND (rt.created_at AT TIME ZONE ls.time_zone)::date BETWEEN $2 AND $3 GROUP BY ls.site_code`, P);
+
+    // ---- the figures for the Summary
+    const codes = labs.map((l) => l.site_code);
+    const sum = (rows, f, pred = () => true) => rows.filter(pred).reduce((a, x) => a + N(f(x)), 0);
+    const median = (arr) => { const a = arr.filter((v) => Number.isFinite(v)).sort((x, y) => x - y); if (!a.length) return null; const m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+    const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5) + 1;
+    // a monthly figure counts for the share of its month inside the range (budget prorated by days)
+    const share = (month) => { const m0 = isoDate(month); const y = +m0.slice(0, 4); const mo = +m0.slice(5, 7);
+      const mEnd = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10); const lo = m0 > from ? m0 : from; const hi = mEnd < to ? mEnd : to;
+      return hi < lo ? 0 : days(lo, hi) / days(m0, mEnd); };
+    const plan = (lab, which, field) => sum(plans, (p) => N(p[field]) * share(p.month), (p) => (!lab || p.site_code === lab) && p.plan === which);
+    const tatDays = (t) => (t.logged_at && t.reported_at ? (Date.parse(t.reported_at) - Date.parse(t.logged_at)) / 864e5 : NaN);
+    const ratio = (a, b) => (N(b) ? N(a) / N(b) : null);
+
+    // sheet names (the formulas refer to them)
+    const SH = { inv: 'Invoices', lines: 'Invoice lines', weeks: 'Finance weeks', plans: 'Finance plans', samples: 'Samples', tests: 'Tests', wip: 'Work in progress', oos: 'OOS investigations' };
+    const invCols = ['invoice_number', 'kind', 'site_code', 'order_code', 'client_name', 'po_number', 'invoice_date', 'due_date', 'payment_terms_days', 'list_total', 'discount_total', 'rush_total', 'total',
+      'credits_number', 'catchup', 'line_count', 'sample_count', 'late_rush_count', 'issued_at', 'issued_by_name', 'sent_at', 'push_status'];
+    const weekCols = ['site_code', 'week_ending', 'lims_revenue', 'costs', 'books_revenue', 'note'];
+    const L = (cols, name) => XLSX.colName(cols.indexOf(name));
+    const nInv = invoices.length + 1; const nWk = weeks.length + 1;
+    const sumifs = (sheet, cols, n, valueCol, labCol, lab) => `SUMIFS('${sheet}'!$${L(cols, valueCol)}$2:$${L(cols, valueCol)}$${Math.max(2, n)},'${sheet}'!$${L(cols, labCol)}$2:$${L(cols, labCol)}$${Math.max(2, n)},"${lab}")`;
+
+    const rows = []; const T = (v) => ({ v, s: 'title' }); const H = (v) => ({ v, s: 'head' }); const S = (v) => ({ v, s: 'sub' }); const note = (v) => ({ v, s: 'note' });
+    const money = (v, f, bold) => ({ v: v === null ? null : Math.round(N(v) * 100) / 100, f, s: bold ? 'money0b' : 'money0' });
+    const pctc = (v, f, bold) => ({ v: v === null ? null : v, f, s: bold ? 'pctb' : 'pct' });
+    const int = (v, bold) => ({ v: v === null ? null : N(v), s: bold ? 'intb' : 'int' });
+    const dec = (v, bold) => ({ v: v === null ? null : Math.round(v * 10) / 10, s: bold ? 'decb' : 'dec' });
+    const generated = new Date();
+    rows.push([T('Performance report')]);
+    rows.push([note(`${from} to ${to}  ·  Labs: ${codes.join(', ')}  ·  Generated ${generated.toISOString().slice(0, 16).replace('T', ' ')} UTC by ${me ? me.full_name : ''}`)]);
+    rows.push([]);
+
+    // headline by lab
+    rows.push([S('Headline by lab')]);
+    const hh = ['Lab', 'Revenue (net)', 'Budget', 'vs budget', 'Costs', 'EBITDA', 'EBITDA margin', 'Samples logged', 'Tests reported', 'Samples on time', 'Tests on time', 'Median days, logged to reported', 'Work in progress now', 'Open OOS now'];
+    rows.push(hh.map(H));
+    const first = rows.length + 1;
+    const openOos = await q(c.db, `SELECT ls.site_code, count(*) AS n FROM oos_investigation x JOIN lab_site ls ON ls.id = x.site_id WHERE x.site_id = ANY($1) AND x.status NOT IN ('Closed','Cancelled') GROUP BY 1`, [ids]).catch(() => []);
+    for (const lab of codes) {
+      const rn = rows.length + 1;
+      const rev = sum(invoices, (x) => x.total, (x) => x.site_code === lab);
+      const bud = plan(lab, 'Budget forecast', 'revenue');
+      const cost = sum(weeks, (x) => x.costs, (x) => x.site_code === lab);
+      const hasCost = weeks.some((x) => x.site_code === lab);
+      const sm = samples.filter((x) => x.site_code === lab); const smDone = sm.filter((x) => x.all_reported && x.on_time !== null);
+      const ts = tests.filter((x) => x.site_code === lab);
+      const wipV = sum(wip, (x) => x.value, (x) => x.site_code === lab);
+      rows.push([lab,
+        money(rev, sumifs(SH.inv, invCols, nInv, 'total', 'site_code', lab)),
+        money(bud || null),
+        pctc(bud ? rev / bud - 1 : null, bud ? `IF(C${rn}=0,"",B${rn}/C${rn}-1)` : undefined),
+        money(hasCost ? cost : null, hasCost ? sumifs(SH.weeks, weekCols, nWk, 'costs', 'site_code', lab) : undefined),
+        money(hasCost ? rev - cost : null, hasCost ? `B${rn}-E${rn}` : undefined),
+        pctc(hasCost && rev ? (rev - cost) / rev : null, hasCost ? `IF(B${rn}=0,"",F${rn}/B${rn})` : undefined),
+        int(sm.length), int(ts.length),
+        pctc(ratio(smDone.filter((x) => x.on_time).length, smDone.length)),
+        pctc(ratio(ts.filter((x) => x.on_time).length, ts.length)),
+        dec(median(ts.map(tatDays))),
+        money(wipV), int(N((openOos.find((x) => x.site_code === lab) || {}).n))]);
+    }
+    const last = rows.length;
+    if (codes.length > 1) {
+      const rn = rows.length + 1; const col = (k) => `SUM(${k}${first}:${k}${last})`;
+      const rev = sum(invoices, (x) => x.total); const bud = plan(null, 'Budget forecast', 'revenue'); const cost = sum(weeks, (x) => x.costs);
+      const smDone = samples.filter((x) => x.all_reported && x.on_time !== null);
+      rows.push([{ v: 'All labs', s: 'bold' }, money(rev, col('B'), true), money(bud || null, col('C'), true), pctc(bud ? rev / bud - 1 : null, `IF(C${rn}=0,"",B${rn}/C${rn}-1)`, true),
+        money(weeks.length ? cost : null, weeks.length ? col('E') : undefined, true), money(weeks.length ? rev - cost : null, weeks.length ? `B${rn}-E${rn}` : undefined, true),
+        pctc(weeks.length && rev ? (rev - cost) / rev : null, weeks.length ? `IF(B${rn}=0,"",F${rn}/B${rn})` : undefined, true),
+        int(samples.length, true), int(tests.length, true), pctc(ratio(smDone.filter((x) => x.on_time).length, smDone.length), undefined, true),
+        pctc(ratio(tests.filter((x) => x.on_time).length, tests.length), undefined, true), dec(median(tests.map(tatDays)), true),
+        money(sum(wip, (x) => x.value), col('M'), true), int(sum(openOos, (x) => x.n), true)]);
+    }
+    rows.push([]);
+
+    // by month
+    rows.push([S('By month')]);
+    rows.push(['Month', 'Revenue (net)', 'Budget', 'vs budget', 'Monthly forecast', 'Costs', 'EBITDA', 'EBITDA margin', 'Samples logged', 'Samples on time', 'Tests reported', 'Tests on time'].map(H));
+    const months = []; { let d = new Date(Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, 1)); while (d.toISOString().slice(0, 10) <= to) { months.push(d.toISOString().slice(0, 7)); d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)); } }
+    for (const m of months) {
+      const rn = rows.length + 1; const inM = (v) => v && isoDate(v).slice(0, 7) === m;
+      const rev = sum(invoices, (x) => x.total, (x) => inM(x.invoice_date));
+      const bud = sum(plans, (p) => N(p.revenue) * share(p.month), (p) => p.plan === 'Budget forecast' && inM(p.month));
+      const fc = sum(plans, (p) => N(p.revenue) * share(p.month), (p) => p.plan === 'Monthly forecast' && inM(p.month));
+      const wk = weeks.filter((x) => inM(x.week_ending)); const cost = sum(wk, (x) => x.costs);
+      const sm = samples.filter((x) => inM(x.logged_on)); const smDone = sm.filter((x) => x.all_reported && x.on_time !== null);
+      const ts = tests.filter((x) => inM(x.reported_on));
+      rows.push([m, money(rev), money(bud || null), pctc(bud ? rev / bud - 1 : null, bud ? `IF(C${rn}=0,"",B${rn}/C${rn}-1)` : undefined), money(fc || null),
+        money(wk.length ? cost : null), money(wk.length ? rev - cost : null, wk.length ? `B${rn}-F${rn}` : undefined),
+        pctc(wk.length && rev ? (rev - cost) / rev : null, wk.length ? `IF(B${rn}=0,"",G${rn}/B${rn})` : undefined),
+        int(sm.length), pctc(ratio(smDone.filter((x) => x.on_time).length, smDone.length)), int(ts.length), pctc(ratio(ts.filter((x) => x.on_time).length, ts.length))]);
+    }
+    rows.push([]);
+
+    // top clients
+    rows.push([S('Top 10 clients by revenue')]);
+    rows.push(['Client', 'Revenue (net)', 'Share of revenue', 'Invoices', 'Samples logged'].map(H));
+    const byClient = new Map();
+    for (const x of invoices) { const k = x.client_name; const o = byClient.get(k) || { rev: 0, n: 0 }; o.rev += N(x.total); if (x.kind === 'Invoice') o.n += 1; byClient.set(k, o); }
+    const totalRev = sum(invoices, (x) => x.total);
+    const top = [...byClient.entries()].sort((a, b) => b[1].rev - a[1].rev).slice(0, 10);
+    if (!top.length) rows.push([note('No invoices issued in this period.')]);
+    for (const [name, o] of top) rows.push([name, money(o.rev), pctc(totalRev ? o.rev / totalRev : null), int(o.n), int(samples.filter((x) => x.client_name === name).length)]);
+    rows.push([]);
+
+    // quality
+    rows.push([S('Quality and timeliness')]);
+    rows.push(['Lab', 'OOS opened', 'OOS confirmed', 'Assignable cause found', 'Retests ordered', 'Tests reported late', 'Average days late (late tests)', 'Rush tests reported'].map(H));
+    for (const lab of codes) {
+      const ox = oos.filter((x) => x.site_code === lab); const late = tests.filter((x) => x.site_code === lab && x.on_time === false);
+      rows.push([lab, int(ox.length), int(ox.filter((x) => x.conclusion === 'OOS confirmed').length), int(ox.filter((x) => x.conclusion === 'Assignable cause found').length),
+        int(N((retests.find((x) => x.site_code === lab) || {}).n)), int(late.length), dec(late.length ? sum(late, (x) => x.days_late) / late.length : null),
+        int(tests.filter((x) => x.site_code === lab && x.is_rush).length)]);
+    }
+    rows.push([]);
+
+    // definitions
+    rows.push([S('How each figure is worked out')]);
+    for (const d of [
+      'Revenue (net): invoices issued in the period less credit notes issued in the period (Invoices tab, column total). The formula in each lab row adds that column for the lab.',
+      'Budget: the lab\'s Budget forecast for each month (Finance plans tab), counted for the days of the month inside the period.',
+      'Costs: the weekly costs Finance types (Finance weeks tab), weeks ending inside the period. EBITDA = Revenue (net) less Costs; blank where no costs were typed.',
+      'Samples logged: client samples logged in the period (Samples tab; internal QA, media and training samples left out).',
+      'Samples on time: of those samples with every test reported, the share whose complete report came by the latest due date (client On Hold days added).',
+      'Tests reported: tests whose first COA was issued in the period (Tests tab). Tests on time: reported by their own due date, On Hold days added.',
+      'Median days, logged to reported: calendar days from logging the sample to the test\'s first issued COA.',
+      'Work in progress now and Open OOS now: as of the moment the report was made, whatever the period (Work in progress tab).',
+      'Every other tab is the LIMS data behind these figures, with the LIMS column names, so it can be filtered, pivoted or checked.',
+    ]) rows.push([note(d)]);
+
+    // ---- the raw tabs
+    const cell = (v, k) => {
+      if (v === null || v === undefined) return null;
+      if (v instanceof Date) return { dt: v.toISOString() };
+      if (/(_date|_on|week_ending|^day0|^month)$/.test(k) && /^\d{4}-\d{2}-\d{2}/.test(String(v))) return { d: isoDate(v) };
+      if (/_at$/.test(k) && /^\d{4}-\d{2}-\d{2}T/.test(String(v))) return { dt: String(v) };
+      if (/(total|price|fee|amount|revenue|costs|^value)$/.test(k) && v !== '' && Number.isFinite(Number(v))) return { v: Number(v), s: 'money' };
+      if (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) && /(days|count|late|tests|^n|_no|terms_days)$/.test(k)) return Number(v);
+      return v;
+    };
+    const raw = (name, cols, data) => ({ name, freeze: 1, filter: true, widths: cols.map((k) => Math.min(40, Math.max(k.length + 2, 12))),
+      rows: [cols.map(H), ...data.map((x) => cols.map((k) => cell(x[k], k)))] });
+    const lineCols = ['invoice_number', 'site_code', 'client_name', 'invoice_date', 'line_no', 'kind', 'sample_code', 'client_sample_id', 'test_code', 'test_name', 'completed_on', 'due_date', 'late_days',
+      'list_price', 'quoted_price', 'price', 'rush_billed', 'rush_fee', 'amount', 'price_note', 'rush_note', 'line_note'];
+    const planCols = ['site_code', 'month', 'plan', 'revenue', 'costs'];
+    const sampleCols = ['sample_code', 'client_sample_id', 'site_code', 'order_code', 'client_name', 'matrix', 'received_at', 'logged_at', 'day0', 'due_date', 'tests', 'completed_on', 'all_reported', 'hold_days', 'on_time', 'days_late'];
+    const testCols = ['sample_code', 'site_code', 'order_code', 'test_name', 'department_name', 'is_rush', 'day0', 'due_date', 'received_at', 'logged_at', 'approved_at', 'reported_at', 'reported_on',
+      'login_days', 'lab_days', 'qa_days', 'hold_days', 'on_time', 'days_late'];
+    const wipCols = ['site_code', 'order_code', 'sample_code', 'client_name', 'test_name', 'due_date', 'wip_state', 'value'];
+    const oosCols = ['oos_code', 'site_code', 'sample_code', 'analyte_name', 'procedure', 'is_gmp', 'reported', 'unit', 'spec_text', 'status', 'opened_at', 'due_date', 'conclusion', 'assignable_cause',
+      'concluded_at', 'retest_determination', 'phase2_decision'];
+    const summary = { name: 'Summary', grid: false, rows, widths: [26, 15, 14, 11, 15, 14, 13, 13, 13, 13, 13, 16, 17, 12] };
+    const buf = XLSX.writeWorkbook({ sheets: [summary,
+      raw(SH.inv, invCols, invoices), raw(SH.lines, lineCols, lines), raw(SH.weeks, weekCols, weeks), raw(SH.plans, planCols, plans),
+      raw(SH.samples, sampleCols, samples), raw(SH.tests, testCols, tests), raw(SH.wip, wipCols, wip), raw(SH.oos, oosCols, oos)] });
+    const fname = `Performance ${codes.join('-')} ${from} to ${to}.xlsx`;
+    return { __raw: true, body: buf, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers: { 'Content-Disposition': `attachment; filename="${fname}"` } };
+  });
+
   r('POST', '/api/finance/plans/preview', async (c) => {
     const labs = await financeLabs(c);
     const tbl = XLSX.readTable(Buffer.from(String(c.body.content_base64 || ''), 'base64'), c.body.file_name || '');

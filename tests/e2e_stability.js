@@ -123,7 +123,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(!!ok); conso
   check('The summary report PDF opens', rep.ok && (rep.headers.get('content-type') || '').includes('pdf'));
 
   // ---- the quote list
-  await go('#/quotes?tab=all'); await page.click('#st button[data-k="all"]'); await page.selectOption('#ty', 'Stability'); await page.waitForTimeout(500);
+  await go('#/quotes?tab=all'); await page.waitForSelector('.pgtabs'); await page.click('.pgtabs .tab[data-f="all"]'); await page.selectOption('#ty', 'Stability'); await page.waitForTimeout(500);
   const ql = await page.locator('#g tbody tr').allInnerTexts();
   check('Pricing > Quotes lists the stability quotes (type filter)', ql.length === 4 && ql.every((t) => /SQ-/.test(t)), String(ql.length));
   await page.locator('#g tbody tr a', { hasText: 'SQ-00002' }).click(); await page.waitForTimeout(1200);

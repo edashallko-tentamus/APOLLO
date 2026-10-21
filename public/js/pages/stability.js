@@ -5,7 +5,7 @@
 // screens (quotes.js), because a stability quote is a quote of kind "Stability".
 import { api, esc, pageHeader, toast, modal, askReason, state, money, badge, can, link, setDirtyCheck, signDialog } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { decide, sendQuote } from './quotes.js';
 
 const css = document.createElement('style');
@@ -260,7 +260,12 @@ export async function studies(main) {
     <div class="card"><div id="g"></div></div>`;
   const g = main.querySelector('#g');
   if (tab === 'studies') {
-    new Grid(g, { readOnly: true, search: true, rows: d.rows, filter: state.query.get('find') || '', emptyText: 'No studies yet: a stability quote becomes a study when the client accepts it.',
+    // one page at a time from the server (0.35.0), newest first
+    pagedList({ el: g, url: '/stability/studies', q: state.query.get('find') || '', filter: state.query.get('show') || 'current',
+      filters: [['current', 'Current'], ['finished', 'Finished'], ['all', 'All']],
+      placeholder: 'Search by study, client, product, quote or condition; type a study code and press Enter to open it',
+      open: (r) => { location.hash = '#/stability/studies/' + r.id; },
+      render: (el, rows) => new Grid(el, { readOnly: true, rows, emptyText: 'No studies here: a stability quote becomes a study when the client accepts it.',
       rowClass: (r) => (r.status === 'Awaiting material' ? 'tbwait' : r.status === 'Cancelled' ? 'mutedrow' : ''),
       columns: [
         { field: 'study_code', title: 'Study', type: 'link', width: 95, href: (r) => '#/stability/studies/' + r.id },
@@ -276,7 +281,7 @@ export async function studies(main) {
         { field: 'excursions_open', title: 'Excursions to assess', type: 'readonly', width: 140, compute: (r) => (Number(r.excursions_open) || ''), cellClass: (r) => (Number(r.excursions_open) ? 'tbfail' : '') },
         { field: 'last_report_code', title: 'Last report', type: 'readonly', width: 130 },
         { field: 'project_code', title: 'Quote', type: 'link', width: 90, href: (r) => '#/stability/quotes/' + r.project_id },
-      ] });
+      ] }) });
   } else {
     pullsGrid(g, d.pulls, d.can_manage, () => studies(main), true);
   }

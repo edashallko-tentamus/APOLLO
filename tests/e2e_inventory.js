@@ -26,7 +26,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   const leave = async () => { if (await page.locator('.modal [data-ok]', { hasText: 'Leave without saving' }).count()) await page.click('.modal [data-ok]'); };
   const reason = async (t) => { await page.waitForSelector('.modal textarea'); await page.fill('.modal textarea', t); await page.click('.modal [data-ok]'); };
   const paste = (text) => page.evaluate((t) => { const dt = new DataTransfer(); dt.setData('text/plain', t); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); }, text);
-  const rows = (host) => page.locator(`${host} > .gwrap > table > tbody > tr, ${host} .gridhost > .gwrap > table > tbody > tr`);
+  const rows = (host) => page.locator(`${host} > .gwrap > table > tbody > tr, ${host} .gridhost > .gwrap > table > tbody > tr, ${host} .pgbody > .gwrap > table > tbody > tr`);
   const cell = (host, r, c) => page.locator(`${host} .gwrap > table > tbody > tr:nth-child(${r}) > td:nth-child(${c})`);
   const toasts = async () => (await page.locator('.toast').allInnerTexts()).join(' | ');
   const asUser = async (label) => { await signIn(page, BASE, label); };

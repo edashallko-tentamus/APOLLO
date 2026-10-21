@@ -2,7 +2,7 @@
 // apply projects, logging; and the sample page
 import { api, esc, pageHeader, toast, modal, state, money, badge, askReason, setDirtyCheck, confirmBox, link, currentSite, signDialog } from '../app.js';
 import { Grid } from '../grid.js';
-import { section, specDialog } from './common.js';
+import { section, specDialog, pagedList } from './common.js';
 import { printLabels } from '../labels.js';
 import { orderBillingCard } from './billing.js';
 import { custodyCard, receiveDialog, openPhotoDialog, photosCard } from './custody.js';
@@ -15,27 +15,33 @@ const unit = (u) => (u === 'Business Days' ? 'bus.' : 'cal.');
 const hasVal = (v) => v !== null && v !== undefined;
 
 export async function list(main) {
-  const rows = await api('/orders');
   const site = currentSite();
-  main.innerHTML = pageHeader('Lab orders', `Orders for ${esc(site ? site.site_code : 'your lab')}. The samples a client orders at one time; tests can only come from the client's accepted quotes.`,
+  main.innerHTML = pageHeader('Lab orders', `Orders for ${esc(site ? site.site_code : 'your lab')}. The samples a client orders at one time; tests can only come from the client's accepted quotes. Newest first, 50 at a time; scan or type an order, PO or sample ID and press Enter to open it.`,
     '<button class="btn primary" id="new">+ New lab order</button>', { kind: 'orders' }) + '<div id="g"></div>';
-  new Grid(main.querySelector('#g'), {
-    readOnly: true, search: true, rows, onRowOpen: (r) => { location.hash = '#/orders/' + r.id; },
-    rowClass: (r) => (r.account_status === 'On Hold' ? 'warnrow' : ''),
-    columns: [
-      { field: 'order_code', title: 'Order', type: 'link', width: 100, href: (r) => '#/orders/' + r.id },
-      { field: 'client_name', title: 'Client', type: 'link', width: 190, href: (r) => '#/clients/' + r.client_id },
-      { field: 'status', title: 'Status', type: 'readonly', width: 95 },
-      { field: 'submission_channel', title: 'Channel', type: 'readonly', width: 80 },
-      { field: 'po_number', title: 'PO', type: 'readonly', width: 100 },
-      { field: 'logged_count', title: 'Samples logged', type: 'readonly', width: 115, format: (v, r) => `${v} of ${r.sample_count}` },
-      { field: 'due_date', title: 'Due', type: 'readonly', width: 110, format: d8 },
-      { field: 'rush_pending', title: 'Rush', type: 'readonly', width: 140, format: (v, r) => [v ? `${v} awaiting approval` : '', r.rush_active ? `${r.rush_active} active` : ''].filter(Boolean).join(' · ') },
-      { field: 'order_value', title: 'Value', type: 'money', width: 100 },
-      { field: 'account_status', title: 'Client', type: 'readonly', width: 85, format: (v) => (v === 'Active' ? '' : v) },
-    ],
-  });
   main.querySelector('#new').onclick = () => newOrder();
+  // one page at a time from the server (0.35.0)
+  pagedList({
+    el: main.querySelector('#g'), url: '/orders', q: state.query.get('find') || '',
+    filters: [['current', 'Current'], ['finished', 'Reported'], ['all', 'All']],
+    placeholder: 'Search by order, client, PO or contact; scan or type an order, PO or sample ID and press Enter',
+    open: (r) => { location.hash = r.sample_id ? '#/samples/' + r.sample_id : '#/orders/' + r.id; },
+    render: (body, rows) => new Grid(body, {
+      readOnly: true, rows, onRowOpen: (r) => { location.hash = '#/orders/' + r.id; }, emptyText: 'No orders here.',
+      rowClass: (r) => (r.account_status === 'On Hold' ? 'warnrow' : ''),
+      columns: [
+        { field: 'order_code', title: 'Order', type: 'link', width: 100, href: (r) => '#/orders/' + r.id },
+        { field: 'client_name', title: 'Client', type: 'link', width: 190, href: (r) => '#/clients/' + r.client_id },
+        { field: 'status', title: 'Status', type: 'readonly', width: 95 },
+        { field: 'submission_channel', title: 'Channel', type: 'readonly', width: 80 },
+        { field: 'po_number', title: 'PO', type: 'readonly', width: 100 },
+        { field: 'logged_count', title: 'Samples logged', type: 'readonly', width: 115, format: (v, r) => `${v} of ${r.sample_count}` },
+        { field: 'due_date', title: 'Due', type: 'readonly', width: 110, format: d8 },
+        { field: 'rush_pending', title: 'Rush', type: 'readonly', width: 140, format: (v, r) => [v ? `${v} awaiting approval` : '', r.rush_active ? `${r.rush_active} active` : ''].filter(Boolean).join(' · ') },
+        { field: 'order_value', title: 'Value', type: 'money', width: 100 },
+        { field: 'account_status', title: 'Client', type: 'readonly', width: 85, format: (v) => (v === 'Active' ? '' : v) },
+      ],
+    }),
+  });
 }
 
 export async function newOrder(clientId) {

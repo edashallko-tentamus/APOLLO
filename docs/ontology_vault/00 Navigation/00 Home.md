@@ -224,6 +224,7 @@ status: Current
 - [[Decision - Training and Competency C-1]]
 - [[Decision - Department Training Counts, METRC IDs and Client Licenses]] (built 0.32.0; build choices proposed)
 - [[Decision - Cancelling Samples and Tests and the Receipt Thermometer]] (built 0.34.0; build choices proposed; potency units on hold)
+- [[Decision - Paged Lists, Search Everything, Widgets on Request and the Performance Report]] (built 0.35.0; build choices proposed)
 - [[Decision - Security Hardening SEC-1]] (built 0.33.0; build choices proposed)
 - [[Open Items for QA Review]] (for Jake Teller)
 

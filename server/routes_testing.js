@@ -3,6 +3,7 @@
 // completion signed "Performed by" (with an optional or required witness who signs too), reopening, re-analysis and
 // re-prep (signed, with a reason) and assignment. Thin: every rule lives in the database.
 'use strict';
+const { page, wantsPage } = require('./paging');
 const { verifyPassword } = require('./auth');
 const rate = require('./ratelimit');
 
@@ -79,7 +80,11 @@ module.exports = function registerTesting({ route, tx, signedTx, currentSite, ch
     const where = show === 'mine' ? "AND b.assigned_to = $2 AND b.status IN ('Open','In Progress')"
       : show === 'review' ? "AND b.status = 'Awaiting Review'" : show === 'all' ? '' : "AND b.status IN ('Open','In Progress','Awaiting Review')";
     // verification batches (WD-6) are the automated runs' own: shown on their verification, never in the lab's lists
-    const rows = await c.db.rows(`SELECT b.* FROM test_batch_view b WHERE b.site_id = $1 AND NOT b.is_verification ${where} ORDER BY b.earliest_due NULLS LAST, b.batch_code LIMIT 1000`,
+    // every batch ever made: one page at a time (0.35.0), newest first; the working lists (open, mine, review) stay whole
+    const paged = show === 'all' && wantsPage(c) ? await page(c, { sql: `SELECT b.* FROM test_batch_view b WHERE b.site_id = $1 AND NOT b.is_verification`, params: [site],
+      filters: { all: 'true', approved: `status::text = 'Approved'`, cancelled: `status::text = 'Cancelled'` },
+      search: ['batch_code', 'test_code', 'test_name', 'assigned_name', 'department_code'], ids: ['batch_code'], order: 'ORDER BY created_at DESC, batch_code DESC' }) : null;
+    const rows = paged ? paged.rows : await c.db.rows(`SELECT b.* FROM test_batch_view b WHERE b.site_id = $1 AND NOT b.is_verification ${where} ORDER BY b.earliest_due NULLS LAST, b.batch_code LIMIT 1000`,
       show === 'mine' ? [site, c.userId] : [site]);
     const counts = await c.db.one(`SELECT count(*) FILTER (WHERE status IN ('Open','In Progress','Awaiting Review')) AS open,
         count(*) FILTER (WHERE assigned_to = $2 AND status IN ('Open','In Progress')) AS mine, count(*) FILTER (WHERE status = 'Awaiting Review') AS review,
@@ -87,7 +92,7 @@ module.exports = function registerTesting({ route, tx, signedTx, currentSite, ch
     // who batches can be assigned to (Assign selected: a supervisor organizes the day from this list)
     const people = await c.db.rows(`SELECT u.id, u.full_name, u.username FROM app_user u WHERE u.is_active AND u.username <> 'system' AND user_has_permission_at(u.id, 'testing.perform', $1)
         ORDER BY u.full_name`, [site]);
-    return { rows, counts, people, ...(await me(c)) };
+    return { ...(paged || {}), rows, counts: paged ? paged.counts : counts, people, ...(await me(c)) };
   });
 
   // ------------------------------------------------------------ one batch

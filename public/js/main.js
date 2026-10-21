@@ -1,6 +1,7 @@
 // Router and layout
 import { state, api, toast, esc, isDirty, setDirtyCheck, confirmBox, modal, currentUser, currentSite, hooks, canAny, myGroups } from './app.js';
 import { enhanceAll } from './combo.js';
+import { initSearch } from './search.js';
 import * as master from './pages/master.js';
 import * as clients from './pages/clients.js';
 import * as catalog from './pages/catalog.js';
@@ -179,7 +180,10 @@ async function route() {
   state.query = new URLSearchParams(q);
   document.body.classList.toggle('printing', h.startsWith('#/print/'));
   markNav();
-  const main = document.getElementById('main');
+  // each page draws into its own fresh container (0.35.0): a page still loading when the person moves on draws into
+  // its old, detached container, never over the page they went to
+  const main = document.createElement('div'); main.className = 'view';
+  document.getElementById('main').replaceChildren(main);
   for (const [re, fn] of ROUTES) {
     const m = h.match(re);
     if (m) {
@@ -322,9 +326,11 @@ function renderWho() {
   const viewOnly = currentSite()?.view_only;
   document.getElementById('whoName').innerHTML = u ? `${esc(u.full_name)}<small title="${esc(g.join(', '))}">${esc(u.username)}${viewOnly ? ' · view only' : g.length ? ' · ' + esc(g.slice(0, 2).join(', ') + (g.length > 2 ? ` +${g.length - 2}` : '')) : ''}</small>` : '';
   document.getElementById('outBtn').hidden = !u; document.getElementById('pwBtn').hidden = !u;
+  const gs = document.getElementById('gsearch'); if (gs) gs.hidden = !u;
 }
 
 async function init() {
+  initSearch();   // 0.35.0: the search box at the top of every page
   // every pick list in the app is a smart dropdown (type to filter, Down arrow for the list)
   new MutationObserver((muts) => { for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) enhanceAll(n); })
     .observe(document.body, { childList: true, subtree: true });

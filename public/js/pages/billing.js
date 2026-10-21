@@ -6,7 +6,7 @@
 // billing card (order page).
 import { api, esc, pageHeader, toast, modal, link, signDialog, state, can, askReason, money } from '../app.js';
 import { Grid } from '../grid.js';
-import { section, editableGrid } from './common.js';
+import { section, editableGrid, pagedList } from './common.js';
 
 const css = document.createElement('style');
 css.textContent = `
@@ -105,7 +105,7 @@ async function readyTab(body, main) {
 
 // ---------------------------------------------------------------- drafts and issued invoices
 async function invoicesTab(body, main, tab) {
-  const d = await api(`/billing/invoices?tab=${tab}${tab === 'issued' ? '&days=' + issuedDays : ''}`);
+  const d = tab === 'issued' ? { rows: [] } : await api(`/billing/invoices?tab=${tab}`);
   const cols = [
     { field: 'code', title: tab === 'issued' ? 'Number' : 'Draft', type: 'link', width: 135, href: (r) => '#/billing/invoices/' + r.id },
     ...(tab === 'issued' ? [{ field: 'kind', title: 'Kind', type: 'readonly', width: 90 }, { field: 'invoice_date', title: 'Date', type: 'readonly', width: 105, format: d8 },
@@ -129,12 +129,17 @@ async function invoicesTab(body, main, tab) {
         { field: 'internal_note', title: 'Internal note', type: 'readonly', width: 160 }]),
   ];
   if (tab === 'issued') {
-    body.innerHTML = `<div class="card"><div class="blfil">Issued in the last: ${[30, 120, 365, 3650].map((n) => `<button data-d="${n}" class="${n === issuedDays ? 'on' : ''}">${n === 3650 ? 'All' : n + ' days'}</button>`).join('')}</div>
-      <div class="blsum"><div><b>${money(d.rows.filter((r) => r.kind === 'Invoice').reduce((s, r) => s + Number(r.total), 0))}</b><span>invoiced</span></div>
-        <div><b>${money(-d.rows.filter((r) => r.kind !== 'Invoice').reduce((s, r) => s + Number(r.total), 0))}</b><span>credited</span></div>
-        <div><b>${d.rows.filter((r) => r.kind === 'Invoice').length}</b><span>invoices</span></div></div><div id="g"></div></div>`;
-    body.querySelectorAll('[data-d]').forEach((b) => { b.onclick = () => { issuedDays = Number(b.dataset.d); invoicesTab(body, main, tab); }; });
-    new Grid(body.querySelector('#g'), { readOnly: true, search: true, rows: d.rows, emptyText: 'Nothing issued in this period.', columns: cols });
+    // one page at a time from the server (0.35.0), newest first; the totals cover every invoice matching the tab and search
+    body.innerHTML = `<div class="card"><div class="blsum" id="blsum"></div><div id="g"></div></div>`;
+    pagedList({ el: body.querySelector('#g'), url: '/billing/invoices?tab=issued', filterParam: 'f', filter: state.query.get('f') || 'all', q: state.query.get('find') || '',
+      filters: [['all', 'All'], ['invoices', 'Invoices'], ['credits', 'Credit notes']],
+      placeholder: 'Search by number, client, order, PO or who issued it; type or scan an invoice number and press Enter to open it',
+      open: (r) => { location.hash = '#/billing/invoices/' + r.id; },
+      render: (el, rows, x) => {
+        const a = x.agg || {};
+        body.querySelector('#blsum').innerHTML = `<div><b>${money(a.invoiced || 0)}</b><span>invoiced</span></div><div><b>${money(a.credited || 0)}</b><span>credited</span></div><div><b>${a.invoices || 0}</b><span>invoices</span></div>`;
+        return new Grid(el, { readOnly: true, rows, emptyText: 'Nothing issued here.', columns: cols });
+      } });
     return;
   }
   body.innerHTML = `<div class="card">${section(tab === 'mine' ? 'My drafts' : 'All drafts at this lab', '', tab === 'mine'

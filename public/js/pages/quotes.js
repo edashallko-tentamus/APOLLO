@@ -3,6 +3,7 @@
 // with an accept/decline link), and the lab-tab test picker used on the quote page (projects.js version()).
 import { api, esc, pageHeader, toast, modal, state, money, badge, can } from '../app.js';
 import { Grid } from '../grid.js';
+import { pagedList } from './common.js';
 
 const css = document.createElement('style');
 css.textContent = `
@@ -26,66 +27,56 @@ const view = { tab: 'mine', status: 'open', type: 'all', lab: '', owner: '' };  
 
 // ---------------------------------------------------------------- the list
 export async function list(main) {
-  const d = await api('/quotes');
   const q = state.query;
   if (q.get('tab')) view.tab = q.get('tab') === 'all' ? 'all' : 'mine';
   const mine = view.tab === 'mine';
-  main.innerHTML = pageHeader('Quotes', 'Every quote and project quote, newest first. A standalone quote is for one customer request; a project is a reusable package of tests for a product. Accept or reject a quote here when the client answers by phone or email; answers through the link in the quote email are recorded by themselves.',
+  const d = await api('/quotes?page=1&size=1' + (mine ? '' : '&tab=all'));
+  main.innerHTML = pageHeader('Quotes', 'Every quote and project quote, newest first, 50 at a time. A standalone quote is for one customer request; a project is a reusable package of tests for a product. Accept or reject a quote here when the client answers by phone or email; answers through the link in the quote email are recorded by themselves.',
     `${d.can_edit ? '<button class="btn primary" id="new">+ New quote</button>' : ''} <a class="btn ghost" href="#/projects">Projects</a>`, { kind: 'quotes' })
     + `<div class="tabs"><a class="tab ${mine ? 'on' : ''}" href="#/quotes?tab=mine" id="tmine">My open quotes</a><a class="tab ${mine ? '' : 'on'}" href="#/quotes?tab=all" id="tall">All quotes</a></div>
-    <div class="qfil">${mine ? '' : `<div class="chips" id="st">${[['open', 'Open'], ['waiting', 'Waiting for the client'], ['Accepted', 'Accepted'], ['Rejected', 'Rejected'], ['expired', 'Expired'], ['all', 'All']]
-      .map(([k, l]) => `<button data-k="${k}" class="${view.status === k ? 'on' : ''}">${l}</button>`).join('')}</div>`}
+    <div class="qfil">
       <label>Type <select id="ty"><option value="all">Quotes and projects</option><option value="Quote">Quotes only</option><option value="Project">Projects only</option><option value="Stability">Stability quotes only</option></select></label>
       <label>Lab <select id="lab"><option value="">All labs</option>${d.labs.map((l) => `<option value="${l.id}">${esc(l.site_code)}</option>`).join('')}</select></label>
-      ${mine ? '' : `<label>Prepared by <select id="own"><option value="">Anyone</option>${[...new Map(d.rows.map((r) => [r.owner_id, r.owner_name])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])))
-        .map(([id, n]) => `<option value="${id}">${esc(n || '')}</option>`).join('')}</select></label>`}
-      <span class="n" id="cnt"></span></div><div class="card"><div id="g"></div></div>`;
+      ${mine ? '' : `<label>Prepared by <select id="own"><option value="">Anyone</option>${(d.owners || []).map((o) => `<option value="${o.id}">${esc(o.name || '')}</option>`).join('')}</select></label>`}
+      </div><div class="card"><div id="g"></div></div>`;
   const $ = (s) => main.querySelector(s);
   $('#ty').value = view.type; $('#lab').value = view.lab; if ($('#own')) $('#own').value = view.owner;
-  const expired = (r) => r.status === 'Expired' || r.past_valid;
-  const keep = (r) => {
-    if (mine && (r.owner_id !== d.me || !r.is_open)) return false;
-    if (!mine) {
-      const s = view.status;
-      if (s === 'open' && !r.is_open) return false;
-      if (s === 'waiting' && !(r.status === 'Quoted' && !r.past_valid)) return false;
-      if (s === 'expired' && !expired(r)) return false;
-      if (['Accepted', 'Rejected'].includes(s) && r.status !== s) return false;
-      if (view.owner && r.owner_id !== view.owner) return false;
-    }
-    if (view.type !== 'all' && r.kind !== view.type) return false;
-    if (view.lab && !String(r.site_ids || '').includes(view.lab)) return false;
-    return true;
-  };
-  const rows = d.rows.filter(keep);
-  $('#cnt').textContent = `${rows.length} of ${d.rows.length}`;
+  const params = () => ({ ...(mine ? {} : { tab: 'all' }), ...(view.type !== 'all' ? { ty: view.type } : {}), ...(view.lab ? { lab: view.lab } : {}), ...(!mine && view.owner ? { own: view.owner } : {}) });
   const canDecide = (r) => d.can_edit && r.status === 'Quoted' && !r.past_valid;
-  new Grid($('#g'), { readOnly: true, search: true, rows, keyField: 'version_id', filter: q.get('find') || '',
-    emptyText: mine ? 'You have no open quotes. "+ New quote" starts one.' : 'No quotes match.',
-    rowClass: (r) => (r.past_valid ? 'tbnc' : ['Rejected', 'Expired', 'Superseded'].includes(r.status) ? 'mutedrow' : ''),
-    columns: [
-      { field: 'project_code', title: 'Quote', type: 'link', width: 100, compute: (r) => `${r.project_code}${r.version_no > 1 ? ' v' + r.version_no : ''}`, href: (r) => (r.kind === 'Stability' ? '#/stability/quotes/' + r.project_id : '#/quote/' + r.version_id) },
-      { field: 'client_name', title: 'Client', type: 'link', width: 150, href: (r) => '#/clients/' + r.client_id },
-      { field: 'project_name', title: 'Reference', type: 'readonly', width: 200 },
-      { field: 'total', title: 'Total', type: 'money', width: 95 },
-      { field: 'status', title: 'Status', type: 'readonly', width: 120, compute: (r) => (r.past_valid ? 'Past valid date' : r.status === 'Submitted for Quote' ? 'Submitted' : r.status),
-        cellClass: (r) => ({ Accepted: 'tbpass', Rejected: 'tbfail' }[r.status] || (r.past_valid ? 'tbfail' : r.status === 'Quoted' ? 'tbwait' : '')) },
-      { field: 'acc', title: '', type: 'button', width: 76, label: (r) => (canDecide(r) ? 'Accept…' : ''), onClick: (r) => canDecide(r) && decide(r, 'Accepted', () => list(main)) },
-      { field: 'rej', title: '', type: 'button', width: 72, label: (r) => (canDecide(r) ? 'Reject…' : ''), onClick: (r) => canDecide(r) && decide(r, 'Rejected', () => list(main)) },
-      { field: 'owner_name', title: 'Prepared by', type: 'readonly', width: 150 },
-      { field: 'quote_contact_name', title: 'For', type: 'readonly', width: 120, compute: (r) => r.quote_contact_name || r.sent_to_name || '' },
-      { field: 'labs', title: 'Labs', type: 'readonly', width: 90 },
-      { field: 'sent', title: 'Sent', type: 'readonly', width: 130, compute: (r) => (r.sent_at ? d8(r.sent_at) : r.quoted_at ? 'Issued, not sent' : '') },
-      { field: 'valid_until', title: 'Valid until', type: 'readonly', width: 100, format: d8 },
-      { field: 'decision', title: 'Decision', type: 'readonly', width: 220, compute: (r) => (r.status === 'Accepted' ? `By ${r.accepted_by_name || ''}${r.decided_via === 'Client link' ? ' (online)' : ''}`
-        : r.status === 'Rejected' ? `${r.decided_via === 'Client link' ? 'Online' : ''}${r.rejected_reason ? (r.decided_via === 'Client link' ? ': ' : '') + r.rejected_reason : ''}` : '') },
-      { field: 'kind', title: 'Type', type: 'readonly', width: 70 },
-      { field: 'line_count', title: 'Tests', type: 'readonly', width: 55 },
-    ] });
-  main.querySelectorAll('#st button').forEach((b) => { b.onclick = () => { view.status = b.dataset.k; list(main); }; });
-  $('#ty').onchange = () => { view.type = $('#ty').value; list(main); };
-  $('#lab').onchange = () => { view.lab = $('#lab').value; list(main); };
-  if ($('#own')) $('#own').onchange = () => { view.owner = $('#own').value; list(main); };
+  // one page at a time from the server (0.35.0); the status chips are its tabs
+  const lst = pagedList({
+    el: $('#g'), url: '/quotes', params: params(), q: q.get('find') || '',
+    filter: mine ? 'open' : (q.get('show') || view.status),
+    filters: mine ? [] : [['open', 'Open'], ['waiting', 'Waiting for the client'], ['Accepted', 'Accepted'], ['Rejected', 'Rejected'], ['expired', 'Expired'], ['all', 'All']],
+    placeholder: 'Search by quote, reference, client or person; type or scan a quote number and press Enter',
+    open: (r) => { location.hash = r.kind === 'Stability' ? '#/stability/quotes/' + r.project_id : '#/quote/' + r.version_id; },
+    render: (body, rows) => new Grid(body, { readOnly: true, rows, keyField: 'version_id',
+      emptyText: mine ? 'You have no open quotes. "+ New quote" starts one.' : 'No quotes match.',
+      rowClass: (r) => (r.past_valid ? 'tbnc' : ['Rejected', 'Expired', 'Superseded'].includes(r.status) ? 'mutedrow' : ''),
+      columns: [
+        { field: 'project_code', title: 'Quote', type: 'link', width: 100, compute: (r) => `${r.project_code}${r.version_no > 1 ? ' v' + r.version_no : ''}`, href: (r) => (r.kind === 'Stability' ? '#/stability/quotes/' + r.project_id : '#/quote/' + r.version_id) },
+        { field: 'client_name', title: 'Client', type: 'link', width: 150, href: (r) => '#/clients/' + r.client_id },
+        { field: 'project_name', title: 'Reference', type: 'readonly', width: 200 },
+        { field: 'total', title: 'Total', type: 'money', width: 95 },
+        { field: 'status', title: 'Status', type: 'readonly', width: 120, compute: (r) => (r.past_valid ? 'Past valid date' : r.status === 'Submitted for Quote' ? 'Submitted' : r.status),
+          cellClass: (r) => ({ Accepted: 'tbpass', Rejected: 'tbfail' }[r.status] || (r.past_valid ? 'tbfail' : r.status === 'Quoted' ? 'tbwait' : '')) },
+        { field: 'acc', title: '', type: 'button', width: 76, label: (r) => (canDecide(r) ? 'Accept…' : ''), onClick: (r) => canDecide(r) && decide(r, 'Accepted', () => lst.reload()) },
+        { field: 'rej', title: '', type: 'button', width: 72, label: (r) => (canDecide(r) ? 'Reject…' : ''), onClick: (r) => canDecide(r) && decide(r, 'Rejected', () => lst.reload()) },
+        { field: 'owner_name', title: 'Prepared by', type: 'readonly', width: 150 },
+        { field: 'quote_contact_name', title: 'For', type: 'readonly', width: 120, compute: (r) => r.quote_contact_name || r.sent_to_name || '' },
+        { field: 'labs', title: 'Labs', type: 'readonly', width: 90 },
+        { field: 'sent', title: 'Sent', type: 'readonly', width: 130, compute: (r) => (r.sent_at ? d8(r.sent_at) : r.quoted_at ? 'Issued, not sent' : '') },
+        { field: 'valid_until', title: 'Valid until', type: 'readonly', width: 100, format: d8 },
+        { field: 'decision', title: 'Decision', type: 'readonly', width: 220, compute: (r) => (r.status === 'Accepted' ? `By ${r.accepted_by_name || ''}${r.decided_via === 'Client link' ? ' (online)' : ''}`
+          : r.status === 'Rejected' ? `${r.decided_via === 'Client link' ? 'Online' : ''}${r.rejected_reason ? (r.decided_via === 'Client link' ? ': ' : '') + r.rejected_reason : ''}` : '') },
+        { field: 'kind', title: 'Type', type: 'readonly', width: 70 },
+        { field: 'line_count', title: 'Tests', type: 'readonly', width: 55 },
+      ] }),
+  });
+  const refilter = () => { if (!mine) view.status = lst.state.f; lst.setParams(params()); };
+  $('#ty').onchange = () => { view.type = $('#ty').value; refilter(); };
+  $('#lab').onchange = () => { view.lab = $('#lab').value; refilter(); };
+  if ($('#own')) $('#own').onchange = () => { view.owner = $('#own').value; refilter(); };
   const nb = $('#new'); if (nb) nb.onclick = () => newQuote();
 }
 

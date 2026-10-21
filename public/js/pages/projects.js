@@ -1,7 +1,7 @@
 // Projects (client-specific quoted test packages), quote versions, analyte trimming, rush terms, printable quote
 import { api, esc, pageHeader, toast, modal, state, money, badge, setDirtyCheck, confirmBox } from '../app.js';
 import { Grid, fmt } from '../grid.js';
-import { section, specDialog } from './common.js';
+import { section, specDialog, pagedList } from './common.js';
 import { testPicker, sendQuote, decide } from './quotes.js';
 
 export async function newProject(clientId) {
@@ -18,11 +18,15 @@ export async function newProject(clientId) {
 }
 
 export async function list(main) {
-  const rows = await api('/projects');
   main.innerHTML = pageHeader('Projects', 'A project is a reusable, client-specific quoted list of tests for a product or a recurring testing bundle. Each re-quote is a new version; orders keep the terms of the version they used. One-off customer requests are Quotes.',
     '<button class="btn primary" id="new">+ New project</button> <a class="btn ghost" href="#/quotes">Quotes</a>', { kind: 'projects' }) + '<div id="g"></div>';
-  new Grid(main.querySelector('#g'), {
-    readOnly: true, search: true, filter: state.query.get('find') || '', rows, onRowOpen: (r) => { location.hash = '#/quote/' + r.latest_version_id; },
+  // one page at a time from the server (0.35.0), newest first
+  pagedList({ el: main.querySelector('#g'), url: '/projects', q: state.query.get('find') || '', filter: state.query.get('show') || 'all',
+    filters: [['all', 'All'], ['open', 'Open'], ['accepted', 'Accepted'], ['closed', 'Closed']],
+    placeholder: 'Search by code, project or client; type a project code and press Enter to open it',
+    open: (r) => { location.hash = '#/projects/' + r.id; },
+    render: (body, rows) => new Grid(body, {
+    readOnly: true, rows, emptyText: 'No projects here.', onRowOpen: (r) => { location.hash = '#/quote/' + r.latest_version_id; },
     columns: [
       { field: 'project_code', title: 'Code', type: 'link', width: 100, href: (r) => '#/projects/' + r.id },
       { field: 'project_name', title: 'Project', type: 'readonly', width: 260 },
@@ -34,7 +38,7 @@ export async function list(main) {
       { field: 'available_to_child_clients', title: 'Shared to sites', type: 'readonly', width: 115, format: (v) => (v ? 'Yes' : '') },
       { field: 'latest_version_id', title: '', type: 'button', width: 110, label: 'Open quote', onClick: (r) => { location.hash = '#/quote/' + r.latest_version_id; } },
     ],
-  });
+  }) });
   main.querySelector('#new').onclick = () => newProject();
 }
 

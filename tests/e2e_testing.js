@@ -349,7 +349,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
 
   // ---- a supervisor assigns several batches at once: Ctrl+click two rows of the Batches list, then Assign selected
   await signIn(page, BASE, 'Lab Supervisor (demo)', '#/testing/batches?show=all'); await page.waitForSelector('#g tbody tr');
-  const bRows = page.locator('#g > .gwrap > table > tbody > tr');
+  const bRows = page.locator('#g .pgbody > .gwrap > table > tbody > tr');
   // an open batch and another batch two or more rows away (Ctrl+click); approved or cancelled ones are skipped when assigning
   const rowTexts = await bRows.allInnerTexts();
   const isOpen = (t) => !/Approved|Cancelled/.test(t);

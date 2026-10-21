@@ -84,7 +84,15 @@ async function as(who) {
   check('A widget is resized by dragging its corner (wider and taller), and kept', w1 && w0 && w1.w > w0.w && w1.h > w0.h, `${w0 && w0.w}x${w0 && w0.h} -> ${w1 && w1.w}x${w1 && w1.h}`);
   await go('#/'); await page.waitForSelector('#dgrid .dw');
   check('The arrangement is the same after a reload', (await codes())[0] === after[0] && (await page.locator('.dw[data-code="backlog"]').getAttribute('style')).includes(`span ${w1.w}`));
-  check('Live: the page says when it was updated and that it refreshes every minute', /refreshes every minute/.test(await page.locator('#dupd').innerText()));
+  // 0.35.0: live widgets say they refresh every 5 minutes; the others say when they were worked out and refresh on request
+  check('A live widget (Backlog) says it is refreshed every 5 minutes', /Refreshed every 5 minutes/.test(await page.locator('.dw[data-code="backlog"] .dwfoot').innerText()));
+  const tatFoot = page.locator('.dw[data-code="tat"] .dwfoot');
+  const t1 = await tatFoot.innerText();
+  check('A widget that is not live (Turnaround) says when it was refreshed, with its own refresh icon', /^Refreshed \d/.test(t1) && await tatFoot.locator('.dwref').count() === 1, t1);
+  await tatFoot.locator('.dwref').click(); await page.waitForTimeout(800);
+  check('Its refresh icon works it out again', /^Refreshed \d/.test(await page.locator('.dw[data-code="tat"] .dwfoot').innerText()));
+  await page.click('#drefresh'); await page.waitForTimeout(1200);
+  check('Refresh all works out the widgets that are not live', await page.locator('.toast').filter({ hasText: 'Refreshed' }).count() > 0);
   await shot('dash_03_arranged');
   const nav = await page.locator('#nav').innerText();
   check('The Lab Supervisor sees neither the GM nor the executive dashboard', !/GM dashboard/.test(nav) && !/Executive dashboard/.test(nav));
@@ -170,6 +178,18 @@ async function as(who) {
   const f3 = await fin('/finance');
   check('...saved from the upload with a reason', f3.plans.some((p) => p.site_code === 'TPS' && p.month === ym && p.plan === 'Monthly forecast' && Number(p.revenue) === 77777 && Number(p.costs) === 66666));
   await shot('dash_06_finance');
+  // 0.35.0: the performance report (Summary plus the LIMS data on separate tabs)
+  await page.click('#fdreport'); await page.waitForSelector('.modal #f_from');
+  check('Performance report: a period and the labs (ticked)', (await page.locator('.modal [data-rlab]:checked').count()) === f0.labs.length);
+  const [rep] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('.modal [data-ok]')]);
+  const repBuf = fs.readFileSync(await rep.path()); const { unzip } = require('../server/xlsx');
+  const zx = unzip(repBuf); const sheetNames = [...String(zx.get('xl/workbook.xml') || '').matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
+  check('...downloads one workbook: the Summary first, then the raw tabs', /^Performance CFL-TPS \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}\.xlsx$/.test(rep.suggestedFilename())
+    && sheetNames[0] === 'Summary' && ['Invoices', 'Invoice lines', 'Finance weeks', 'Finance plans', 'Samples', 'Tests', 'Work in progress', 'OOS investigations'].every((n) => sheetNames.includes(n)), `${rep.suggestedFilename()} ${sheetNames.join(', ')}`);
+  const s1 = String(zx.get('xl/worksheets/sheet1.xml') || '');
+  const s2 = String(zx.get('xl/worksheets/sheet2.xml') || '');
+  check('...the Summary has the headline by lab, by month, top clients and quality, with revenue as SUMIFS over the Invoices tab', /Headline by lab/.test(s1) && /By month/.test(s1) && /Top 10 clients/.test(s1) && /Quality and timeliness/.test(s1) && /SUMIFS\('Invoices'!/.test(s1));
+  check('...the raw tabs use the LIMS column names', /invoice_number/.test(s2) && /site_code/.test(s2) && /client_name/.test(s2));
   const fnav = await page.locator('#nav').innerText();
   check('The Finance group sees the executive dashboard and the finance figures, not Billing', /Executive dashboard/.test(fnav) && /Finance figures/.test(fnav) && !/Ready to invoice/.test(fnav));
 

@@ -5,7 +5,7 @@
 // Admin: job roles, Units, Unit conversions.
 import { api, esc, pageHeader, toast, modal, state, currentSite, currentUser, badge, link, signDialog, setDirtyCheck, can } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { lotCard } from './logbooks.js';
 import { bulkButtons, wireBulk, printTable } from '../bulkio.js';
 import { printLabels } from '../labels.js';
@@ -177,55 +177,60 @@ const LIST_COLS = [
 
 export async function lots(main) {
   if (!needLab(main)) return;
-  const rows = await api('/inventory/lots');
   const site = currentSite();
   const f = FILTERS[state.query.get('show')] ? state.query.get('show') : 'active'; // the menu link always opens on Active
-  const count = (k) => rows.filter(FILTERS[k][1]).length;
-  main.innerHTML = pageHeader(`Inventory: ${site.site_code}`, `Every item in ${esc(site.site_name)}: chemicals, standards, reagents, media, strains, consumables and in-house mixtures. Click an ID to open it.`,
+  main.innerHTML = pageHeader(`Inventory: ${site.site_code}`, `Every item in ${esc(site.site_name)}: chemicals, standards, reagents, media, strains, consumables and in-house mixtures. The newest are shown 50 at a time; search finds any of them, and a scanned or typed ID opens its item.`,
     '', { kind: 'inventory' }) + tabs('#/inventory') + `
     <div class="invbar">
-      ${Object.entries(FILTERS).map(([k, [l]]) => `<a class="tab ${k === f ? 'on' : ''}" href="#/inventory?show=${k}" style="text-decoration:none">${esc(l)} <small>${count(k)}</small></a>`).join('')}
       <span class="sp"></span>${bulkButtons('lots')}<button class="btn" id="print">Print</button>
       <button class="btn primary" id="newitem">+ New Inventory Item</button><button class="btn primary" id="mix">+ In-house mixture</button>
     </div>
     <div class="invbar"><span class="help">Also:</span><button class="btn" id="use">Record usage</button>
       <button class="btn" id="many">Receive many (paste)</button><button class="btn" id="labels" title="Barcode labels for the ticked rows (Dymo, 1 x 2 1/8 in.), one per container">Print labels</button></div>
     <div id="g"></div>`;
-  const shown = rows.filter(FILTERS[f][1]).map((r) => ({ ...r, _pick: false }));
-  const g = new Grid(main.querySelector('#g'), {
-    rows: shown, search: true, filter: state.query.get('find') || '', emptyText: 'Nothing here.',
-    onRowOpen: (r) => { location.hash = '#/inventory/lots/' + r.id; },
-    rowClass: (r) => (closed(r) ? 'mutedrow' : ''),
-    columns: [
-      { field: '_dup', title: '', type: 'button', width: 82, label: 'Duplicate', onClick: (r) => { location.hash = '#/inventory/new?from=' + r.id; } },
-      { field: '_reo', title: '', type: 'button', width: 74, label: (r) => (isMixture(r) || r.status === 'Cancelled' ? '' : 'Reorder'), onClick: (r) => { if (!isMixture(r)) reorderDialog(r); } },
-      { field: 'lot_code', title: 'ID', type: 'link', width: 100, href: (r) => '#/inventory/lots/' + r.id },
-      { field: 'material', title: 'Name', type: 'readonly', width: 230 },
-      { field: 'lotno', title: 'Lot#', type: 'readonly', width: 110, compute: (r) => (isMixture(r) ? r.lot_code : r.manufacturer_lot || '–') },
-      { field: 'conc_display', title: 'Conc.', type: 'readonly', width: 100, format: (v) => v || '–' },
-      { field: 'date_made', title: 'Date made', type: 'readonly', width: 95, format: (v) => d8(v) || '–' },
-      { field: 'cas_display', title: 'CAS', type: 'readonly', width: 95, format: (v) => v || '–' },
-      { field: 'supplier_name', title: 'Vendor', type: 'readonly', width: 150, format: (v) => v || '–' },
-      { field: 'expiration_date', title: 'Exp date', type: 'readonly', width: 95, format: (v) => d8(v) || '–', cellClass: exp },
-      { field: 'amount', title: 'Amount', type: 'readonly', width: 90, align: 'right', compute: (r) => (r.receipt_status === 'Received' ? qty(r.on_hand, r.unit) : '–'), cellClass: amt },
-      { field: 'receipt_status', title: 'Purchase status', type: 'readonly', width: 120, format: (v, r) => (isMixture(r) ? '–' : v) },
-      { field: 'qa_status', title: 'QA testing', type: 'readonly', width: 170, format: (v) => v || '', help: 'QA testing before use: the item types your lab tests (Inventory > QA testing), or items sent for it, are tested on a sample with the lot\'s ID and released for every use or for named tests',
-        cellClass: (r) => qaCls(r.qa_status) },
-      { field: '_pick', title: '☐', type: 'bool', width: 40, help: 'Tick rows to export, print or label only those' },
-      // waste classification (0.30.0): how the item is disposed of; "classify from the SDS" still needs a choice
-      { field: 'waste_name', title: 'Waste', type: 'readonly', width: 200, format: (v, r) => (v ? (r.waste_review ? 'To classify (see SDS)' : v) : 'None'),
-        cellClass: (r) => (!r.waste_name || r.waste_review ? 'cwarn' : ''), help: 'The item\'s waste classification (Admin > Lab setup > Waste classifications): how it is disposed of' },
-    ],
+  // one page at a time from the server (0.35.0): the tabs and their counts, search, a scanned ID
+  const list = pagedList({
+    el: main.querySelector('#g'), url: '/inventory/lots', filter: f, q: state.query.get('find') || '',
+    filters: Object.entries(FILTERS).map(([k, [l]]) => [k, l]),
+    placeholder: 'Search by ID, name, lot#, CAS, vendor or analyte; scan or type an ID and press Enter to open it',
+    open: (r) => { location.hash = '#/inventory/lots/' + r.id; },
+    render: (body, rows) => new Grid(body, {
+      rows: rows.map((r) => ({ ...r, _pick: false })), emptyText: 'Nothing here.',
+      onRowOpen: (r) => { location.hash = '#/inventory/lots/' + r.id; },
+      rowClass: (r) => (closed(r) ? 'mutedrow' : ''),
+      columns: [
+        { field: '_dup', title: '', type: 'button', width: 82, label: 'Duplicate', onClick: (r) => { location.hash = '#/inventory/new?from=' + r.id; } },
+        { field: '_reo', title: '', type: 'button', width: 74, label: (r) => (isMixture(r) || r.status === 'Cancelled' ? '' : 'Reorder'), onClick: (r) => { if (!isMixture(r)) reorderDialog(r); } },
+        { field: 'lot_code', title: 'ID', type: 'link', width: 100, href: (r) => '#/inventory/lots/' + r.id },
+        { field: 'material', title: 'Name', type: 'readonly', width: 230 },
+        { field: 'lotno', title: 'Lot#', type: 'readonly', width: 110, compute: (r) => (isMixture(r) ? r.lot_code : r.manufacturer_lot || '–') },
+        { field: 'conc_display', title: 'Conc.', type: 'readonly', width: 100, format: (v) => v || '–' },
+        { field: 'date_made', title: 'Date made', type: 'readonly', width: 95, format: (v) => d8(v) || '–' },
+        { field: 'cas_display', title: 'CAS', type: 'readonly', width: 95, format: (v) => v || '–' },
+        { field: 'supplier_name', title: 'Vendor', type: 'readonly', width: 150, format: (v) => v || '–' },
+        { field: 'expiration_date', title: 'Exp date', type: 'readonly', width: 95, format: (v) => d8(v) || '–', cellClass: exp },
+        { field: 'amount', title: 'Amount', type: 'readonly', width: 90, align: 'right', compute: (r) => (r.receipt_status === 'Received' ? qty(r.on_hand, r.unit) : '–'), cellClass: amt },
+        { field: 'receipt_status', title: 'Purchase status', type: 'readonly', width: 120, format: (v, r) => (isMixture(r) ? '–' : v) },
+        { field: 'qa_status', title: 'QA testing', type: 'readonly', width: 170, format: (v) => v || '', help: 'QA testing before use: the item types your lab tests (Inventory > QA testing), or items sent for it, are tested on a sample with the lot\'s ID and released for every use or for named tests',
+          cellClass: (r) => qaCls(r.qa_status) },
+        { field: '_pick', title: '☐', type: 'bool', width: 40, help: 'Tick rows to export, print or label only those' },
+        // waste classification (0.30.0): how the item is disposed of; "classify from the SDS" still needs a choice
+        { field: 'waste_name', title: 'Waste', type: 'readonly', width: 200, format: (v, r) => (v ? (r.waste_review ? 'To classify (see SDS)' : v) : 'None'),
+          cellClass: (r) => (!r.waste_name || r.waste_review ? 'cwarn' : ''), help: 'The item\'s waste classification (Admin > Lab setup > Waste classifications): how it is disposed of' },
+      ],
+    }),
   });
-  const picked = () => g.rows.filter((r) => r._pick);
-  wireBulk(main, { selected: () => picked().map((r) => r.id), done: () => lots(main) });
-  main.querySelector('#print').onclick = () => { const p = picked(); printTable(`Inventory: ${site.site_code} (${FILTERS[f][0]})`, LIST_COLS, p.length ? p : g.v.map((i) => g.rows[i])); };
+  const g = () => list.grid();
+  const picked = () => (g() ? g().rows.filter((r) => r._pick) : []);
+  wireBulk(main, { selected: () => picked().map((r) => r.id), done: () => list.reload() });
+  main.querySelector('#print').onclick = () => { const p = picked(); printTable(`Inventory: ${site.site_code} (${FILTERS[list.state.f][0]})`, LIST_COLS, p.length ? p : (g() ? g().v.map((i) => g().rows[i]) : [])); };
   main.querySelector('#newitem').onclick = () => { location.hash = '#/inventory/new'; };
   main.querySelector('#mix').onclick = () => { location.hash = '#/inventory/mixture'; };
   main.querySelector('#many').onclick = () => { location.hash = '#/inventory/receive'; };
-  main.querySelector('#use').onclick = () => usageDialog(rows.filter((r) => r.use_eligible), () => lots(main));
+  // usage is recorded against any usable lot, not only those on the page shown
+  main.querySelector('#use').onclick = async () => usageDialog((await api('/inventory/lots?usable=1')).filter((r) => r.use_eligible), () => list.reload());
   main.querySelector('#labels').onclick = () => {
-    const p = picked().length ? picked() : g.selectedRows();
+    const p = picked().length ? picked() : (g() ? g().selectedRows() : []);
     if (!p.length) { toast('Tick the rows (or select them) to print labels for.', 'err'); return; }
     printLabels('lot', p.map((r) => r.id));
   };

@@ -4,3 +4,4 @@ backup*/
 node_modules/
 tests/screens/
 *.log
+docs/ontology_vault/.obsidian/

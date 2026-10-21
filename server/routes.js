@@ -17,6 +17,7 @@ function match(method, pathname) {
 }
 const tx = (ctx, fn) => ctx.db.tx({ userId: ctx.userId, reason: ctx.reason, siteId: ctx.siteId }, fn);
 const { registerAuth, signedTx } = require('./auth');
+const { page, wantsPage } = require('./paging');
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k] === '' ? null : o[k]]));
 
 // Generic helpers for "save a grid" (inserts + updates in one transaction, one reason)
@@ -104,11 +105,17 @@ route('GET', '/api/dashboard', async (c) => c.db.one(`SELECT
   (SELECT count(*) FROM audit_log) AS audit_entries`, [(await canAccess(c, c.siteId)) ? c.siteId : '']));
 
 // ---------------------------------------------------------------- clients
-route('GET', '/api/clients', (c) => c.db.rows(`SELECT c.*, COALESCE(c.display_name, c.legal_name) AS name, p.legal_name AS parent_name,
+const CLIENTS_SQL = `SELECT c.*, COALESCE(c.display_name, c.legal_name) AS name, p.legal_name AS parent_name,
   (SELECT count(*) FROM client_contact cc WHERE cc.client_id = c.id AND cc.status = 'Active') AS contact_count,
   (SELECT count(*) FROM project pr WHERE pr.client_id = c.id) AS project_count,
   client_can_order(c.id) AS can_order, client_can_release_report(c.id) AS can_release
-  FROM client c LEFT JOIN client p ON p.id = c.parent_client_id ORDER BY c.legal_name`));
+  FROM client c LEFT JOIN client p ON p.id = c.parent_client_id`;
+route('GET', '/api/clients', (c) => (!wantsPage(c) ? c.db.rows(CLIENTS_SQL + ' ORDER BY c.legal_name')
+  // the Clients list (0.35.0): one page at a time, newest first
+  : page(c, { sql: CLIENTS_SQL, params: [],
+    filters: { current: `account_status::text <> 'Inactive'`, active: `account_status::text = 'Active'`, hold: `account_status::text = 'On Hold'`, inactive: `account_status::text = 'Inactive'`, all: 'true' },
+    search: ['client_code', 'legal_name', 'display_name', 'parent_name', 'billing_address'], ids: ['client_code'],
+    order: 'ORDER BY created_at DESC, client_code DESC' })));
 route('GET', '/api/clients/:id', async (c) => {
   const client = await c.db.one(`SELECT c.*, p.legal_name AS parent_name, client_can_order(c.id) AS can_order,
     client_can_release_report(c.id) AS can_release FROM client c LEFT JOIN client p ON p.id = c.parent_client_id WHERE c.id = $1`, [c.params.id]);
@@ -181,9 +188,13 @@ route('POST', '/api/clients', (c) => tx(c, (t) => upsertRows(t, 'client', [c.bod
 route('PUT', '/api/clients/:id', (c) => tx(c, (t) => upsertRows(t, 'client', [{ ...c.body.row, id: c.params.id }], CLIENT_FIELDS)));
 
 // ---------------------------------------------------------------- contacts and links
-route('GET', '/api/contacts', (c) => c.db.rows(`SELECT ct.*, COALESCE((SELECT string_agg(COALESCE(cl.display_name, cl.legal_name), ', ' ORDER BY cl.legal_name)
+const CONTACTS_SQL = `SELECT ct.*, COALESCE((SELECT string_agg(COALESCE(cl.display_name, cl.legal_name), ', ' ORDER BY cl.legal_name)
   FROM client_contact cc JOIN client cl ON cl.id = cc.client_id WHERE cc.contact_id = ct.id AND cc.status = 'Active'), '') AS clients
-  FROM contact ct ORDER BY ct.last_name, ct.first_name`));
+  FROM contact ct`;
+route('GET', '/api/contacts', (c) => (!wantsPage(c) ? c.db.rows(CONTACTS_SQL + ' ORDER BY ct.last_name, ct.first_name')
+  : page(c, { sql: CONTACTS_SQL, params: [], filters: { active: `status::text = 'Active'`, inactive: `status::text <> 'Active'`, all: 'true' },
+    search: ['contact_code', 'first_name', 'last_name', `first_name || ' ' || last_name`, 'email', 'phone', 'clients'], ids: ['contact_code', 'email'],
+    order: 'ORDER BY created_at DESC, contact_code DESC' })));
 const CONTACT_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'job_title', 'portal_access', 'status'];
 route('POST', '/api/contacts/bulk', (c) => tx(c, (t) => upsertRows(t, 'contact', c.body.rows, CONTACT_FIELDS)));
 route('POST', '/api/client-contacts/bulk', (c) => tx(c, (t) => upsertRows(t, 'client_contact', c.body.rows,
@@ -265,12 +276,17 @@ route('PUT', '/api/catalog/:testId', (c) => tx(c, async (t) => {
 }));
 
 // ---------------------------------------------------------------- projects and quotes
-route('GET', '/api/projects', (c) => c.db.rows(`SELECT p.*, COALESCE(cl.display_name, cl.legal_name) AS client_name,
+const PROJECTS_SQL = `SELECT p.*, COALESCE(cl.display_name, cl.legal_name) AS client_name,
   lv.version_no AS latest_version, lv.status AS latest_status, lv.id AS latest_version_id,
   (SELECT count(*) FROM quoted_test_configuration q WHERE q.project_version_id = lv.id AND q.status = 'Active') AS line_count
   FROM project p JOIN client cl ON cl.id = p.client_id
   LEFT JOIN LATERAL (SELECT * FROM project_version pv WHERE pv.project_id = p.id ORDER BY version_no DESC LIMIT 1) lv ON true
-  WHERE p.kind = 'Project' ORDER BY p.project_code DESC`));
+  WHERE p.kind = 'Project'`;
+route('GET', '/api/projects', (c) => (!wantsPage(c) ? c.db.rows(PROJECTS_SQL + ' ORDER BY p.project_code DESC')
+  : page(c, { sql: PROJECTS_SQL, params: [],
+    filters: { open: `latest_status::text IN ('Draft','Submitted for Quote','Quoted')`, accepted: `latest_status::text = 'Accepted'`,
+      closed: `latest_status::text IN ('Superseded','Rejected','Expired')`, all: 'true' },
+    filter: 'all', search: ['project_code', 'project_name', 'client_name'], ids: ['project_code'], order: 'ORDER BY project_code DESC' })));
 route('POST', '/api/projects', (c) => tx(c, async (t) => {
   const [p] = await upsertRows(t, 'project', [c.body.row], ['client_id', 'project_name', 'purpose', 'available_to_child_clients', 'is_list_price_acceptance']);
   const v = await t.one('SELECT new_project_version($1) AS id', [p.id]);
@@ -462,7 +478,18 @@ route('GET', '/api/sites/:id/holidays', async (c) => (await checkSite(c, c.param
 route('POST', '/api/sites/:id/holidays/bulk', (c) => tx(c, (t) => upsertRows(t, 'site_holiday', c.body.rows, ['holiday_date', 'description', 'status'], { site_id: c.params.id })));
 
 // (orders of origin Workflow Verification are the automated runs' own: shown on their verification, not in the lab's lists)
-route('GET', '/api/orders', async (c) => c.db.rows("SELECT * FROM lab_order_view WHERE site_id = $1 AND origin::text <> 'Workflow Verification' ORDER BY order_code DESC", [await currentSite(c)]));
+const ORDERS_SQL = "SELECT * FROM lab_order_view WHERE site_id = $1 AND origin::text <> 'Workflow Verification'";
+route('GET', '/api/orders', async (c) => {
+  const site = await currentSite(c);
+  if (!wantsPage(c)) return c.db.rows(ORDERS_SQL + ' ORDER BY order_code DESC', [site]);
+  // one page at a time (0.35.0): current work first; finished = reported
+  return page(c, { sql: ORDERS_SQL, params: [site],
+    filters: { current: "status::text NOT IN ('Reported','Complete')", finished: "status::text IN ('Reported','Complete')", all: 'true' },
+    search: ['order_code', 'client_name', 'client_code', 'po_number', 'ordering_contact'],
+    ids: ['order_code', 'po_number'], order: 'ORDER BY order_code DESC',
+    findExact: (q) => c.db.one(`SELECT o.id, o.order_code, s.id AS sample_id FROM sample s JOIN lab_order o ON o.id = s.lab_order_id
+      WHERE o.site_id = $1 AND upper(replace(s.sample_code, ' ', '')) = upper(replace($2, ' ', '')) LIMIT 1`, [site, q]) });
+});
 route('POST', '/api/orders', async (c) => {
   const site = await currentSite(c); // new orders are always for the lab the user is working in
   return tx(c, (t) => upsertRows(t, 'lab_order', [{ ...c.body.row, site_id: site }], ['client_id', 'site_id', 'ordering_contact_id', 'submission_channel', 'po_number', 'notes', 'client_license_id'])).then((r) => r[0]);
@@ -629,10 +656,16 @@ route('GET', '/api/intake', async (c) => {
 });
 route('POST', '/api/rush-decisions', (c) => tx({ ...c, reason: c.body.reason || (c.body.decision === 'Approved' ? 'Rush approved by intake' : '') }, (t) =>
   upsertRows(t, 'rush_decision', [c.body], ['requested_test_id', 'decision', 'requested_tier_id', 'replacement_tier_id', 'reason'])));
-route('GET', '/api/outbox', async (c) => c.db.rows(`SELECT e.*, o.order_code, u.full_name AS triggered_by, p.project_code AS quote_code, p.id AS quote_project_id
+const OUTBOX_SQL = `SELECT e.*, o.order_code, u.full_name AS triggered_by, p.project_code AS quote_code, p.id AS quote_project_id
   FROM email_outbox e LEFT JOIN lab_order o ON o.id = e.lab_order_id JOIN app_user u ON u.id = e.created_by
   LEFT JOIN project_version pv ON pv.id = e.project_version_id LEFT JOIN project p ON p.id = pv.project_id
-  WHERE COALESCE(o.site_id, e.site_id) = $1 ORDER BY e.created_at DESC LIMIT 200`, [await currentSite(c)]));
+  WHERE COALESCE(o.site_id, e.site_id) = $1`;
+route('GET', '/api/outbox', async (c) => {
+  const site = await currentSite(c);
+  if (!wantsPage(c)) return c.db.rows(OUTBOX_SQL + ' ORDER BY e.created_at DESC LIMIT 200', [site]);
+  return page(c, { sql: OUTBOX_SQL, params: [site], search: ['subject', 'to_address', 'to_name', 'order_code', 'quote_code', 'template', 'triggered_by'],
+    ids: ['order_code', 'quote_code'], order: 'ORDER BY created_at DESC' });
+});
 // (version 1 of a test is made Effective by approval in the Workflow Designer: /api/methods/versions/:id/approve)
 
 // ================================================================ SLICE 3: inventory (server/routes_inventory.js)
@@ -679,6 +712,7 @@ require('./routes_waste')({ route, tx, currentSite, hasPermission, isUuid, AUDIT
 // the chain of custody, receipts and sample photos (0.29.0, migration 051)
 require('./routes_custody')({ route, signedTx, tx, checkSite, hasPermission, isUuid, AUDIT_SCOPES });
 require('./routes_labels')({ route, checkSite, currentSite, isUuid });
+require('./routes_search')(route, { currentSite, hasPermission });   // 0.35.0: search everything (the box at the top of every page)
 // Background jobs: automatic equipment tag-outs (expired calibration, maintenance due) at start and every hour
 module.exports.startJobs = (db) => {
   const run = () => equipment.autoTag(db).then((r) => { if (r && Number(r.n)) console.log(`Equipment: ${r.n} automatic tag-out(s)`); }).catch((e) => console.error('Automatic tag-out failed:', e.message));

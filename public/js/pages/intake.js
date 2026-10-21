@@ -1,7 +1,7 @@
 // Intake dashboard (rush approvals and incoming work), Outbox, Sites and holidays (Admin)
 import { api, esc, pageHeader, toast, modal, state, money, badge, currentSite, currentUser } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { showEmail } from './orders.js';
 
 const d8 = (v) => (v ? new Date(v + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '');
@@ -83,17 +83,18 @@ async function decide(r, decision, d, main) {
 }
 
 export async function outbox(main) {
-  const rows = await api('/outbox');
   const site = currentSite();
   const tab = state.query.get('tab') === 'templates' ? 'templates' : 'emails';
   main.innerHTML = pageHeader('Outbox', `Every automatic email the system generates for ${esc(site ? site.site_code : 'your lab')}. In the Sandbox nothing is actually sent; this is exactly what the client would receive.`, '', { kind: tab === 'templates' ? 'templates' : 'outbox' })
     + `<div class="tabs"><a class="tab ${tab === 'emails' ? 'on' : ''}" href="#/outbox">Emails</a><a class="tab ${tab === 'templates' ? 'on' : ''}" href="#/outbox?tab=templates" id="tplTab">Templates</a></div><div id="g"></div>`;
   if (tab === 'templates') { (await import('./reports.js')).templates(main.querySelector('#g')); return; }
-  new Grid(main.querySelector('#g'), { readOnly: true, search: true, rows, onRowOpen: showEmail, emptyText: 'No emails yet.',
+  // one page at a time from the server (0.35.0), newest first
+  pagedList({ el: main.querySelector('#g'), url: '/outbox', q: state.query.get('find') || '', placeholder: 'Search by subject, recipient, order, quote or type',
+    render: (body, rows) => new Grid(body, { readOnly: true, rows, onRowOpen: showEmail, emptyText: 'No emails here.',
     columns: [{ field: 'created_at', title: 'When', type: 'readonly', width: 150, format: dt }, { field: 'template', title: 'Type', type: 'readonly', width: 150 },
       { field: 'order_code', title: 'Order / quote', type: 'link', width: 105, compute: (r) => r.order_code || r.quote_code || '', href: (r) => (r.order_code ? orderLink(r) : r.quote_project_id ? '#/quotes/' + r.quote_project_id : null) }, { field: 'to_address', title: 'To', type: 'readonly', width: 230 },
       { field: 'subject', title: 'Subject', type: 'link', width: 380, onClick: showEmail }, { field: 'triggered_by', title: 'Triggered by', type: 'readonly', width: 140 },
-      { field: 'delivery_status', title: 'Delivery', type: 'readonly', width: 140 }] });
+      { field: 'delivery_status', title: 'Delivery', type: 'readonly', width: 140 }] }) });
 }
 
 export async function sites(main, selected) {

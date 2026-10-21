@@ -1,16 +1,20 @@
 // Clients list and client page (details, contacts with roles, projects, what the client may order)
 import { api, esc, pageHeader, toast, modal, state, badge, askReason, money } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { newProject } from './projects.js';
 import { newOrder } from './orders.js';
 
 export async function list(main) {
-  const rows = await api('/clients');
-  main.innerHTML = pageHeader('Clients', 'Hold and status apply to each client only. Nothing cascades from a parent client.',
+  main.innerHTML = pageHeader('Clients', 'Hold and status apply to each client only. Nothing cascades from a parent client. Newest first, 50 at a time; search finds any client.',
     '<button class="btn primary" id="new">+ New client</button>', { kind: 'clients' }) + '<div id="g"></div>';
-  new Grid(main.querySelector('#g'), {
-    readOnly: true, search: true, filter: state.query.get('find') || '', rows, onRowOpen: (r) => { location.hash = '#/clients/' + r.id; },
+  // one page at a time from the server (0.35.0)
+  pagedList({ el: main.querySelector('#g'), url: '/clients', q: state.query.get('find') || '', filter: state.query.get('show') || 'current',
+    filters: [['current', 'Current'], ['active', 'Active'], ['hold', 'On Hold'], ['inactive', 'Inactive'], ['all', 'All']],
+    placeholder: 'Search by code, name or parent client; type a client code and press Enter to open it',
+    open: (r) => { location.hash = '#/clients/' + r.id; },
+    render: (body, rows) => new Grid(body, {
+    readOnly: true, rows, emptyText: 'No clients here.', onRowOpen: (r) => { location.hash = '#/clients/' + r.id; },
     rowClass: (r) => (r.account_status === 'On Hold' ? 'warnrow' : r.account_status === 'Inactive' ? 'mutedrow' : ''),
     columns: [
       { field: 'client_code', title: 'Code', type: 'link', width: 95, href: (r) => '#/clients/' + r.id },
@@ -24,9 +28,9 @@ export async function list(main) {
       { field: 'contact_count', title: 'Contacts', type: 'readonly', width: 75 },
       { field: 'project_count', title: 'Projects', type: 'readonly', width: 75 },
     ],
-  });
+  }) });
   main.querySelector('#new').onclick = async () => {
-    const v = await clientForm({}, rows);
+    const v = await clientForm({}, await api('/clients'));
     if (!v) return;
     try { const r = await api('/clients', { method: 'POST', body: { row: v } }); location.hash = '#/clients/' + r.id; } catch (e) { toast(e.message, 'err'); }
   };

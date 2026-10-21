@@ -7,7 +7,7 @@ import { api, esc, pageHeader, toast, modal, state, badge, link, signDialog, ask
 import { reviewTrends } from './trending.js';
 import { openOos } from './oos.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 import { enhanceAll } from '../combo.js';
 import { printLabels } from '../labels.js';
 import { flagsCard, aliquotsCard } from './logbooks.js';
@@ -199,7 +199,7 @@ const SHOW = { open: 'Open', mine: 'My worklist', review: 'Awaiting review', all
 export async function batches(main) {
   if (!needLab(main)) return;
   const show = SHOW[state.query.get('show')] ? state.query.get('show') : 'open';
-  const d = await api('/testing/batches?show=' + show);
+  const d = await api('/testing/batches?show=' + (show === 'all' ? 'open' : show));
   main.innerHTML = pageHeader(show === 'mine' ? 'My worklist' : show === 'review' ? 'QC Review' : 'Batches',
     show === 'mine' ? 'Batches assigned to you that are not finished, earliest due first.' : show === 'review' ? 'Batches whose bench work is done, waiting for a reviewer (someone who did not perform or witness their steps).' : 'Every batch in this lab: its step progress and who it is assigned to.', '', { kind: 'batches' })
     + topTabs(show === 'mine' ? '#/testing/batches?show=mine' : show === 'review' ? '#/testing/batches?show=review' : '#/testing/batches')
@@ -207,8 +207,8 @@ export async function batches(main) {
        ${d.can_assign ? '<span style="flex:1"></span><span class="help">Select batches (Ctrl+click to pick several), then</span> <button class="btn" id="massassign">Assign selected</button>' : ''}</div>
      ${state.query.get('made') ? `<div class="tbnote">Batch <b>${esc(state.query.get('made'))}</b> made and assigned to you. It is highlighted below; open it to start, or assign it with others.</div>` : ''}<div id="g"></div>`;
   const made = state.query.get('made');
-  const bg = new Grid(main.querySelector('#g'), {
-    readOnly: true, search: true, rows: d.rows, emptyText: show === 'mine' ? 'No batches assigned to you.' : 'No batches.',
+  const grid = (el, rows) => new Grid(el, {
+    readOnly: true, search: show !== 'all', rows, emptyText: show === 'mine' ? 'No batches assigned to you.' : 'No batches.',
     rowClass: (r) => (made && r.batch_code === made ? 'tbmade' : ''),
     onRowOpen: (r) => { location.hash = '#/testing/batches/' + r.id; },
     columns: [
@@ -226,6 +226,14 @@ export async function batches(main) {
       { field: 'created_at', title: 'Made', type: 'readonly', width: 140, format: dt },
     ],
   });
+  // the working lists (open, mine, review) stay whole; every batch ever made comes one page at a time (0.35.0)
+  let bgOne = null;
+  const list = show === 'all' ? pagedList({ el: main.querySelector('#g'), url: '/testing/batches?show=all', filterParam: 'f', filter: state.query.get('f') || 'all',
+    q: state.query.get('find') || '', filters: [['all', 'All'], ['approved', 'Approved'], ['cancelled', 'Cancelled']],
+    placeholder: 'Search by batch, test, analyst or department; scan or type a batch ID and press Enter to open it',
+    open: (r) => { location.hash = '#/testing/batches/' + r.id; }, render: (el, rows) => grid(el, rows) }) : null;
+  if (!list) bgOne = grid(main.querySelector('#g'), d.rows);
+  const bg = { selectedRows: () => (list ? (list.grid() ? list.grid().selectedRows() : []) : bgOne.selectedRows()) };
   // a supervisor assigns several batches at once (each assignment is recorded on its batch)
   const ma = main.querySelector('#massassign');
   if (ma) ma.onclick = async () => {

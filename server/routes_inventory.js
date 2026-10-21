@@ -3,6 +3,7 @@
 'use strict';
 
 const bulk = require('./bulk');
+const { page, wantsPage } = require('./paging');
 const LOT_FIELDS = ['item_name', 'cas_number', 'physical_form', 'chemical_id', 'item_description', 'chemical_types', 'supplier_id', 'manufacturer_id', 'catalog_number', 'manufacturer_lot',
   'requested_quantity', 'quantity_received', 'unit', 'container_count', 'concentration', 'concentration_unit', 'purity_pct', 'received_date',
   'opened_date', 'expiration_date', 'retest_date', 'storage_condition', 'storage_location_id', 'status', 'notes', 'item_url', 'department_id', 'waste_classification_id'];
@@ -164,10 +165,24 @@ module.exports = function registerInventory({ route, tx, signedTx, upsertRows, c
   r('GET', '/api/inventory/sites', (c) => c.db.rows("SELECT id, site_code, site_name FROM lab_site WHERE status = 'Active' ORDER BY site_code"));
 
   // ------------------------------------------------------------ lots
-  r('GET', '/api/inventory/lots', async (c) => c.db.rows(`SELECT v.*, media_status(v.id) AS media_status, lot_qa_status(v.id) AS qa_status,
+  const LOTS_SQL = `SELECT v.*, media_status(v.id) AS media_status, lot_qa_status(v.id) AS qa_status,
       w.waste_name, w.waste_code, w.needs_review AS waste_review, w.hazard_classes AS waste_hazards
-    FROM inventory_lot_view v JOIN inventory_lot il ON il.id = v.id LEFT JOIN waste_classification w ON w.id = il.waste_classification_id WHERE v.site_id = $1
-    ORDER BY (v.receipt_status = 'Received') DESC, (v.status IN ('Disposed','Cancelled')), v.material, v.lot_code`, [await currentSite(c)]));
+    FROM inventory_lot_view v JOIN inventory_lot il ON il.id = v.id LEFT JOIN waste_classification w ON w.id = il.waste_classification_id WHERE v.site_id = $1`;
+  // the list screen asks for one page (0.35.0); other callers (usage dialog, mixtures, scripts) still get every lot
+  const LOT_OPEN = `status::text NOT IN ('Disposed','Cancelled','Depleted')`;
+  r('GET', '/api/inventory/lots', async (c) => {
+    const site = await currentSite(c);
+    if (!wantsPage(c)) return c.db.rows(LOTS_SQL + ` ORDER BY (v.receipt_status = 'Received') DESC, (v.status IN ('Disposed','Cancelled')), v.material, v.lot_code`, [site]);
+    return page(c, { sql: LOTS_SQL, params: [site],
+      filters: { active: LOT_OPEN, wasted: `NOT (${LOT_OPEN})`,
+        expired: `${LOT_OPEN} AND expiry_status::text IN ('Expired','Retest due')`, negative: `negative_stock`,
+        order: `receipt_status::text <> 'Received' AND status::text <> 'Cancelled'`,
+        qa: `${LOT_OPEN} AND qa_status IS NOT NULL AND qa_status NOT LIKE 'Released%'`,
+        waste: `${LOT_OPEN} AND (waste_name IS NULL OR waste_review)` },
+      search: ['lot_code', 'material', 'manufacturer_lot', 'cas_display', 'supplier_name', 'analytes_text'],
+      ids: ['lot_code', 'manufacturer_lot'],
+      order: 'ORDER BY created_at DESC, lot_code DESC' });
+  });
   r('GET', '/api/inventory/dashboard', async (c) => c.db.one(`SELECT
     count(*) FILTER (WHERE receipt_status = 'Received' AND status = 'Available') AS available,
     count(*) FILTER (WHERE expiry_status = 'Expired' AND status NOT IN ('Disposed','Cancelled')) AS expired,

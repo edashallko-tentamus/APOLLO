@@ -2,6 +2,7 @@
 // release by someone else, calibration changes by QA, schedules, transfer) live in the database; these handlers read,
 // write, sign and pass the user, lab and Reason for Change through.
 'use strict';
+const { page, wantsPage } = require('./paging');
 
 const EQ_FIELDS = ['equipment_name', 'equipment_type_id', 'department_id', 'manufacturer', 'model', 'serial_number', 'asset_tag', 'location_id',
   'location_note', 'calibration_required', 'calibration_interval_months', 'calibration_alert_days', 'qualification_required', 'in_service_date', 'notes'];
@@ -76,8 +77,15 @@ module.exports = function registerEquipment({ route, tx, signedTx, upsertRows, c
   r('GET', '/api/equipment', async (c) => {
     const site = await currentSite(c);
     await autoTag(c.db, site);
-    return c.db.rows(`SELECT e.*, is_equipment_owner($2, e.id) AS mine FROM equipment_view e WHERE e.site_id = $1
-      ORDER BY e.admin_status = 'Retired', lower(e.type_name), lower(e.equipment_name)`, [site, c.userId]);
+    const sql = `SELECT e.*, is_equipment_owner($2, e.id) AS mine FROM equipment_view e WHERE e.site_id = $1`;
+    if (!wantsPage(c)) return c.db.rows(sql + ` ORDER BY e.admin_status = 'Retired', lower(e.type_name), lower(e.equipment_name)`, [site, c.userId]);
+    // one page at a time (0.35.0), newest first
+    return page(c, { sql, params: [site, c.userId],
+      filters: { active: `admin_status::text <> 'Retired'`, tagged: `availability = 'Tagged out'`,
+        caldue: `admin_status::text = 'In Service' AND calibration_status IN ('Alert','Deficient')`, mine: `mine AND admin_status::text <> 'Retired'`,
+        retired: `admin_status::text = 'Retired'` },
+      search: ['equipment_code', 'equipment_name', 'type_name', 'manufacturer', 'model', 'serial_number', 'owners', 'department_code'],
+      ids: ['equipment_code', 'serial_number'], order: 'ORDER BY created_at DESC, equipment_code DESC' });
   });
   r('GET', '/api/equipment/due', async (c) => {
     const site = await currentSite(c);

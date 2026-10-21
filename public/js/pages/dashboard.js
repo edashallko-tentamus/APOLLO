@@ -1,14 +1,15 @@
 // Dashboards (D-1, migration 037). Home is the dashboard: the widgets of the person's groups at the lab, arranged
 // and resized by the person (drag the title bar to move, drag the corner to resize; put away and bring back). The GM
 // dashboard covers the GM's labs; the executive dashboard every lab and the finance update. Every number opens its
-// page or the list behind it. Refreshes every minute while it is open. Also: Admin > Dashboard widgets (each group's
+// page or the list behind it. Live widgets refresh every 5 minutes while it is open; the others on request (0.35.0). Also: Admin > Dashboard widgets (each group's
 // widgets) and the finance figures page.
-import { api, esc, pageHeader, toast, state, can, money, link, currentSite, askReason } from '../app.js';
+import { api, esc, pageHeader, toast, state, can, money, link, currentSite, askReason, modal } from '../app.js';
 import { Grid } from '../grid.js';
 import { section, editableGrid } from './common.js';
 
 const css = document.createElement('style');
 css.textContent = `
+.rlabs { display: flex; flex-direction: column; gap: 4px; }
 .dbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
 .dbar .sp { flex: 1; } .dbar select { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
 .dgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 100px; gap: 12px; grid-auto-flow: row dense; }
@@ -19,7 +20,10 @@ css.textContent = `
 .dw header .cat { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
 .dw header button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
 .dw header button:hover { background: #F0F3F5; color: var(--ink); }
-.dw .body { padding: 4px 12px 12px; overflow: auto; flex: 1; min-height: 0; font-size: 13px; }
+.dw .dwfoot { font-size: 10.5px; color: var(--muted); padding: 0 22px 4px 12px; text-align: right; opacity: .75; white-space: nowrap; }
+.dw .dwfoot .dwref { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.dw .dwfoot .dwref:hover { color: var(--ink); }
+.dw .body { padding: 4px 12px 6px; overflow: auto; flex: 1; min-height: 0; font-size: 13px; }
 .dw .rz { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; background:
   linear-gradient(135deg, transparent 50%, #b7c0c8 50%, #b7c0c8 58%, transparent 58%, transparent 70%, #b7c0c8 70%, #b7c0c8 78%, transparent 78%); }
 .dk { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
@@ -86,6 +90,8 @@ const BOARDS = {
   executive: { title: 'Executive dashboard', sub: () => 'Every lab side by side, and the weekly finance update against the Budget Forecast and the Monthly Forecast. Not shown to General Managers.' },
 };
 let timer = null;
+// when a widget's figures were worked out: the time today, else the date and time
+const fmtAt = (iso) => { const t = new Date(iso); return t.toDateString() === new Date().toDateString() ? t.toLocaleTimeString([], { timeStyle: 'short' }) : t.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
 const boardLab = {};
 const tabs = {};   // the tab picked in a widget (by widget code), kept while the page refreshes
 
@@ -99,15 +105,31 @@ async function board(main, key) {
   const d = await api(`/dashboard/${key}${boardLab[key] ? '?lab=' + boardLab[key] : ''}`);
   main.innerHTML = pageHeader(BOARDS[key].title, BOARDS[key].sub(lab ? `${lab.site_code} (${lab.site_name})` : 'your lab'), '', key === 'home' ? null : { kind: 'dashboard_widgets' })
     + `<div class="dbar">${d.labs.length > 1 ? `<label>Lab <select id="dlab"><option value="">All my labs together</option>${d.labs.map((l) => `<option value="${l.id}" ${boardLab[key] === l.id ? 'selected' : ''}>${esc(l.site_code)}: ${esc(l.site_name)}</option>`).join('')}</select></label>` : ''}
-      <span class="sp"></span><span id="dupd"></span><button class="btn" id="dadd">Bring back a widget</button><button class="btn ghost" id="dreset">Reset layout</button></div>
+      <span class="sp"></span><span id="dupd"></span>${key === 'home' ? '' : '<button class="btn" id="dreport" title="Download the performance report for a period to Excel">Performance report (Excel)</button>'}<button class="btn" id="drefresh" title="Work out again every widget that is not live">Refresh all</button><button class="btn" id="dadd">Bring back a widget</button><button class="btn ghost" id="dreset">Reset layout</button></div>
       <div class="dgrid" id="dgrid"></div>`;
   const root = main.querySelector('#dgrid');
   let model = arrange(d);
   const save = () => api(`/dashboard/${key}/layout`, { method: 'PUT', body: { layout: model.order.map((w) => ({ code: w.code, w: w.w, h: w.h })), hidden: model.hidden } }).catch((e) => toast(e.message, 'err'));
   const render = () => {
     root.innerHTML = model.order.length ? '' : '<div class="dhidden" style="grid-column: 1 / -1">No widgets here. Your groups have none at this lab, or you put them all away: Bring back a widget, or ask your lab administrator (Admin > Dashboard widgets).</div>';
-    for (const w of model.order) root.appendChild(widgetEl(w, key, model, save, render));
-    main.querySelector('#dupd').textContent = `Updated ${new Date(d.at).toLocaleTimeString([], { timeStyle: 'short' })} · refreshes every minute`;
+    for (const w of model.order) root.appendChild(widgetEl(w, key, model, save, render, refreshOne));
+    main.querySelector('#dupd').textContent = '';
+  };
+  // a widget that is not live is worked out again only on request: its own icon, or Refresh all
+  const lq = () => (boardLab[key] ? '&lab=' + boardLab[key] : '');
+  async function refreshOne(codes, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const fresh = await api(`/dashboard/${key}?refresh=1&only=${encodeURIComponent(codes.join(','))}${lq()}`);
+      for (const w of fresh.widgets) { const m = model.order.find((x) => x.code === w.code); if (m) Object.assign(m, { data: w.data, error: w.error, at: w.at }); }
+      render();
+    } catch (e) { toast(e.message, 'err'); if (btn) btn.disabled = false; }
+  }
+  if (main.querySelector('#dreport')) main.querySelector('#dreport').onclick = () => performanceReport(d.labs);
+  main.querySelector('#drefresh').onclick = (e) => {
+    const codes = model.order.filter((w) => !w.live).map((w) => w.code);
+    if (!codes.length) { toast('Every widget here is live: it refreshes every 5 minutes.'); return; }
+    refreshOne(codes, e.target).then(() => { const b = main.querySelector('#drefresh'); if (b) b.disabled = false; toast('Refreshed.'); });
   };
   render();
   const sel = main.querySelector('#dlab');
@@ -129,11 +151,14 @@ async function board(main, key) {
     if (location.hash !== hash || !document.body.contains(root)) { clearInterval(timer); timer = null; return; }
     if (document.visibilityState !== 'visible' || document.querySelector('.ddet, .modal-bg') || root.querySelector('.dragging')) return;
     try {
-      const fresh = await api(`/dashboard/${key}${boardLab[key] ? '?lab=' + boardLab[key] : ''}`);
-      for (const w of fresh.widgets) { const m = model.order.find((x) => x.code === w.code); if (m) { m.data = w.data; m.error = w.error; } }
-      d.at = fresh.at; render();
+      // only the live widgets are asked for again (every 5 minutes, Alex 2026-10-21); the others wait for a refresh
+      const codes = model.order.filter((w) => w.live).map((w) => w.code);
+      if (!codes.length) return;
+      const fresh = await api(`/dashboard/${key}?only=${encodeURIComponent(codes.join(','))}${lq()}`);
+      for (const w of fresh.widgets) { const m = model.order.find((x) => x.code === w.code); if (m) Object.assign(m, { data: w.data, error: w.error, at: w.at }); }
+      render();
     } catch (_) { /* keep the last numbers */ }
-  }, 60000);
+  }, 5 * 60000);
 }
 
 // the person's saved order and sizes, then any widget not placed yet
@@ -147,13 +172,17 @@ function arrange(d) {
   return { all, order, hidden };
 }
 
-function widgetEl(w, key, model, save, render) {
+function widgetEl(w, key, model, save, render, refreshOne) {
   const el = document.createElement('section');
   el.className = 'dw'; el.dataset.code = w.code;
   el.style.gridColumn = `span ${w.w}`; el.style.gridRow = `span ${w.h}`;
   el.innerHTML = `<header draggable="true" title="Drag to move"><h3 title="${esc(w.description || '')}">${esc(w.title)}</h3><span class="cat">${esc(w.category || '')}</span>
       <button data-x title="Put this widget away" aria-label="Put ${esc(w.title)} away">×</button></header>
-    <div class="body"></div><div class="rz" title="Drag to resize"></div>`;
+    <div class="body"></div>
+    <footer class="dwfoot">${w.live ? 'Refreshed every 5 minutes' : `Refreshed ${w.at ? fmtAt(w.at) : ''} <button class="dwref" title="Refresh this widget" aria-label="Refresh ${esc(w.title)}">↻</button>`}</footer>
+    <div class="rz" title="Drag to resize"></div>`;
+  const rb = el.querySelector('.dwref');
+  if (rb) rb.onclick = () => refreshOne([w.code], rb);
   el.querySelector('[data-x]').onclick = async () => { model.hidden.push(w.code); model.order = model.order.filter((x) => x.code !== w.code); render(); await save(); toast(`${w.title} put away: Bring back a widget shows it again.`); };
   // the body, redrawn when one of its tabs (Revenue / EBITDA / Costs) is picked
   const fill = () => {
@@ -404,7 +433,9 @@ export async function finance(main) {
     <div class="ftabs" role="tablist">${d.labs.map((l) => `<button type="button" role="tab" data-lab="${esc(l.site_code)}" class="${l.site_code === financeLab ? 'on' : ''}" aria-selected="${l.site_code === financeLab}" title="${esc(l.site_name)}">${esc(l.site_code)}</button>`).join('')}</div>
     <div class="card">${section(`Weekly update: ${lab ? lab.site_name : ''}`, 'One row per week (the date the week ends). Revenue (LIMS) is worked out from the invoices and locked. Costs should exclude depreciation, amortization, interest and tax, so that revenue less costs is EBITDA: to confirm with finance.')}<div id="wg"></div></div>
     <div class="card">${section(`Forecasts: ${lab ? lab.site_name : ''}`, 'Budget forecast (set for the year) and Monthly forecast (updated as the year goes), per month (YYYY-MM). Download them to Excel for every lab you type for, edit, and upload the file: you see every change before it is saved.',
-      '<button class="btn" id="plandl">Download Excel</button> <button class="btn" id="planul">Upload Excel</button>')}<div id="pg"></div></div>`;
+      '<button class="btn" id="plandl">Download Excel</button> <button class="btn" id="planul">Upload Excel</button>')}<div id="pg"></div></div>
+    <div class="card">${section('Performance report', 'Everything for a period in one Excel file: a Summary for the General Manager or executive (headline by lab, by month, top clients, quality and timeliness), then the LIMS data behind it on separate tabs, with the LIMS column names.',
+      '<button class="btn primary" id="fdreport">Performance report (Excel)</button>')}</div>`;
   main.querySelector('#fy').onchange = (e) => { financeYear = Number(e.target.value); finance(main); };
   main.querySelectorAll('[data-lab]').forEach((b) => { b.onclick = () => { financeLab = b.dataset.lab; finance(main); }; });
   const full = (grid, changes) => changes.map((ch) => (ch.id ? { ...grid.rows.find((r) => r.id === ch.id), ...ch } : { site_code: financeLab, ...ch }));
@@ -423,7 +454,32 @@ export async function finance(main) {
     { field: 'ebitda', title: 'EBITDA', type: 'money', width: 120, compute: (r) => (r.revenue === undefined || r.revenue === null || r.revenue === '' ? null : Number(r.revenue || 0) - Number(r.costs || 0)) }],
     save: (changes, reason) => api('/finance/plans', { method: 'POST', body: { reason, rows: full(pg, changes) } }), afterSave: () => finance(main) });
   main.querySelector('#plandl').onclick = () => downloadForecasts();
+  main.querySelector('#fdreport').onclick = () => performanceReport(d.labs);
   main.querySelector('#planul').onclick = () => uploadForecasts(() => finance(main));
+}
+
+// The performance report (0.35.0): a period, the labs, then the Excel file (Summary plus the raw data tabs)
+export async function performanceReport(labs) {
+  const t = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const several = labs.length > 1;
+  const v = await modal({ title: 'Performance report (Excel)', okText: 'Download',
+    intro: 'Choose the period. The file has a Summary (headline by lab, by month, top clients, quality and timeliness) and the data behind it on separate tabs, with the LIMS column names.',
+    fields: [{ name: 'from', label: 'From', type: 'date', value: ymd(new Date(t.getFullYear(), 0, 1)), required: true }, { name: 'to', label: 'To', type: 'date', value: ymd(t), required: true }],
+    after: several ? `<div class="field"><label>Labs</label><div class="rlabs">${labs.map((l) => `<label class="cb"><input type="checkbox" data-rlab="${esc(l.site_code)}" checked> ${esc(l.site_code)}: ${esc(l.site_name)}</label>`).join('')}</div></div>` : '',
+    collect: (m) => (several ? { labs: [...m.querySelectorAll('[data-rlab]:checked')].map((x) => x.dataset.rlab) } : {}) });
+  if (!v) return;
+  if (v.from > v.to) { toast('From must be on or before To.', 'err'); return; }
+  if (several && !(v.labs || []).length) { toast('Tick at least one lab.', 'err'); return; }
+  const qs = new URLSearchParams({ from: v.from, to: v.to }); if (several) qs.set('labs', v.labs.join(','));
+  toast('Making the report…');
+  try {
+    const res = await fetch('/api/finance/report.xlsx?' + qs, { headers: { 'x-site-id': state.site || '' } });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'The download failed'); }
+    const cd = res.headers.get('Content-Disposition') || ''; const name = (cd.match(/filename="([^"]+)"/) || [])[1] || `Performance ${v.from} to ${v.to}.xlsx`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    toast('Performance report downloaded.');
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 // The forecasts to and from Excel (D-1.1)

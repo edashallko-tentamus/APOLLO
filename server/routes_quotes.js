@@ -3,6 +3,7 @@
 // the project quotes), a new quote, sending it to the client (PDF + email with an accept/decline link), accepting or
 // rejecting from the list, the PDF, and the client's page (no sign-in).
 'use strict';
+const { page, wantsPage } = require('./paging');
 const Q = require('./quotes');
 
 module.exports = function registerQuotes({ route, tx, currentSite, hasPermission, isUuid, AUDIT_SCOPES, AUDIT_LISTS }) {
@@ -17,10 +18,26 @@ module.exports = function registerQuotes({ route, tx, currentSite, hasPermission
   };
 
   // the list: every quote's and project's latest version (filters and "My open quotes" on the page)
-  r('GET', '/api/quotes', async (c) => ({
-    rows: await c.db.rows(`SELECT * FROM quote_list_view ORDER BY COALESCE(sent_at, quoted_at, version_created_at) DESC`),
-    labs: await c.db.rows(`SELECT id, site_code, site_name FROM lab_site WHERE status = 'Active' ORDER BY site_code`),
-    me: c.userId, can_edit: await hasPermission(c, 'quotes.edit') }));
+  r('GET', '/api/quotes', async (c) => {
+    const extra = { labs: await c.db.rows(`SELECT id, site_code, site_name FROM lab_site WHERE status = 'Active' ORDER BY site_code`),
+      me: c.userId, can_edit: await hasPermission(c, 'quotes.edit') };
+    if (!wantsPage(c)) return { rows: await c.db.rows(`SELECT * FROM quote_list_view ORDER BY COALESCE(sent_at, quoted_at, version_created_at) DESC`), ...extra };
+    // one page at a time (0.35.0): the tab (mine / all), type, lab and who prepared it narrow the list; the status chips are the filters
+    const q = c.query; const params = []; const where = [];
+    const add = (cond, v) => { params.push(v); where.push(cond.replace('?', '$' + params.length)); };
+    if (q.tab !== 'all') { add('owner_id = ?', c.userId); where.push('is_open'); }
+    if (['Quote', 'Project', 'Stability'].includes(q.ty)) add('kind::text = ?', q.ty);
+    if (isUuid(q.lab)) add(`site_ids::text LIKE '%' || ? || '%'`, q.lab);
+    if (q.tab === 'all' && isUuid(q.own)) add('owner_id = ?', q.own);
+    const sql = `SELECT *, COALESCE(sent_at, quoted_at, version_created_at) AS list_at FROM quote_list_view ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
+    const d = await page(c, { sql, params,
+      filters: q.tab !== 'all' ? { open: 'true' } : { open: 'is_open', waiting: `status::text = 'Quoted' AND NOT past_valid`, Accepted: `status::text = 'Accepted'`,
+        Rejected: `status::text = 'Rejected'`, expired: `status::text = 'Expired' OR past_valid`, all: 'true' },
+      search: ['project_code', 'project_name', 'client_name', 'owner_name', 'quote_contact_name', 'sent_to_name'],
+      ids: ['project_code'], order: 'ORDER BY list_at DESC, project_code DESC' });
+    const owners = await c.db.rows(`SELECT DISTINCT owner_id AS id, owner_name AS name FROM quote_list_view WHERE owner_id IS NOT NULL ORDER BY owner_name`);
+    return { ...d, ...extra, owners };
+  });
 
   // a new quote for a client (and the contact it is for); the first version starts as a Draft
   r('POST', '/api/quotes', (c) => tx({ ...c, reason: c.body.reason || 'New quote' }, async (t) => {

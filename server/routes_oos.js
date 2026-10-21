@@ -2,6 +2,7 @@
 // conclusion with the report PDF, cancel, retests, the retest determination), the client's answers (a public link),
 // and the OOS checklists (QA). The rules live in the database.
 'use strict';
+const { page, wantsPage } = require('./paging');
 const OOS = require('./oos');
 const { verifySignature } = require('./auth');
 
@@ -31,8 +32,13 @@ module.exports = function registerOos({ route, tx, signedTx, upsertRows, current
 
   r('GET', '/api/oos', async (c) => {
     const site = await currentSite(c);
-    return { rows: await c.db.rows(`${LIST} WHERE x.site_id = $1 ORDER BY (x.status IN ('Closed','Cancelled')), x.opened_at DESC`, [site]),
-      can_open: await hasPermission(c, 'oos.open') };
+    const can_open = await hasPermission(c, 'oos.open');
+    // one page at a time, newest first (0.35.0)
+    if (wantsPage(c)) return { ...(await page(c, { sql: `${LIST} WHERE x.site_id = $1`, params: [site],
+      filters: { open: `(status::text NOT IN ('Closed','Cancelled') OR responses_waiting > 0)`, overdue: 'overdue', closed: `status::text IN ('Closed','Cancelled')`, all: 'true' },
+      search: ['oos_code', 'sample_code', 'client_sample_id', 'client_name', 'test_name', 'analyte_name', 'batch_code', 'conclusion'], ids: ['oos_code', 'sample_code', 'batch_code'],
+      order: 'ORDER BY opened_at DESC' })), can_open };
+    return { rows: await c.db.rows(`${LIST} WHERE x.site_id = $1 ORDER BY (x.status IN ('Closed','Cancelled')), x.opened_at DESC`, [site]), can_open };
   });
   // the OOS state of the results of a batch (QC Review) or a sample (sample page)
   r('GET', '/api/oos/for', async (c) => {

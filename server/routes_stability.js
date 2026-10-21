@@ -3,6 +3,7 @@
 // a new one, its design (one save for the plan, conditions, timepoints, tests and matrix), a new version; the
 // studies, placement in chambers, pull orders, recording pulls, the cumulative report; conditions, chambers, racks.
 'use strict';
+const { page, wantsPage } = require('./paging');
 const S = require('./stability');
 const COA = require('./coa');
 const { verifySignature } = require('./auth');
@@ -197,7 +198,11 @@ module.exports = function registerStability({ route, tx, signedTx, upsertRows, c
   r('GET', '/api/stability/studies', async (c) => {
     const site = await currentSite(c);
     await makeDue(c, site);
-    return { rows: await c.db.rows(`SELECT * FROM stability_study_view WHERE site_id = $1 ORDER BY CASE status WHEN 'Awaiting material' THEN 0 WHEN 'Active' THEN 1 ELSE 2 END, next_pull NULLS LAST, study_code`, [site]),
+    // the studies one page at a time, newest first (0.35.0)
+    const paged = wantsPage(c) ? await page(c, { sql: 'SELECT * FROM stability_study_view WHERE site_id = $1', params: [site],
+      filters: { current: `status::text IN ('Awaiting material','Active')`, finished: `status::text NOT IN ('Awaiting material','Active')`, all: 'true' },
+      search: ['study_code', 'client_name', 'product', 'project_code', 'conditions', 'last_report_code'], ids: ['study_code', 'project_code'], order: 'ORDER BY created_at DESC, study_code DESC' }) : null;
+    return { ...(paged || {}), rows: paged ? paged.rows : await c.db.rows(`SELECT * FROM stability_study_view WHERE site_id = $1 ORDER BY CASE status WHEN 'Awaiting material' THEN 0 WHEN 'Active' THEN 1 ELSE 2 END, next_pull NULLS LAST, study_code`, [site]),
       pulls: await c.db.rows(`SELECT * FROM stability_pull_view WHERE site_id = $1 AND status IN ('Scheduled','Ordered') AND scheduled_date <= site_today($1) + 60 ORDER BY scheduled_date, study_code`, [site]),
       today: (await c.db.one('SELECT site_today($1) AS d', [site])).d, can_manage: await hasPermission(c, 'stability.manage') };
   });

@@ -154,3 +154,62 @@ export async function specDialog(owner, done) {
     catch (e) { m.querySelector('.merr').textContent = e.message; }
   };
 }
+
+// Paged lists (0.35.0). One page at a time from the server (50 rows, newest first), with the filter tabs and their
+// counts, page buttons and a search box. Typing searches the whole list on the server; Enter (or a barcode scanner,
+// which types the ID and presses Enter) opens the record when the text is exactly its ID.
+// opts: { el, url, filters: [[key, label], ...], filter (key to start on), size, placeholder, params (extra query object),
+//         render(bodyEl, rows, data) (draws the rows; may return a grid), open(row) (opens a record found by its ID) }
+// returns { reload(), state, grid() }
+export function pagedList(opts) {
+  const el = opts.el;
+  const here = new URLSearchParams((location.hash.split('?')[1]) || '');
+  const st = { page: Math.max(1, parseInt(here.get('p'), 10) || 1), q: opts.q || '', f: opts.filter || (opts.filters && opts.filters[0] && opts.filters[0][0]) || '', size: opts.size || 50 };
+  let grid = null; let seq = 0; let timer = null; let last = null;
+  el.innerHTML = `<div class="pglist">
+      ${opts.filters && opts.filters.length ? `<div class="tabs pgtabs">${opts.filters.map(([k, l]) => `<button class="tab" data-f="${esc(k)}">${esc(l)} <small data-n="${esc(k)}"></small></button>`).join('')}</div>` : ''}
+      <div class="pgbar"><input class="pgsearch" type="search" autocomplete="off" placeholder="${esc(opts.placeholder || 'Search, or type or scan an ID and press Enter')}" value="${esc(st.q)}">
+        <span class="pginfo"></span><span class="sp"></span>
+        <button class="btn ghost pgprev" title="Previous page">‹ Previous</button><span class="pgof"></span><button class="btn ghost pgnext" title="Next page">Next ›</button></div>
+      <div class="pgbody"></div></div>`;
+  const $ = (s) => el.querySelector(s);
+  async function load(openExact) {
+    const my = ++seq;
+    const p = new URLSearchParams({ page: String(st.page), size: String(st.size), ...(opts.params || {}) });
+    if (st.q) p.set('q', st.q);
+    if (st.f) p.set('f', st.f);
+    const d = await api(`${opts.url}${opts.url.includes('?') ? '&' : '?'}${p}`);
+    if (my !== seq) return null;   // a newer search is on its way
+    last = d; st.page = d.page; st.f = d.filter || st.f;
+    if (openExact && d.exact && opts.open) { opts.open(d.exact); return d; }
+    el.querySelectorAll('.pgtabs .tab').forEach((b) => b.classList.toggle('on', b.dataset.f === st.f));
+    el.querySelectorAll('.pgtabs small[data-n]').forEach((s) => { const n = (d.counts || {})[s.dataset.n]; s.textContent = n === undefined ? '' : n; });
+    const from = d.total ? (d.page - 1) * d.size + 1 : 0;
+    $('.pginfo').textContent = d.total ? `${from}–${from + d.rows.length - 1} of ${d.total.toLocaleString()}${st.q ? ` matching "${st.q}"` : ''}` : (st.q ? `Nothing matches "${st.q}"` : '');
+    $('.pgof').textContent = `Page ${d.page} of ${d.pages}`;
+    $('.pgprev').disabled = d.page <= 1; $('.pgnext').disabled = d.page >= d.pages;
+    grid = opts.render($('.pgbody'), d.rows, d) || null;
+    remember();
+    return d;
+  }
+  // every load from a click or the search box: an error is shown, never left unhandled (a page error)
+  const run = (o) => load(o).catch((e) => { if (el.isConnected) toast(e.message, 'err'); return null; });
+  // keep the tab, search and page in the address, so Back from a record returns to the same place
+  function remember() {
+    if (opts.remember === false) return;
+    const [path, qs] = (location.hash || '#/').split('?');
+    const u = new URLSearchParams(qs || '');
+    const set = (k, v) => { if (v) u.set(k, v); else u.delete(k); };
+    set(opts.filterParam || 'show', st.f); set('find', st.q); set('p', st.page > 1 ? String(st.page) : '');
+    const next = path + (u.toString() ? '?' + u : '');
+    if (next !== location.hash) history.replaceState(null, '', next);
+  }
+  el.querySelectorAll('.pgtabs .tab').forEach((b) => b.addEventListener('click', () => { st.f = b.dataset.f; st.page = 1; run(); }));
+  $('.pgprev').addEventListener('click', () => { if (st.page > 1) { st.page--; run(); } });
+  $('.pgnext').addEventListener('click', () => { st.page++; run(); });
+  const s = $('.pgsearch');
+  s.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { st.q = s.value.trim(); st.page = 1; run(); }, 350); });
+  s.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); st.q = s.value.trim(); st.page = 1; run(true); } });
+  const ready = run(false);   // a search in the address filters; only Enter opens a record
+  return { reload: () => run(), setParams: (p) => { opts.params = p; st.page = 1; return run(); }, ready, state: st, grid: () => grid, data: () => last, search: (q, open) => { s.value = q; st.q = q; st.page = 1; return run(open); } };
+}

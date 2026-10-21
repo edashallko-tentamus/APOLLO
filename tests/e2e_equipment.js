@@ -37,7 +37,7 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 
   await signIn(page, BASE, 'Alex Kiddle', '#/equipment');
   await page.waitForSelector('#g tbody tr');
   check('Equipment is in the menu and the register lists the lab\'s equipment', (await page.locator('nav a[href="#/equipment"]').count()) === 1 && (await page.locator('#g tbody tr').count()) === 17); // 9, plus ICP-MS 2 and the microwave digester (WD-2 demo), a top-loading balance (WD-4 demo), four stability chambers (seed_025) and the receiving thermometer (seed_039)
-  const tagged = await page.locator('a.tab', { hasText: 'Tagged out' }).innerText();
+  const tagged = await page.locator('.pgtabs .tab', { hasText: 'Tagged out' }).innerText();
   check('Expired calibration and overdue maintenance were tagged out automatically', /Tagged out\s*2/.test(tagged), tagged);
   const pipRow = page.locator('#g tbody tr', { hasText: 'Pipette P10 #3' });
   check('The expired pipette shows red and Tagged out: Calibration', /Tagged out: Calibration/.test(await pipRow.innerText())

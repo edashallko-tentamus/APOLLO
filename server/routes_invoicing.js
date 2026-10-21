@@ -4,6 +4,7 @@
 // QuickBooks Online company; credit notes (signed "Credited by"); the order's billing; settings (payment terms,
 // the accounting connection). Thin: every rule lives in the database.
 'use strict';
+const { page, wantsPage } = require('./paging');
 const INV = require('./invoices');
 
 module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, checkSite, hasPermission, isUuid, AUDIT_SCOPES, AUDIT_LISTS, AUDIT_CHECKS }) {
@@ -57,7 +58,15 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
     else if (tab === 'queue') rows = await c.db.rows(`SELECT p.id AS push_id, p.status AS push_status, p.entity, p.provider, p.attempts, p.last_error, p.sent_at AS pushed_at, p.created_at AS queued_at,
         i.id, i.code, i.kind, i.client_name, i.order_code, i.invoice_date, i.total FROM accounting_push p JOIN invoice_view i ON i.id = p.invoice_id
         WHERE p.site_id = $1 ORDER BY p.created_at DESC LIMIT 500`, [site]);
-    else rows = await c.db.rows(`SELECT * FROM invoice_view WHERE site_id = $1 AND status = 'Issued' AND invoice_date >= site_today($1) - $2::int
+    else if (wantsPage(c)) {
+      // issued invoices and credit notes, one page at a time, newest first (0.35.0)
+      const d = await page(c, { sql: `SELECT * FROM invoice_view WHERE site_id = $1 AND status = 'Issued'`, params: [site],
+        filters: { all: 'true', invoices: `kind::text = 'Invoice'`, credits: `kind::text <> 'Invoice'`, unpaid: `kind::text = 'Invoice' AND COALESCE(credited, 0) = 0` },
+        search: ['code', 'invoice_number', 'client_name', 'order_code', 'po_number', 'issued_by_name'], ids: ['code', 'invoice_number', 'order_code'],
+        order: 'ORDER BY invoice_date DESC, invoice_number DESC',
+        aggregate: `COALESCE(sum(total) FILTER (WHERE kind::text = 'Invoice'), 0) AS invoiced, COALESCE(-sum(total) FILTER (WHERE kind::text <> 'Invoice'), 0) AS credited, count(*) FILTER (WHERE kind::text = 'Invoice')::int AS invoices` });
+      return { ...d, ...(await perms(c, site)), me: c.userId };
+    } else rows = await c.db.rows(`SELECT * FROM invoice_view WHERE site_id = $1 AND status = 'Issued' AND invoice_date >= site_today($1) - $2::int
         ORDER BY invoice_date DESC, invoice_number DESC LIMIT 2000`, [site, days]);
     return { rows, ...(await perms(c, site)), me: c.userId };
   });

@@ -3,7 +3,7 @@
 // right), then one signing act that issues each COA; the COA card on the sample page; the email templates (Outbox).
 import { api, esc, pageHeader, toast, modal, badge, link, signDialog, state, can, askReason } from '../app.js';
 import { Grid } from '../grid.js';
-import { section, editableGrid } from './common.js';
+import { section, editableGrid, pagedList } from './common.js';
 
 const css = document.createElement('style');
 css.textContent = `
@@ -156,10 +156,13 @@ function batchesTab(body, d, main) {
 // the archive: issued COAs
 let issuedDays = 90;
 async function issuedTab(body) {
-  body.innerHTML = `<div class="card"><div class="rffil">Issued in the last: ${[30, 90, 365, 3650].map((n) => `<button data-d="${n}" class="${n === issuedDays ? 'on' : ''}">${n === 3650 ? 'All' : n + ' days'}</button>`).join('')}</div><div id="g"></div></div>`;
-  body.querySelectorAll('[data-d]').forEach((b) => { b.onclick = () => { issuedDays = Number(b.dataset.d); issuedTab(body); }; });
-  const x = await api('/reports/issued?days=' + issuedDays);
-  new Grid(body.querySelector('#g'), { readOnly: true, search: true, rows: x.rows, emptyText: 'No COA issued in this period.', columns: [
+  body.innerHTML = '<div class="card"><div id="g"></div></div>';
+  // one page at a time from the server (0.35.0), newest first; a report ID, sample ID or verification code opens the PDF
+  pagedList({ el: body.querySelector('#g'), url: '/reports/issued', filterParam: 'f', filter: state.query.get('f') || 'all', q: state.query.get('find') || '',
+    filters: [['all', 'All'], ['final', 'Final'], ['interim', 'Not final']],
+    placeholder: 'Search by report, sample, client sample ID, order, client or verification code; scan or type one and press Enter to open the report',
+    open: (v) => { window.open(`/api/reports/coa/${v.id}/pdf${sq()}`, '_blank'); },
+    render: (el, rows) => new Grid(el, { readOnly: true, rows, emptyText: 'No COA here.', columns: [
     { field: 'report_id', title: 'Report', type: 'link', width: 165, onClick: (v) => window.open(`/api/reports/coa/${v.id}/pdf${sq()}`, '_blank') },
     { field: 'version_no', title: 'Version', type: 'readonly', width: 65 },
     { field: 'is_final', title: 'Final', type: 'readonly', width: 55, format: (v) => (v ? 'Yes' : '') },
@@ -171,7 +174,7 @@ async function issuedTab(body) {
     { field: 'issued_by_name', title: 'Finalized by', type: 'readonly', width: 145 },
     { field: 'group_code', title: 'Group', type: 'readonly', width: 85 },
     { field: 'emails', title: 'Emailed', type: 'link', width: 75, format: (v) => (v ? 'Outbox' : 'No'), href: (v) => (v.emails ? '#/outbox?find=' + encodeURIComponent(v.sample_code) : null) },
-    { field: 'verify_code', title: 'Verification code', type: 'link', width: 145, onClick: (v) => window.open(`/verify.html?c=${v.verify_code}`, '_blank') }] });
+    { field: 'verify_code', title: 'Verification code', type: 'link', width: 145, onClick: (v) => window.open(`/verify.html?c=${v.verify_code}`, '_blank') }] }) });
 }
 
 // Stability reports (S-2, migration 041): the studies with a cumulative report to issue

@@ -3,7 +3,7 @@
 // their qualification history, the supplier risk classes, and each lab's purchasing settings.
 import { api, esc, pageHeader, toast, modal, state, currentSite, badge, link, signDialog, can } from '../app.js';
 import { Grid } from '../grid.js';
-import { editableGrid, section } from './common.js';
+import { editableGrid, section, pagedList } from './common.js';
 
 const signed = (opts, fn) => signDialog({ ...opts, submit: ({ reason, signature }) => fn(reason, signature) });
 
@@ -79,25 +79,30 @@ const LINE_COLS = (withPick) => [
 
 export async function requests(main) {
   if (!needLab(main)) return;
-  const [d, me] = await Promise.all([api('/purchasing/lines'), api('/purchasing/me')]);
+  const [d0, me] = await Promise.all([api('/purchasing/lines?page=1&size=1'), api('/purchasing/me')]);
   const site = currentSite();
   const f = FILTERS[state.query.get('show')] ? state.query.get('show') : 'approve';
-  const over = d.setting && d.setting.second_approval_over !== null ? Number(d.setting.second_approval_over) : null;
-  main.innerHTML = pageHeader(`Purchasing: ${site.site_code}`, `Every purchase request in ${esc(site.site_name)}: inventory items (from Inventory), equipment, services and other items. Approve, then group approved requests of one supplier into an order with the finance PO number. ${over !== null ? `Requests above ${money(over)} also need a General Manager's approval (marked *).` : 'No second approval amount is set for this lab.'} Nobody approves their own request.`,
+  const over = d0.setting && d0.setting.second_approval_over !== null ? Number(d0.setting.second_approval_over) : null;
+  main.innerHTML = pageHeader(`Purchasing: ${site.site_code}`, `Every purchase request in ${esc(site.site_name)}: inventory items (from Inventory), equipment, services and other items. Approve, then group approved requests of one supplier into an order with the finance PO number. ${over !== null ? `Requests above ${money(over)} also need a General Manager's approval (marked *).` : 'No second approval amount is set for this lab.'} Nobody approves their own request. Newest first, 50 at a time.`,
     '', { kind: 'purchasing' }) + tabs('#/purchasing') + `
-    <div class="pubar">${Object.entries(FILTERS).map(([k, [l, fn]]) => `<a class="tab ${k === f ? 'on' : ''}" href="#/purchasing?show=${k}" style="text-decoration:none">${esc(l)} <small>${d.rows.filter(fn).length}</small></a>`).join('')}
-      <span class="sp"></span>
+    <div class="pubar"><span class="sp"></span>
       ${me.can_approve || me.can_approve_over ? '<button class="btn" id="approve">Approve ticked</button><button class="btn" id="reject">Reject ticked</button>' : ''}
       ${me.can_order ? '<button class="btn" id="order">Order ticked</button>' : ''}
       ${me.can_request ? '<button class="btn primary" id="new">+ New request</button>' : ''}</div>
     <div class="help" style="margin-bottom:8px">Inventory items are requested from Inventory (+ New Inventory Item as a request, or Reorder on any item); they appear here too.</div>
     <div id="g"></div>`;
-  const rows = d.rows.filter(FILTERS[f][1]).map((r) => ({ ...r, _pick: false }));
-  const g = new Grid(main.querySelector('#g'), { rows, search: true, filter: state.query.get('find') || '', emptyText: 'Nothing here.', onRowOpen: (r) => { location.hash = '#/purchasing/requests/' + r.id; },
-    rowClass: (r) => (['Cancelled', 'Rejected', 'Received'].includes(r.status) ? 'mutedrow' : ''), columns: LINE_COLS(true) });
-  const picked = () => g.rows.filter((r) => r._pick);
+  // one page at a time from the server (0.35.0)
+  const list = pagedList({
+    el: main.querySelector('#g'), url: '/purchasing/lines', filter: f, q: state.query.get('find') || '',
+    filters: Object.entries(FILTERS).map(([k, [l]]) => [k, l]),
+    placeholder: 'Search by request, item, supplier, catalog number or PO; scan or type a request or PO number and press Enter',
+    open: (r) => { location.hash = '#/purchasing/requests/' + r.id; },
+    render: (body, rows) => new Grid(body, { rows: rows.map((r) => ({ ...r, _pick: false })), emptyText: 'Nothing here.', onRowOpen: (r) => { location.hash = '#/purchasing/requests/' + r.id; },
+      rowClass: (r) => (['Cancelled', 'Rejected', 'Received'].includes(r.status) ? 'mutedrow' : ''), columns: LINE_COLS(true) }),
+  });
+  const picked = () => (list.grid() ? list.grid().rows.filter((r) => r._pick) : []);
   const need = () => { const p = picked(); if (!p.length) toast('Tick the requests first.', 'err'); return p; };
-  const reload = () => requests(main);
+  const reload = () => list.reload();
   const q = (id) => main.querySelector('#' + id);
   if (q('new')) q('new').onclick = () => newRequest(() => reload());
   if (q('approve')) q('approve').onclick = async () => {
@@ -319,16 +324,21 @@ export async function receive(main) {
 // ================================================================ PURCHASE ORDERS
 export async function orders(main) {
   if (!needLab(main)) return;
-  const rows = await api('/purchasing/orders');
   const site = currentSite();
-  main.innerHTML = pageHeader(`Purchase orders: ${site.site_code}`, 'Approved requests grouped by supplier, with the finance PO number and the supplier\'s confirmation.', '', { kind: 'purchasing' })
+  main.innerHTML = pageHeader(`Purchase orders: ${site.site_code}`, 'Approved requests grouped by supplier, with the finance PO number and the supplier\'s confirmation. Newest first, 50 at a time.', '', { kind: 'purchasing' })
     + tabs('#/purchasing/orders') + '<div id="g"></div>';
-  new Grid(main.querySelector('#g'), { rows, readOnly: true, search: true, emptyText: 'No orders yet.', onRowOpen: (r) => { location.hash = '#/purchasing/orders/' + r.id; }, columns: [
-    { field: 'po_code', title: 'Order', type: 'link', width: 120, href: (r) => '#/purchasing/orders/' + r.id },
-    { field: 'external_po_number', title: 'Finance PO', type: 'readonly', width: 120 }, { field: 'supplier_name', title: 'Supplier', type: 'readonly', width: 200 },
-    { field: 'line_count', title: 'Lines', type: 'readonly', width: 60 }, { field: 'amount', title: 'Amount', type: 'readonly', width: 100, align: 'right', format: money },
-    { field: 'receipt_state', title: 'Received', type: 'readonly', width: 120, cellClass: (r) => (r.receipt_state === 'Received' ? 'cok' : r.receipt_state === 'Partly received' ? 'cwarn' : '') },
-    { field: 'ordered_at', title: 'Ordered', type: 'readonly', width: 140, format: dt }, { field: 'ordered_by', title: 'By', type: 'readonly', width: 140 }] });
+  pagedList({
+    el: main.querySelector('#g'), url: '/purchasing/orders', q: state.query.get('find') || '',
+    filters: [['open', 'Open'], ['received', 'Received'], ['all', 'All']],
+    placeholder: 'Search by order, finance PO, supplier or confirmation; scan or type an order or PO number and press Enter',
+    open: (r) => { location.hash = '#/purchasing/orders/' + r.id; },
+    render: (body, rows) => new Grid(body, { rows, readOnly: true, emptyText: 'No orders here.', onRowOpen: (r) => { location.hash = '#/purchasing/orders/' + r.id; }, columns: [
+      { field: 'po_code', title: 'Order', type: 'link', width: 120, href: (r) => '#/purchasing/orders/' + r.id },
+      { field: 'external_po_number', title: 'Finance PO', type: 'readonly', width: 120 }, { field: 'supplier_name', title: 'Supplier', type: 'readonly', width: 200 },
+      { field: 'line_count', title: 'Lines', type: 'readonly', width: 60 }, { field: 'amount', title: 'Amount', type: 'readonly', width: 100, align: 'right', format: money },
+      { field: 'receipt_state', title: 'Received', type: 'readonly', width: 120, cellClass: (r) => (r.receipt_state === 'Received' ? 'cok' : r.receipt_state === 'Partly received' ? 'cwarn' : '') },
+      { field: 'ordered_at', title: 'Ordered', type: 'readonly', width: 140, format: dt }, { field: 'ordered_by', title: 'By', type: 'readonly', width: 140 }] }),
+  });
 }
 
 export async function order(main, id) {

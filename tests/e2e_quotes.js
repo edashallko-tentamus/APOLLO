@@ -40,14 +40,14 @@ const results = []; const check = (l, ok, x = '') => { results.push(!!ok); conso
     && mine.some((t) => /Q-00001/.test(t)) && mine.some((t) => /Q-00002/.test(t)), mine.length + ' rows');
   check('Each row shows who prepared it, and Accept / Reject on the quoted one', mine.every((t) => /Account Manager \(demo\)/.test(t)) && /Accept…[\s\S]*Reject…/.test(mine.find((t) => /Q-00001/.test(t))));
   await shot('q_01_my_open');
-  await page.click('#tall'); await page.waitForSelector('#st');
-  await page.click('#st button[data-k="all"]'); await page.waitForTimeout(400);
+  await page.click('#tall'); await page.waitForSelector(".pgtabs");
+  await page.click('.pgtabs .tab[data-f="all"]'); await page.waitForTimeout(400);
   const all = await rowsOf();
   check('All quotes: quotes and projects together, with the Alex-prepared rejected one', all.some((t) => /Q-00004/.test(t) && /Alex Kiddle/.test(t) && /Rejected/.test(t)) && all.some((t) => /PRJ-/.test(t)));
-  await page.click('#st button[data-k="Accepted"]'); await page.selectOption('#ty', 'Quote'); await page.waitForTimeout(500);
+  await page.click('.pgtabs .tab[data-f="Accepted"]'); await page.selectOption('#ty', 'Quote'); await page.waitForTimeout(500);
   const acc = await rowsOf();
   check('Filters: Accepted + Quotes only gives Q-00003 (accepted by Priya Shah)', acc.length === 1 && /Q-00003/.test(acc[0]) && /Priya Shah/.test(acc[0]), acc.join(' / '));
-  await page.click('#st button[data-k="all"]'); await page.selectOption('#ty', 'all');
+  await page.click('.pgtabs .tab[data-f="all"]'); await page.selectOption('#ty', 'all');
   const tps = (await am('/quotes')).data.labs.find((l) => l.site_code === 'TPS');
   await page.selectOption('#lab', tps.id); await page.waitForTimeout(500);
   const tr = await rowsOf();
@@ -120,7 +120,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(!!ok); conso
   check('The client accepts online', /is accepted/.test(await cp.locator('main').innerText()));
   await cp.screenshot({ path: path.join(OUT, 'q_05_client_accepted.png'), fullPage: true });
   await cctx.close();
-  await page.goto(`${BASE}/#/quotes?tab=all`); await page.waitForSelector('#st'); await page.click('#st button[data-k="Accepted"]'); await page.waitForTimeout(400);
+  await page.goto(`${BASE}/#/quotes?tab=all`); await page.waitForSelector(".pgtabs"); await page.click('.pgtabs .tab[data-f="Accepted"]'); await page.waitForTimeout(400);
   const accd = (await rowsOf()).find((t) => /Q-00005/.test(t)) || '';
   check('The list shows Q-00005 accepted by Jordan Reyes (online)', /Accepted/.test(accd) && /Jordan Reyes \(online\)/.test(accd), accd);
   const beta = (await am('/clients')).data.find((c) => c.legal_name === 'Beta Foods LLC');

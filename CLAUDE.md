@@ -950,6 +950,15 @@ Cecilia Colesanti's call with Alex (2026-10-21) and Alex's answers ("Something n
 - **Tests:** `test_051_charges_catalogue_orders.sql` (47 checks; 1898 rule tests on PostgreSQL 16). `tests/e2e_charges_ordering.js` (`npm run test:charges`, 26 checks, fresh database). `e2e_slice2_1.js` uses the picker instead of the quoted-test dropdown.
 - **Alex's data:** not applied. Only 058 waits (no seed). It adds the five service lines and their types, empty charge tables and the email template; nothing of his changes. Try on a copy first; apply only on his go. Never on the demo copy (3100).
 - **For Claude Code:** next migration 059, next seed 040, next rule test test_052. Run `npm test` and the suites on PGlite (`test:charges` on a fresh database).
+- **On the laptop (Claude Code, 2026-10-22):** 1898 rule tests on PGlite and 40 of 41 browser suites pass; copy test of 058 clean. Installed with 0.36.1 on Alex's go. Backup `backup-before-0.36.1-2026-10-22`.
+
+## 0.36.1: batch page redraws, the header search box, bench test timing (Claude Code, 2026-10-22; no migration)
+
+- `search.js`: `initSearch()` sets the box up once (`box.dataset.ready`).
+- `testing.js` `batchPage()`: `main._batchLoad` numbers each load; an older one finishing last does not draw. Keep this guard when changing the batch page; other pages that reload themselves can need the same.
+- `tests/e2e_testing.js`: bench grids autosave quietly (a note, no toast, no redraw), so tests must not wait for the save bar or a toast: `pasteAt` (paste only into the focused grid; taken = bar or note changed; tries 4 times), `saveGrid` (wait until nothing pending, then reload), `settle()` (network idle before clicks), `statusBecomes()`. Other suites that type into bench grids may need the same helpers.
+- Open: the step's "Still to do" box is stale after an autosave until the page reloads; `test:testing` still sometimes stops at the second batch's Weigh step (paste ignored), under investigation.
+- Git: the project is on GitHub (private, `kiddlea/APOLLO`, branch `main`); commit, push and tag every change and delivery. Alex may edit on GitHub too (the README): `git pull` before committing.
 
 ## Demo recordings (Alex, 2026-10-16)
 

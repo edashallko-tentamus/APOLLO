@@ -255,7 +255,11 @@ export async function batches(main) {
 
 // ================================================================ ONE BATCH
 export async function batchPage(main, id) {
+  // two reloads can overlap (an autosave and a material added, say): only the latest one draws, so an older answer
+  // arriving last never puts the batch back as it was before the newer change (0.36.1)
+  const seq = (main._batchLoad = (main._batchLoad || 0) + 1);
   const [d, opts] = await Promise.all([api('/testing/batches/' + id), api(`/testing/batches/${id}/options`)]);
+  if (main._batchLoad !== seq) return;
   const b = d.batch;
   const byRun = Object.fromEntries(d.steps.map((s) => [s.id, s]));
   const stepOf = (key) => d.steps.find((s) => s.step_key === key);

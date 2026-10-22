@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.36.0** (2026-10-21) |
+| Current version | **0.36.1** (2026-10-22) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1898 database rule tests (0.36.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and 41 browser test suites (0.36.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
 | 0.36.0 | 2026-10-21 | Charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections | Claude in the cloud | 058 | Discount % typed on quote lines and packages (and one % for every line); miscellaneous charges (kits, shipping, fees, discounts) in the catalogue, on quotes, on orders (billed at once) and on draft invoices; service line > type > department on tests and service lines on clients; the order's drill-down test picker; any test of the lab ordered at its list price (a quote line still wins); the invoice details first, payment status recorded by hand; the PO of an issued invoice corrected (signed) with a corrected copy sent |
 | 0.35.0 | 2026-10-21 | Lists one page at a time, search everything, widgets on request, the performance report | Claude in the cloud | none | Every long list shows the 50 most recent with pages, tabs with counts and a search on the server (a typed or scanned ID opens its record); a search box at the top of every page finds any record by ID or name; dashboard widgets refresh on request (Refresh all, ↻ per widget, the time last worked out), the 7 live ones every 5 minutes; Finance figures and the GM and executive dashboards download a performance report to Excel (Summary plus the LIMS data on separate tabs) |
 | 0.34.0 | 2026-10-20 | Cancelling, receipt thermometer | Claude Code | 057, seed 039 | Cancel… for samples and tests with a reason (refused with results or in a batch); the thermometer from the register at receipt; the serving size on the chain of custody; license dates on the lab's date; 0.28.1 restored (potency units built, then put on hold) |
@@ -152,6 +153,17 @@ A living record of how LIMS3 is designed and built: what changed in each version
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.36.1: batch page redraws, the header search box, bench test timing (2026-10-22, Claude Code; no migration)
+
+- **Why.** Alex asked for the 0.35.0 search box fix and for the intermittent `test:testing` failures (open since 0.35.0) to be investigated, then for 0.36.0 to be installed.
+- **What changed.**
+  - `public/js/search.js`: the header search box is set up once. `main.js` calls `initSearch()` on every page change, and each call added another set of listeners.
+  - `public/js/pages/testing.js` `batchPage()`: each load is numbered on its container; only the latest one draws. Before, two overlapping reloads (an autosave and a material added, say) could finish in the wrong order, and the older answer put the batch back as it was before the newer change (a spike just added seemed to vanish).
+  - `tests/e2e_testing.js`: since 0.27.0 bench grids save by themselves, quietly (a note, no toast, no redraw). The test now treats a paste as taken when the save bar shows or the "Saved automatically" note changes; a save waits until nothing is pending (clicking Save now if the bar is up) and reloads so the step's to-do box is current; a paste is sent only when the focused grid holds the clicked cell; clicks wait until the page has stopped loading; the spike and status checks wait for what they read. A failed Complete step prints the dialog's message and the step's to-do list (`DIAG`).
+- **Found, not changed:** after an autosave the step's "Still to do" box is not redrawn until the page is reloaded, so it can still say "no weight" after the weights are saved. Raise with Alex.
+- **How it was checked (PGlite, fresh databases on ports 3305 and 3306).** 1898 rule tests pass. 40 of the 41 browser suites pass (`test:security` last). `test:testing` with the fixes: 55/55 in some runs; other runs still stop at the second batch's Weigh step, where the paste is ignored (being investigated after the install, on Alex's instruction).
+- **Alex's data.** 058 copy-tested on a copy taken 2026-10-22: applied in 0.6 s; requested tests, invoices and invoice lines unchanged; 5 service lines and 12 types, the "Invoice Corrected" template; 792 of 861 issued invoices show Overdue (the demo catch-up invoices, never marked paid); lab switches unchanged. Installed with 0.36.1 on Alex's go (2026-10-22): the start printed "Applied: 058_charges_service_lines_catalogue_orders.sql". Backup `backup-before-0.36.1-2026-10-22`.
 
 ### 0.36.0: charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections (2026-10-21, Claude in the cloud; migration 058)
 

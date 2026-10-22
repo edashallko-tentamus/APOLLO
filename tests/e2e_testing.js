@@ -26,25 +26,53 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   const cell = (r, c) => `#body tbody tr:nth-child(${r}) td:nth-child(${c})`;
   // (Claude Code, 2026-10-15: on a busy laptop the grid could still be drawing when the paste arrived, so the paste was
   // lost and the save bar never showed; wait for the cell, and paste again once if no save bar appears)
+  // (0.36.1: a grid takes a paste only while it has the focus; if the step redrew between the click and the paste, the
+  // paste went nowhere. Paste only when the focused grid holds the clicked cell; the caller tries again otherwise.)
+  // wait until the page has stopped loading (no request for half a second), so a redraw cannot land between a click and
+  // what it was for (0.36.1)
+  const settle = () => page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   const pasteOnce = async (sel, text) => {
-    await page.locator(sel).waitFor({ state: 'visible' }); await page.waitForTimeout(300);
+    await settle(); await page.locator(sel).waitFor({ state: 'visible' }); await page.waitForTimeout(300);
     await page.locator(sel).click();
-    await page.evaluate((t) => { const dt = new DataTransfer(); dt.setData('text/plain', t); document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); }, text);
-    await page.waitForTimeout(250);
+    const ok = await page.evaluate(([s, t]) => {
+      const a = document.activeElement; const cell = document.querySelector(s);
+      if (!a || !cell || !a.contains(cell)) return `focus on ${a ? a.tagName + '.' + a.className : 'nothing'}; cell ${cell ? 'found: ' + cell.textContent.slice(0, 40) : 'missing'}`;
+      const dt = new DataTransfer(); dt.setData('text/plain', t); a.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); return true;
+    }, [sel, text]);
+    if (ok !== true) console.log('DIAG paste refused at ' + sel + ': ' + ok);
+    await page.waitForTimeout(250); return ok === true;
   };
+  // (0.36.1: since 0.27.0 the bench grids save by themselves after a short pause, quietly: no toast, no redraw. On a busy
+  // laptop that could happen before the test looked for the save bar, so it waited for a bar that never came back.
+  // A paste counts as taken when the bar shows or the "Saved automatically" note changes; a save waits until nothing
+  // is pending, clicking Save now if the bar is still up, then reloads so the step's to-do box is current.)
+  const autoNote = () => page.evaluate(() => document.querySelector('#body .autosaved')?.textContent || '');
   const pasteAt = async (sel, text) => {
-    await pasteOnce(sel, text);
-    const bar = page.locator('#body .savebar [data-save]');
-    try { await bar.waitFor({ state: 'visible', timeout: 4000 }); } catch (e) { if (await bar.count()) await pasteOnce(sel, text); }
+    for (let k = 0; k < 4; k++) {
+      const before = await autoNote();
+      if (await pasteOnce(sel, text)) {
+        try { await page.waitForFunction((b) => { const s = document.querySelector('#body .savebar [data-save]'); const n = document.querySelector('#body .autosaved'); return (s && s.offsetParent) || (n && n.textContent !== b); }, before, { timeout: 4000 }); return; } catch (e) { /* not taken: try again */ }
+      }
+      await page.waitForTimeout(1000);
+    }
+    console.log('DIAG paste never taken at ' + sel + ' | url ' + page.url() + ' | tab ' + (await page.locator('.tbtabs a.on').innerText().catch(() => '?'))
+      + ' | panel: ' + (await page.locator('#panel').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 500));
   };
-  const saveGrid = async () => { await page.locator('#body .savebar [data-save]').waitFor({ state: 'visible', timeout: 10000 }); await page.click('#body .savebar [data-save]'); await page.waitForTimeout(1200); };
+  const saveGrid = async () => {
+    const bar = page.locator('#body .savebar [data-save]');
+    for (let i = 0; i < 40 && await bar.isVisible(); i++) { await bar.click({ timeout: 1000 }).catch(() => {}); await page.waitForTimeout(500); }
+    await page.waitForTimeout(800);
+    await page.reload(); await page.waitForSelector('#panel .card'); await page.waitForTimeout(600);
+  };
   // open a step's tab and wait until the new page is shown with that tab active (the old page stays up while the batch reloads)
   const tab = async (name) => {
     await page.locator('.tbtabs a', { hasText: name }).first().click();
     await page.waitForFunction((n) => [...document.querySelectorAll('.tbtabs a.on')].some((a) => a.textContent.includes(n)), name, { timeout: 15000 });
-    await page.waitForSelector('#panel .card'); await page.waitForTimeout(600);
+    await page.waitForSelector('#panel .card'); await page.waitForTimeout(600); await settle();
   };
   const status = async () => (await page.locator('main .sub .badge').first().innerText()).trim();
+  // after signing, the batch page redraws; wait (up to 10 s) for the status to arrive rather than reading it once (0.36.1)
+  const statusBecomes = async (want) => { await page.waitForFunction((w) => document.querySelector('main .sub .badge')?.textContent.trim() === w, want, { timeout: 10000 }).catch(() => {}); return status(); };
   // making a batch lands on the Batches list with the new batch highlighted; open it from there
   const openMade = async () => { await page.waitForSelector('#g tr.tbmade', { timeout: 15000 }); await page.locator('#g tr.tbmade a').first().click(); await page.waitForSelector('#panel .card'); await page.waitForTimeout(700); };
   // the Complete step dialog: own password, and the witness's when asked
@@ -54,7 +82,12 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
     if (witness) { await page.fill('.sigmodal #c_wuser', witness); await page.fill('.sigmodal #c_wpass', PASSWORD); }
     await page.click('.sigmodal [data-ok]');
     if (expectError) { await page.waitForFunction(() => document.querySelector('.sigmodal .merr')?.textContent.trim()); const t = await page.textContent('.sigmodal .merr'); return t; }
-    await page.waitForSelector('.sigmodal', { state: 'detached', timeout: 15000 }); await page.waitForTimeout(900); return '';
+    await page.waitForSelector('.sigmodal', { state: 'detached', timeout: 15000 }).catch(async (e) => {
+      console.log('DIAG dialog:', (await page.textContent('.sigmodal').catch(() => '')).replace(/\s+/g, ' ').slice(0, 400));
+      console.log('DIAG to do:', (await page.locator('.tbtodo').allInnerTexts().catch(() => [])).join(' | ').replace(/\s+/g, ' ').slice(0, 600));
+      throw e;
+    });
+    await page.waitForTimeout(900); await settle(); return '';
   };
   const modalPick = async (sel, re) => {
     const v = await page.evaluate(([s, src]) => { const o = [...document.querySelectorAll(s + ' option')].find((x) => new RegExp(src).test(x.textContent)); return o ? o.value : null; }, [sel, re.source]);
@@ -64,7 +97,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
     await opener(); await page.waitForSelector('.modal #f_lot_id');
     await modalPick('.modal #f_lot_id', lotRe); await page.locator('.modal #f_purpose').selectOption(purpose);
     if (volume) await page.fill('.modal #f_volume', String(volume));
-    await page.click('.modal [data-ok]'); await page.waitForTimeout(1000);
+    await page.click('.modal [data-ok]'); await page.waitForTimeout(1000); await settle();
   };
 
   // ---- Analyst: the backlog and the batch list
@@ -83,12 +116,13 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
 
   // ---- Weigh: paste three weights, spikes on the LCS and the matrix spikes
   await pasteAt(cell(6, 5), '0.5012\n0.4987\n0.5033'); await saveGrid();
-  check('Weights pasted from Excel are recorded (no reason needed for new values)', /Saved 3 rows/.test(await toasts()) && !(await page.locator('.tbtodo').count()));
+  check('Weights pasted from Excel are recorded (no reason needed for new values)', /0\.5012[\s\S]*0\.4987[\s\S]*0\.5033/.test(await page.locator('#body tbody').innerText()) && !(await page.locator('.tbtodo').count()));
   await page.locator(cell(2, 2)).click();
   await addMaterial(async () => { await page.locator(cell(2, 3)).click({ button: 'right' }); await page.waitForSelector('.tbmenu'); await page.locator('.tbmenu button', { hasText: 'Add material' }).click(); },
     /IV-SPK|Multi-element spike/, 'Spike', 0.5);
   await page.locator(cell(4, 2)).click(); await page.locator(cell(5, 2)).click({ modifiers: ['Shift'] });
   await addMaterial(() => page.click('[data-a="mat"]'), /Multi-element spike/, 'Spike', 0.5);
+  await page.waitForFunction(() => ((document.querySelector('#body tbody')?.innerText || '').match(/INV-\d+ 0\.5 mL/g) || []).length === 3, null, { timeout: 10000 }).catch(() => {});
   const spikes = await page.locator('#body tbody').innerText();
   check('Spikes added to selected rows (right-click menu and button): the LCS, spike and duplicate show the lot and volume',
     (spikes.match(/INV-\d+ 0\.5 mL/g) || []).length === 3);
@@ -119,6 +153,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   const fc = page.waitForEvent('filechooser'); await page.click('[data-a="file"]'); const ch = await fc;
   await ch.setFiles({ name: 'BAT-000001_icpms_export.csv', mimeType: 'text/csv', buffer: Buffer.from('Sample,Pb,Cd,As,Hg\nICV,49,49,49,4.9\n') }); await page.waitForTimeout(1200);
   await page.click('[data-a="eq"]'); await page.waitForSelector('.modal #f_equipment_id'); await modalPick('.modal #f_equipment_id', /ICP-MS 2/); await page.click('.modal [data-ok]'); await page.waitForTimeout(1000);
+  await settle();
   const nRows = await page.locator('#body tbody tr').count();
   await page.locator(cell(1, 2)).click(); await page.locator(cell(2, 2)).click({ modifiers: ['Shift'] });
   await addMaterial(() => page.click('[data-a="mat"]'), /check standard/, 'Standard', 1);
@@ -313,7 +348,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
     (await status()) === 'In Progress' && /Returned by the reviewer[\s\S]*Check the digest volume/.test(await page.locator('main').innerText()));
   await signIn(page, BASE, 'Analyst (demo)', `#/testing/batches/${b1}`); await page.waitForSelector('#panel .card'); await page.waitForTimeout(600);
   await complete();
-  check('The analyst completes the reopened step; the batch is back for review', (await status()) === 'Awaiting Review');
+  check('The analyst completes the reopened step; the batch is back for review', (await statusBecomes('Awaiting Review')) === 'Awaiting Review');
   await signIn(page, BASE, 'Lab Supervisor (demo)', `#/testing/batches/${b1}`); await page.waitForSelector('#rv_steps'); await page.waitForTimeout(600);
   const marks = (await api('labsup', '/testing/batches/' + b1)).review_marks;
   check('After the return only the reopened step needs approving again; the steps before it keep their approval',
@@ -321,9 +356,10 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   await approveAll();
   check('The reviewer\'s choices were kept', /Ready to approve/.test(await page.locator('#panel').innerText()));
   await page.click('#rv_ok'); await sign(page); await page.waitForTimeout(1200);
+  const apprStatus = await statusBecomes('Approved'); await page.waitForTimeout(600);
   const appr = await page.locator('main').innerText();
   check('Approved (signed "Reviewed by"): the results are stored with their specification comparison; the QC Review step is done',
-    (await status()) === 'Approved' && /Approved by Lab Supervisor \(demo\)/.test(appr) && /Stored results/.test(appr) && /✓/.test(await page.locator('.tbtabs a', { hasText: 'QC Review' }).innerText()));
+    apprStatus === 'Approved' && /Approved by Lab Supervisor \(demo\)/.test(appr) && /Stored results/.test(appr) && /✓/.test(await page.locator('.tbtabs a', { hasText: 'QC Review' }).innerText()));
   await shot('99b_review');
   const sampleId = rv.items[0] && (await api('labsup', '/testing/batches/' + b1)).entries.find((e) => e.requested_test_id === rv.items[0].requested_test_id).sample_id;
   await go('#/samples/' + sampleId); await page.waitForSelector('#rg tbody tr');

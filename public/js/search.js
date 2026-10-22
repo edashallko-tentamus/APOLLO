@@ -8,6 +8,9 @@ export function initSearch() {
   const input = document.getElementById('gsInput');
   const pop = document.getElementById('gsPop');
   if (!box || !input || !pop) return;
+  // main.js calls this on every page change: set the box up once, or every page adds another set of listeners
+  if (box.dataset.ready) return;
+  box.dataset.ready = '1';
   let seq = 0; let timer = null; let items = []; let pick = -1;
   const close = () => { pop.hidden = true; pick = -1; };
   const go = (href) => { close(); input.value = ''; input.blur(); location.hash = href; };

@@ -1,38 +1,52 @@
-# LIMS3 Sandbox
+# APOLLO
 
-A working Sandbox of LIMS3 with fictional demo data. Slice 1: clients and contacts, the analyte table, the test catalogue with pricing and turnaround, rush fee schedules, projects and quotes, and the audit trail. Slice 2: sites and holidays, lab orders, samples, the intake dashboard (rush approvals), due dates, and the email Outbox. Slice 3: Inventory (lots of every kind of material, stock movements, in-house mixtures, purchase requests and receiving, transfers between labs, Supplier COAs, sample storage and retained quantity, warning rules).
+**APOLLO** is the in-house Laboratory Information Management System (LIMS3) being built for Tentamus North America. This repository is the **Sandbox** build: a working prototype with fictional demo data, used to design and try every module before it is promoted under change control through Test/Validation to Production (first lab: CFL).
 
-## Start it (Windows, Claude desktop app)
+**Status:** version **0.36.0** (2026-10-21). It passes its automated tests (1898 database rule tests and 41 browser test suites). It has **not** been validated and is not for GxP use. Validation follows GAMP 5 Category 5, module by module (URS, FS, RTM, risk assessment, IQ/OQ/PQ).
 
-1. Unzip this folder somewhere you keep work files, for example `Documents\lims3-sandbox`.
-2. Open the Claude desktop app and click the **Code** tab.
-3. Choose **Local**, click **Select folder**, and pick the unzipped folder.
-4. Select the Opus model, then paste this message:
+## What it does
 
-   > Read CLAUDE.md. Set up and start the app, run the tests, and open it in the browser pane for me.
+| Area | Modules |
+|---|---|
+| Clients and pricing | Clients and contacts (roles per client, licenses), test catalogue with pricing and turnaround, rush fee schedules, projects, standalone quotes, stability quotes, test packages and dated price changes, discounts by %, miscellaneous charges, service lines |
+| Intake | Lab orders and samples (grid entry, paste from Excel), the test picker (service line > type > department, any test at list price), chain of custody and signed receipt, receipt photos, rush approvals, due dates on each lab's calendar, labels (Dymo, Code 128), the Outbox |
+| Testing | Workflow Designer (tests built as signed, versioned workflows), workflow verification (automated runs with a URS/FRS report), backlog and batches, bench steps (weighing, dilution, readings, incubation, plating), analytical runs, QC Review, preliminary results, OOS investigations and retests, training and competency |
+| Reports | Report Finalization, the Certificate of Analysis (PDF, report templates, QR verification), stability studies and reports |
+| Lab supplies | Inventory (lots, mixtures, QA testing before use, waste classifications), purchasing and receiving, vendor approvals (local and corporate), equipment (calibration, tag-out, release), electronic logbooks, the sensor feed (iMonnit) |
+| Oversight | Invoicing (QuickBooks Online queue, credit notes, payment status), dashboards (Home, GM, Executive, finance figures, performance report to Excel), trending and control charts, the audit trail, permissions through lab groups, electronic signatures |
 
-Claude installs what is needed (one embedded database package), runs the checks, and shows you the app.
+Every business rule lives in the database (PostgreSQL constraints, triggers and functions), so no screen, script or integration can bypass it. Every regulated table has an append-only audit trail; changes need a reason, and signed actions need the user's password.
 
-## Using it
+## Run it
 
-- Pick who you are in **Working as** (top right). Every change is recorded under that name.
-- Grids work like Excel: drag to select, **Ctrl+D** fills down, **Ctrl+C / Ctrl+V** copy and paste (including from Excel), type or press Enter to edit.
-- Saving a change to a regulated record asks for a **Reason for Change**. You can see every change on the **Audit trail** page.
-- To start over with fresh demo data, ask Claude to "reset the sandbox database".
+Needs Node.js 18 or later. No other software: the database is embedded (PGlite).
 
-To ask for changes, describe what you want in plain words in the Code tab, for example "on the quote screen, show the discount column next to the list price" or "a client on hold should still be able to receive quotes".
+```
+npm install      # the embedded database package
+npm test         # builds a fresh database and runs every rule test
+npm start        # then open http://localhost:3000
+npm run reset    # deletes the local database; the next start rebuilds it with demo data
+```
 
-## Updating from the first slice
+On first start the system administrator sets their own password. To use a PostgreSQL server instead, set `DATABASE_URL`. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a fresh database.
 
-Claude in the Code tab may have fixed things on your laptop during the first setup (for example in `server/db.js`), so do not just overwrite the old folder.
+On a Windows laptop the simplest way is the Claude desktop app's Code tab: open this folder and ask Claude to read `CLAUDE.md`, set up, start the app and run the tests.
 
-1. Unzip this version into a **new** folder next to the old one, for example `Documents\lims3-sandbox-v2`.
-2. In the Code tab, open the **old** folder and paste:
+## Where things are
 
-   > A new version of this project is in ..\lims3-sandbox-v2. Read its CLAUDE.md. Bring its changes into this folder, but keep any fixes you made here for this computer. Keep my data folder. Then run npm test and the browser tests, restart the app, and show me the Lab orders page.
+| Path | What |
+|---|---|
+| `db/migrations/` | The schema and every rule, one numbered migration per change |
+| `db/seed*.sql` | Fictional demo data |
+| `db/tests/` | Database rule tests |
+| `server/` | Plain Node server (no framework): the JSON API, PDFs, Excel, the sensor feed |
+| `public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
+| `tests/` | Browser tests (Playwright) |
+| `docs/LIMS3 Design and Build Log.md` | Every version: what changed, why, how it was checked |
+| `docs/ontology_vault/` | The design (Obsidian vault): business objects, rules, workflows and every decision (`08 Decisions`) |
+| `docs/project_docs/` | Other project documents (scale test, demo scripts) |
+| `CLAUDE.md` | Working instructions for Claude, with the detail of each slice |
 
-New tables and demo data are added to your existing Sandbox database automatically.
+## How it is built
 
-## Reading Supplier COAs with AI (optional, off by default)
-
-When a Supplier COA is uploaded on a lot, the app can ask Claude to read it and propose the values (manufacturer lot, expiry, purity, concentration). A person checks every value beside the document and confirms before anything is saved; the proposal is kept in the audit record. It needs an Anthropic API key, and IT/QA approval because the document is sent to Anthropic to be read. To switch it on, ask Claude in the Code tab: "turn on AI COA reading with my API key" and paste the key when asked (it is stored only on this computer, never in the project files). Without a key, the same screen is used to type the values beside the document.
+Alex Kiddle (LIMS Director, Tentamus North America) designs each slice and decides; Claude builds it, with Claude in the cloud and Claude Code on the laptop working on the same project. Each slice is designed first, recorded as decision notes in the vault, built as a migration with its screens and tests, checked on a fresh database and on a copy of the working data, then applied on Alex's go. Git history in this repository starts at version 0.33.0 (2026-10-20); earlier versions are recorded in the build log.

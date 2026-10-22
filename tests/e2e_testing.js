@@ -128,6 +128,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
     (spikes.match(/INV-\d+ 0\.5 mL/g) || []).length === 3);
   await shot('96_weigh');
   await complete();
+  await page.waitForFunction(() => [...document.querySelectorAll('.tbtabs a')].some((a) => /Weigh/.test(a.textContent) && /✓/.test(a.textContent)), null, { timeout: 10000 }).catch(() => {});
   check('Weigh completed with the analyst\'s signature', /✓/.test(await page.locator('.tbtabs a', { hasText: 'Weigh' }).innerText()));
 
   // ---- Digestion fields, the standard dilution
@@ -168,7 +169,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   const calc = await page.locator('#body tbody').innerText();
   check('The results are calculated live (reading x 5 x 50 / 1000 / weight)', /0\.496/.test(calc) && !/Waiting for/.test(calc));
   await complete();
-  check('Every bench step done: the batch waits for QC Review', (await status()) === 'Awaiting Review');
+  check('Every bench step done: the batch waits for QC Review', (await statusBecomes('Awaiting Review')) === 'Awaiting Review');
   await tab('Results and QC');
   const qc = await page.locator('#qc tbody').innerText();
   check('QC verdicts per analyte: check standards, blank, LCS, spike recoveries and the duplicate RPD all pass',
@@ -187,7 +188,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   const rr = await page.locator('#body tbody').innerText();
   check('Add analytical run (duplicate, signed with a reason): run 2 opens with the sample read again as RA1- and RA2- and the run\'s own ICV and CCVs; the batch is back in progress',
     rr.includes('RA1-' + sLabel) && rr.includes('RA2-' + sLabel) && /RA1-ICV/.test(rr) && /RA1-CCV-1/.test(rr) && !/Method Blank/.test(rr)
-    && (await status()) === 'In Progress' && /run 2/.test(await page.locator('.tbtodo').innerText()));
+    && (await statusBecomes('In Progress')) === 'In Progress' && /run 2/.test(await page.locator('.tbtodo').innerText()));
   await shot('98a_run2');
   const rows2 = await page.locator('#body tbody tr').allInnerTexts();
   let si = 0;
@@ -345,7 +346,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   await page.click('#rv_ret'); await page.waitForSelector('.modal #f_step_run_id'); await page.click('.modal [data-ok]');
   await sign(page, { reason: 'Check the digest volume on the bench sheet' }); await page.waitForTimeout(900);
   check('Return to the analyst (signed, with what to fix): the batch is back in progress with the reviewer\'s note',
-    (await status()) === 'In Progress' && /Returned by the reviewer[\s\S]*Check the digest volume/.test(await page.locator('main').innerText()));
+    (await statusBecomes('In Progress')) === 'In Progress' && /Returned by the reviewer[\s\S]*Check the digest volume/.test(await page.locator('main').innerText()));
   await signIn(page, BASE, 'Analyst (demo)', `#/testing/batches/${b1}`); await page.waitForSelector('#panel .card'); await page.waitForTimeout(600);
   await complete();
   check('The analyst completes the reopened step; the batch is back for review', (await statusBecomes('Awaiting Review')) === 'Awaiting Review');
@@ -368,7 +369,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   check('The order is In Testing (some of its tests are not finished)', (ordersAfter.rows || ordersAfter).some((o) => o.order_code === 'LO-000003' && o.status === 'In Testing'));
   await go('#/testing/batches?show=open'); await page.locator('#g a', { hasText: madeCode }).click(); await page.waitForSelector('#cancelb');
   await page.click('#cancelb'); await sign(page, { reason: 'Digester down; rebatch tomorrow' }); await page.waitForTimeout(900);
-  check('A batch is cancelled (signed, with a reason): its samples go back to the backlog', (await status()) === 'Cancelled' && /Cancelled/.test(await page.locator('.tbtodo').innerText()));
+  check('A batch is cancelled (signed, with a reason): its samples go back to the backlog', (await statusBecomes('Cancelled')) === 'Cancelled' && /Cancelled/.test(await page.locator('.tbtodo').innerText()));
   await go('#/testing'); await page.waitForSelector('.tbgroup');
   check('The re-prep is back at the top of the backlog', /^Re-prep/.test(await hm().locator('tbody tr').first().innerText()));
 

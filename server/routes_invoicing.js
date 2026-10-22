@@ -43,7 +43,11 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
         test_code, test_name, list_price, price, discount, rush_fee, rush_status, rush_tier_name, due_date, completed_on, late_days, amount, is_retest, retest_of,
         oos_code, was_retested, billing_status, (stability_pull_id IS NOT NULL) AS stability
       FROM invoice_ready_view WHERE site_id = $1 ORDER BY completed_on, order_code, sample_code, test_name`, [site]);
-    return { rows, ...(await perms(c, site)), me: c.userId };
+    // 058: charges (kits, shipping, fees, discounts) are ready as soon as they are added
+    const charges = await c.db.rows(`SELECT order_charge_id, charge_no, lab_order_id, order_code, po_number, client_id, client_name, sample_id, sample_code,
+        charge_code, charge_name, kind, quantity, list_price, unit_price, amount, note, source, project_code, created_at
+      FROM charge_ready_view WHERE site_id = $1 ORDER BY created_at, order_code`, [site]);
+    return { rows, charges, ...(await perms(c, site)), me: c.userId };
   });
 
   // Drafts and issued invoices (this lab): mine, everyone's drafts, issued (last N days), the QuickBooks queue
@@ -60,8 +64,9 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
         WHERE p.site_id = $1 ORDER BY p.created_at DESC LIMIT 500`, [site]);
     else if (wantsPage(c)) {
       // issued invoices and credit notes, one page at a time, newest first (0.35.0)
-      const d = await page(c, { sql: `SELECT * FROM invoice_view WHERE site_id = $1 AND status = 'Issued'`, params: [site],
-        filters: { all: 'true', invoices: `kind::text = 'Invoice'`, credits: `kind::text <> 'Invoice'`, unpaid: `kind::text = 'Invoice' AND COALESCE(credited, 0) = 0` },
+      const d = await page(c, { sql: `SELECT v.*, invoice_payment_status(v.id) AS payment_status, i.paid_on FROM invoice_view v JOIN invoice i ON i.id = v.id WHERE v.site_id = $1 AND v.status = 'Issued'`, params: [site],
+        filters: { all: 'true', invoices: `kind::text = 'Invoice'`, credits: `kind::text <> 'Invoice'`,
+          unpaid: `kind::text = 'Invoice' AND payment_status IN ('Unpaid','Overdue')`, overdue: `payment_status = 'Overdue'`, paid: `payment_status = 'Paid'` },
         search: ['code', 'invoice_number', 'client_name', 'order_code', 'po_number', 'issued_by_name'], ids: ['code', 'invoice_number', 'order_code'],
         order: 'ORDER BY invoice_date DESC, invoice_number DESC',
         aggregate: `COALESCE(sum(total) FILTER (WHERE kind::text = 'Invoice'), 0) AS invoiced, COALESCE(-sum(total) FILTER (WHERE kind::text <> 'Invoice'), 0) AS credited, count(*) FILTER (WHERE kind::text = 'Invoice')::int AS invoices` });
@@ -74,26 +79,42 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
   r('POST', '/api/billing/claim', async (c) => {
     await currentSite(c);
     const tests = uuids(c.body.tests);
-    const out = await tx({ ...c, reason: c.reason || 'Work claimed for invoicing' }, (t) => t.one('SELECT claim_invoice_work($1::uuid[], $2) AS ids', [tests, c.body.note || null]));
-    const ids = Array.isArray(out.ids) ? out.ids : String(out.ids || '').replace(/^\{|\}$/g, '').split(',').filter(Boolean);
+    const charges = uuids(c.body.charges);
+    if (!tests.length && !charges.length) throw new Error('Choose the work to invoice');
+    const list = (v) => (Array.isArray(v) ? v : String(v || '').replace(/^\{|\}$/g, '').split(',').filter(Boolean));
+    const ids = await tx({ ...c, reason: c.reason || 'Work claimed for invoicing' }, async (t) => {
+      const a = tests.length ? list((await t.one('SELECT claim_invoice_work($1::uuid[], $2) AS ids', [tests, c.body.note || null])).ids) : [];
+      const b = charges.length ? list((await t.one('SELECT claim_invoice_charges($1::uuid[], $2) AS ids', [charges, c.body.note || null])).ids) : [];
+      return [...new Set([...a, ...b])];
+    });
     return { invoices: ids };
   });
 
   r('GET', '/api/billing/invoices/:id', async (c) => {
     const i = await invoiceOf(c, c.params.id);
-    const lines = await c.db.rows(`SELECT l.*, rt.sample_id, s.lab_order_id, (SELECT x.oos_code FROM oos_investigation x JOIN requested_test r2 ON r2.oos_investigation_id = x.id WHERE r2.id = l.requested_test_id) AS oos_code,
-        (SELECT ci.invoice_number FROM invoice_line cl JOIN invoice ci ON ci.id = cl.invoice_id WHERE cl.credits_line_id = l.id AND ci.status = 'Issued') AS credited_by
-      FROM invoice_line l JOIN requested_test rt ON rt.id = l.requested_test_id JOIN sample s ON s.id = rt.sample_id
+    const lines = await c.db.rows(`SELECT l.*, COALESCE(rt.sample_id, oc.sample_id) AS sample_id, i.lab_order_id, (SELECT x.oos_code FROM oos_investigation x JOIN requested_test r2 ON r2.oos_investigation_id = x.id WHERE r2.id = l.requested_test_id) AS oos_code,
+        (SELECT ci.invoice_number FROM invoice_line cl JOIN invoice ci ON ci.id = cl.invoice_id WHERE cl.credits_line_id = l.id AND ci.status = 'Issued') AS credited_by,
+        oc.charge_no, (l.order_charge_id IS NOT NULL) AS is_charge
+      FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id LEFT JOIN requested_test rt ON rt.id = l.requested_test_id LEFT JOIN order_charge oc ON oc.id = l.order_charge_id
       WHERE l.invoice_id = $1 AND l.status = 'Active' ORDER BY l.line_no`, [i.id]);
     if (i.status === 'Draft') {
       for (const l of lines) {
-        if (l.rush_ordered || Number(l.late_days) > 0) l.rush_options = await c.db.rows('SELECT * FROM invoice_rush_options($1, $2)', [l.requested_test_id, l.completed_on]);
+        if (l.requested_test_id && (l.rush_ordered || Number(l.late_days) > 0)) l.rush_options = await c.db.rows('SELECT * FROM invoice_rush_options($1, $2)', [l.requested_test_id, l.completed_on]);
       }
     }
+    // 058: payment status, PO corrections, and the charges a draft can take
+    const pay = await c.db.one(`SELECT invoice_payment_status(i.id) AS payment_status, i.paid_on, i.paid_note, i.paid_recorded_at, u.full_name AS paid_recorded_by_name
+      FROM invoice i LEFT JOIN app_user u ON u.id = i.paid_recorded_by WHERE i.id = $1`, [i.id]);
+    Object.assign(i, pay);
+    const corrections = await c.db.rows(`SELECT k.id, k.correction_no, k.field, k.old_value, k.new_value, k.reason, k.document_id, k.push_status, k.sent_at, k.created_at, u.full_name AS by_name
+      FROM invoice_correction k JOIN app_user u ON u.id = k.created_by WHERE k.invoice_id = $1 ORDER BY k.created_at`, [i.id]);
+    const chargeItems = i.status === 'Draft' ? await c.db.rows(`SELECT id, charge_code, charge_name, kind, price FROM charge_item
+      WHERE status = 'Active' AND (site_id IS NULL OR site_id = $1) ORDER BY kind = 'Discount', charge_name`, [i.site_id]) : [];
+    const samples = i.status === 'Draft' ? await c.db.rows(`SELECT id, sample_code, client_sample_id FROM sample WHERE lab_order_id = $1 AND status <> 'Cancelled' ORDER BY sample_code`, [i.lab_order_id]) : [];
     const credits = await c.db.rows(`SELECT id, code, invoice_date, total, reason FROM invoice_view WHERE credit_of_id = $1 AND status = 'Issued' ORDER BY issued_at`, [i.id]);
     const emails = await c.db.rows(`SELECT id, to_address, subject, created_at FROM email_outbox WHERE document_id = $1 AND $1 IS NOT NULL ORDER BY created_at`, [i.document_id]);
     const push = await c.db.one('SELECT id, status, entity, provider, payload, attempts, last_error, sent_at, created_at FROM accounting_push WHERE invoice_id = $1', [i.id]);
-    return { invoice: i, lines, credits, emails, push, ...(await perms(c, i.site_id)), me: c.userId };
+    return { invoice: i, lines, credits, emails, push, corrections, charge_items: chargeItems, samples, ...(await perms(c, i.site_id)), me: c.userId };
   });
 
   r('PUT', '/api/billing/invoices/:id', async (c) => {
@@ -128,6 +149,57 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
   r('POST', '/api/billing/invoices/:id/release', async (c) => {
     const i = await invoiceOf(c, c.params.id);
     await tx({ ...c, reason: c.reason || 'Draft invoice released' }, (t) => t.query('SELECT release_invoice_draft($1)', [i.id]));
+  });
+
+  // 058: a charge (or a discount) added straight onto one's own draft; it is recorded on the order too
+  r('POST', '/api/billing/invoices/:id/charges', async (c) => {
+    const i = await invoiceOf(c, c.params.id);
+    const b = c.body || {};
+    if (!isUuid(b.charge_item_id)) throw new Error('Choose the charge');
+    const price = b.price === '' || b.price === null || b.price === undefined ? null : Number(b.price);
+    if (price !== null && !Number.isFinite(price)) throw new Error('Type the price as a number');
+    const q = parseInt(b.quantity, 10) || 1;
+    const out = await tx({ ...c, reason: c.reason || 'Charge added at invoicing' }, async (t) => {
+      let p = price;
+      if (p === null) p = Number((await t.one('SELECT price FROM charge_item WHERE id = $1', [b.charge_item_id])).price);
+      return t.one('SELECT add_invoice_charge($1, $2, $3, $4, $5, $6) AS id', [i.id, b.charge_item_id, q, p, b.note || '', isUuid(b.sample_id) ? b.sample_id : null]);
+    });
+    return { order_charge_id: out.id };
+  });
+
+  // 058: payment status, recorded by hand until QuickBooks reports payments (an empty date clears it)
+  r('POST', '/api/billing/invoices/:id/payment', async (c) => {
+    const i = await invoiceOf(c, c.params.id);
+    const d = String(c.body.paid_on || '').trim();
+    if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('Give the payment date as a date');
+    await tx({ ...c, reason: c.reason || (d ? 'Payment recorded' : 'Payment record cleared') }, (t) => t.query('SELECT record_invoice_payment($1, $2::date, $3)', [i.id, d || null, c.body.paid_note || '']));
+  });
+
+  // 058: correct the PO number of an issued invoice (signed "Corrected by", with a reason): the corrected copy of the PDF
+  // is made, attached to the correction and emailed; the original PDF is kept unchanged
+  r('POST', '/api/billing/invoices/:id/correct-po', async (c) => {
+    const i = await invoiceOf(c, c.params.id);
+    if (!c.reason) throw new Error('Say why the PO number is corrected');
+    const po = String(c.body.po_number || '').trim();
+    const out = await signedTx({ ...c }, { meaning: 'Corrected by', action: `PO number of ${i.invoice_number} corrected`, module: 'Invoicing' }, async (t) => {
+      const k = await t.one('SELECT correct_invoice_po($1, $2) AS id', [i.id, po]);
+      const row = await t.one('SELECT * FROM invoice_correction WHERE id = $1', [k.id]);
+      const p = await INV.pdf(t, i.id, { corrected: { old_value: row.old_value, new_value: row.new_value, at: row.created_at } });
+      const d = await t.one(`INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES ($1, 'application/pdf', $2, $3, decode($4, 'base64')) RETURNING id`,
+        [`${i.invoice_number} corrected ${row.correction_no}.pdf`, p.buf.length, p.sha256, p.buf.toString('base64')]);
+      const n = await t.one('SELECT record_invoice_correction_document($1, $2, $3) AS n', [k.id, d.id, p.sha256]);
+      return { correction_id: k.id, emails: Number(n.n) };
+    });
+    return out;
+  });
+  r('GET', '/api/billing/corrections/:id/pdf', async (c) => {
+    if (c.query.s) c.siteId = c.query.s;
+    if (!isUuid(c.params.id)) throw new Error('Correction not found');
+    const k = await c.db.one('SELECT invoice_id, document_id, correction_no FROM invoice_correction WHERE id = $1', [c.params.id]);
+    if (!k || !k.document_id) throw new Error('Correction not found');
+    const i = await invoiceOf(c, k.invoice_id);
+    const d = await c.db.one(`SELECT encode(content, 'base64') AS b64 FROM document_file WHERE id = $1`, [k.document_id]);
+    return { __raw: true, body: Buffer.from(d.b64, 'base64'), type: 'application/pdf', headers: { 'Content-Disposition': `inline; filename="${i.code} corrected ${k.correction_no}.pdf"` } };
   });
 
   // Issue checked drafts: one signature ("Invoiced by"); each PDF made, attached, emailed and queued in the same transaction
@@ -215,7 +287,9 @@ module.exports = function registerInvoicing({ route, tx, signedTx, currentSite, 
   });
 
   AUDIT_SCOPES.invoice = `SELECT 'invoice', $1::uuid UNION ALL SELECT 'invoice_line', id FROM invoice_line WHERE invoice_id = $1
-    UNION ALL SELECT 'accounting_push', id FROM accounting_push WHERE invoice_id = $1`;
+    UNION ALL SELECT 'accounting_push', id FROM accounting_push WHERE invoice_id = $1
+    UNION ALL SELECT 'invoice_correction', id FROM invoice_correction WHERE invoice_id = $1
+    UNION ALL SELECT 'order_charge', order_charge_id FROM invoice_line WHERE invoice_id = $1 AND order_charge_id IS NOT NULL`;
   AUDIT_CHECKS.invoice = async (c, id) => { await invoiceOf(c, id); };
-  AUDIT_LISTS.billing = ['invoice', 'invoice_line', 'accounting_push', 'accounting_connection', 'accounting_customer'];
+  AUDIT_LISTS.billing = ['invoice', 'invoice_line', 'accounting_push', 'accounting_connection', 'accounting_customer', 'invoice_correction', 'order_charge'];
 };

@@ -19,6 +19,11 @@ css.textContent = `
 tr.bllate td { background: #fff1e6; } td.bllate { color: #a13d12; font-weight: 700; } tr.blretest td { background: #fbf7ec; }
 td.blneg { color: #a13d12; }
 .blinv { display: grid; grid-template-columns: minmax(320px, 1fr) 300px; gap: 12px; align-items: start; } .blinv .card { margin: 0 0 12px; }
+.bldet { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 18px; margin: 4px 0 2px; font-size: 13.5px; }
+.bldet div > span { display: block; color: var(--muted); font-size: 12px; } .bldet div > b { font-weight: 600; }
+.blpay { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12.5px; font-weight: 700; }
+.blpay.Paid { background: #e3f3e8; color: #1f6b3a; } .blpay.Unpaid { background: #eef1f3; color: #3b4650; } .blpay.Overdue { background: #fde8e1; color: #a13d12; } .blpay.Credited { background: #F3E9F6; color: #7a4d8c; }
+tr.blcharge td { background: #f4f7fb; }
 .bltot div { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13.5px; } .bltot .big { font-size: 18px; font-weight: 700; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
 .blbanner { border-left: 4px solid #c68a00; background: #fff8e6; padding: 8px 12px; border-radius: 4px; margin: 0 0 12px; font-size: 13px; }
 .blbanner.cn { border-color: #7a4d8c; background: #F3E9F6; }
@@ -45,7 +50,7 @@ export async function list(main) {
     ready: 'Work whose COA has been issued to the client and is not invoiced yet. Select the work to invoice and claim it: each lab order\'s work goes onto your own draft invoice, which nobody else can change or issue. Orange rows are rushes reported late.',
     mine: 'Your draft invoices. Open each one to check the prices and discounts against the quote and any late rush, then select the drafts and issue them with one signature: each is numbered, dated today, emailed to the client\'s billing contacts and queued for QuickBooks.',
     drafts: 'Every draft invoice at this lab and who is checking it. Only the holder changes or issues a draft; a lab administrator can take one back with a reason.',
-    issued: 'Invoices and credit notes issued at this lab, newest first. An issued invoice never changes: correct it with a credit note from its page.',
+    issued: 'Invoices and credit notes issued at this lab, newest first. The amounts of an issued invoice never change: correct them with a credit note from its page. Payments are recorded by hand on the invoice until QuickBooks is connected.',
     queue: 'What was queued for this lab\'s QuickBooks Online company, as its API takes it. Nothing is sent until a system administrator connects the lab (Settings).',
     settings: 'Clients\' payment terms, and this lab\'s accounting company (each lab is its own QuickBooks Online company).' }[tab];
   main.innerHTML = pageHeader('Billing', intro, '', { kind: 'billing' })
@@ -62,6 +67,7 @@ export async function list(main) {
 // ---------------------------------------------------------------- ready to invoice
 async function readyTab(body, main) {
   const d = await api('/billing/ready');
+  const charges = d.charges || [];
   const lateRush = (r) => Number(r.late_days) > 0 && Number(r.rush_fee) > 0;
   const FILTERS = { all: ['All', () => true], late: ['Late rush', lateRush], rush: ['Rush', (r) => Number(r.rush_fee) > 0], retest: ['Retests', (r) => r.is_retest || r.was_retested],
     discount: ['Discounted', (r) => Number(r.discount) > 0], stability: ['Stability pulls', (r) => r.stability] };
@@ -71,9 +77,11 @@ async function readyTab(body, main) {
   body.innerHTML = `<div class="card">${section('Completed work not yet invoiced', '', `<button class="btn primary" id="claim" ${d.can_issue ? '' : 'disabled'}>Claim selected into my drafts</button>`)}
     <div class="blsum"><div><b>${money(sum(d.rows))}</b><span>${d.rows.length} test${d.rows.length === 1 ? '' : 's'} ready</span></div>
       <div><b>${new Set(d.rows.map((r) => r.order_code)).size}</b><span>lab orders</span></div>
-      <div><b>${d.rows.filter(lateRush).length}</b><span>late rushes to check</span></div></div>
+      <div><b>${d.rows.filter(lateRush).length}</b><span>late rushes to check</span></div>
+      <div><b>${money(charges.reduce((x, r) => x + Number(r.amount || 0), 0))}</b><span>${charges.length} charge${charges.length === 1 ? '' : 's'} ready</span></div></div>
     <div class="blfil">Show: ${Object.entries(FILTERS).map(([k, [l, fn]]) => `<button data-f="${k}" class="${k === readyFilter ? 'on' : ''}">${esc(l)} <small>${d.rows.filter(fn).length}</small></button>`).join('')}</div>
-    <div id="g"></div></div>`;
+    <div id="g"></div></div>
+    <div class="card">${section('Charges not yet invoiced', 'Kits, shipping, report fees, surcharges and discounts added to lab orders. They are ready at once (no testing, no COA). Select them here as well as tests: one Claim puts both on the order\'s draft.')}<div id="g2"></div></div>`;
   body.querySelectorAll('[data-f]').forEach((b) => { b.onclick = () => { readyFilter = b.dataset.f; readyTab(body, main); }; });
   const g = new Grid(body.querySelector('#g'), { readOnly: true, search: true, rows, emptyText: 'Nothing is waiting to be invoiced: completed work appears here once its COA is issued.',
     rowClass: (r) => (lateRush(r) ? 'bllate' : r.is_retest ? 'blretest' : ''), columns: [
@@ -92,12 +100,27 @@ async function readyTab(body, main) {
       { field: 'amount', title: 'Amount', type: 'money', width: 90 },
       { field: 'notes', title: 'Notes', type: 'readonly', width: 300, compute: (r) => [r.rush_tier_name && Number(r.rush_fee) > 0 ? 'Rush: ' + r.rush_tier_name : '', r.is_retest ? `Retest of ${r.retest_of}${r.oos_code ? ' (' + r.oos_code + ')' : ''}${r.billing_status === 'Non-billable' ? ', not charged' : ''}` : '',
         r.was_retested ? 'Retested' : '', r.stability ? 'Stability pull' : ''].filter(Boolean).join(' · ') }] });
+  const g2 = new Grid(body.querySelector('#g2'), { readOnly: true, search: true, rows: charges, emptyText: 'No charges waiting: add kits, shipping and fees on the lab order (Charges card).', columns: [
+    { field: 'created_at', title: 'Added', type: 'readonly', width: 110, format: d8 },
+    { field: 'order_code', title: 'Order', type: 'link', width: 95, href: (r) => '#/orders/' + r.lab_order_id },
+    { field: 'po_number', title: 'PO', type: 'readonly', width: 90 },
+    { field: 'client_name', title: 'Client', type: 'link', width: 170, href: (r) => '#/clients/' + r.client_id },
+    { field: 'charge_no', title: 'Charge', type: 'readonly', width: 95 },
+    { field: 'charge_name', title: 'What', type: 'readonly', width: 200 },
+    { field: 'kind', title: 'Kind', type: 'readonly', width: 90 },
+    { field: 'sample_code', title: 'Sample', type: 'link', width: 125, href: (r) => (r.sample_id ? '#/samples/' + r.sample_id : null) },
+    { field: 'quantity', title: 'Qty', type: 'readonly', width: 50 },
+    { field: 'unit_price', title: 'Each', type: 'money', width: 80 },
+    { field: 'amount', title: 'Amount', type: 'money', width: 90, cellClass: (r) => (Number(r.amount) < 0 ? 'blneg' : '') },
+    { field: 'note', title: 'Note', type: 'readonly', width: 220, compute: (r) => [r.note, r.project_code ? 'Price from ' + r.project_code : ''].filter(Boolean).join(' · ') }] });
   body.querySelector('#claim').onclick = async () => {
     const s = g.selectedRows();
-    if (!s.length) { toast('Select the work to invoice (Ctrl+click or Shift+click for several; Ctrl+A for everything shown).', 'err'); return; }
+    const sc = g2.selectedRows();
+    if (!s.length && !sc.length) { toast('Select the work to invoice (Ctrl+click or Shift+click for several; Ctrl+A for everything shown).', 'err'); return; }
     try {
-      const x = await api('/billing/claim', { method: 'POST', body: { tests: [...new Set(s.map((r) => r.requested_test_id))] } });
-      toast(`${s.length} test${s.length === 1 ? '' : 's'} claimed onto ${x.invoices.length} draft invoice${x.invoices.length === 1 ? '' : 's'} (one per lab order).`);
+      const x = await api('/billing/claim', { method: 'POST', body: { tests: [...new Set(s.map((r) => r.requested_test_id))], charges: [...new Set(sc.map((r) => r.order_charge_id))] } });
+      const what = [s.length ? `${s.length} test${s.length === 1 ? '' : 's'}` : '', sc.length ? `${sc.length} charge${sc.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+      toast(`${what} claimed onto ${x.invoices.length} draft invoice${x.invoices.length === 1 ? '' : 's'} (one per lab order).`);
       location.hash = x.invoices.length === 1 ? '#/billing/invoices/' + x.invoices[0] : '#/billing?tab=mine';
     } catch (e) { toast(e.message, 'err'); }
   };
@@ -117,6 +140,8 @@ async function invoicesTab(body, main, tab) {
     { field: 'sample_count', title: 'Samples', type: 'readonly', width: 65 },
     { field: 'total', title: 'Total', type: 'money', width: 95, cellClass: (r) => (Number(r.total) < 0 ? 'blneg' : '') },
     ...(tab === 'issued' ? [
+      { field: 'payment_status', title: 'Payment', type: 'readonly', width: 95, format: (v) => v || '', cellClass: (r) => (r.payment_status === 'Overdue' ? 'bllate' : '') },
+      { field: 'paid_on', title: 'Paid', type: 'readonly', width: 100, format: d8 },
       { field: 'credited', title: 'Credited', type: 'readonly', width: 85, format: (v) => (Number(v) ? money(v) : '') },
       { field: 'credits_number', title: 'Credits', type: 'readonly', width: 120 },
       { field: 'catchup', title: 'Catch-up', type: 'readonly', width: 75, format: (v) => (v ? 'Yes' : '') },
@@ -132,7 +157,7 @@ async function invoicesTab(body, main, tab) {
     // one page at a time from the server (0.35.0), newest first; the totals cover every invoice matching the tab and search
     body.innerHTML = `<div class="card"><div class="blsum" id="blsum"></div><div id="g"></div></div>`;
     pagedList({ el: body.querySelector('#g'), url: '/billing/invoices?tab=issued', filterParam: 'f', filter: state.query.get('f') || 'all', q: state.query.get('find') || '',
-      filters: [['all', 'All'], ['invoices', 'Invoices'], ['credits', 'Credit notes']],
+      filters: [['all', 'All'], ['invoices', 'Invoices'], ['unpaid', 'Unpaid'], ['overdue', 'Overdue'], ['paid', 'Paid'], ['credits', 'Credit notes']],
       placeholder: 'Search by number, client, order, PO or who issued it; type or scan an invoice number and press Enter to open it',
       open: (r) => { location.hash = '#/billing/invoices/' + r.id; },
       render: (el, rows, x) => {
@@ -223,38 +248,54 @@ export async function invoice(main, id) {
   const draft = i.status === 'Draft';
   const mine = draft && i.claimed_by === d.me && d.can_issue;
   const credit = i.kind === 'Credit note';
+  const issuedInvoice = !draft && !credit && i.status === 'Issued';
   const title = draft ? `Draft invoice ${i.draft_code}` : `${i.kind} ${i.invoice_number}`;
   const sub = draft ? `${i.client_name}, order ${i.order_code}. Being checked by ${i.claimed_by === d.me ? 'you' : i.claimed_by_name}.`
     : `${i.client_name}, order ${i.order_code}. Issued ${dt(i.issued_at)} by ${i.issued_by_name || 'the system'}.`;
   const actions = [`<button class="btn" id="pdf">${draft ? 'Preview PDF' : 'PDF'}</button>`,
     mine ? '<button class="btn primary" id="issue">Issue…</button> <button class="btn" id="rel">Release draft</button>' : '',
-    !draft && !credit && d.can_issue && Number(i.total) + 0 !== 0 ? '<button class="btn" id="credit">Credit…</button>' : ''].join(' ');
+    issuedInvoice && d.can_issue && Number(i.total) + 0 !== 0 ? '<button class="btn" id="credit">Credit…</button>' : ''].join(' ');
+  // 0.36.0 (Cecilia): the invoice's details first, across the top, with its payment status
+  const pay = i.payment_status ? `<span class="blpay ${esc(i.payment_status)}">${esc(i.payment_status)}</span>` : '';
+  const cell = (label, value) => `<div><span>${label}</span><b>${value || '<span class="help">none</span>'}</b></div>`;
+  const detActions = [mine ? '<button class="btn" id="edit">Change…</button>' : '',
+    issuedInvoice && d.can_issue ? `<button class="btn" id="paid">${i.paid_on ? 'Change payment…' : 'Record payment…'}</button>` : '',
+    issuedInvoice && d.can_issue && !i.catchup ? '<button class="btn" id="cpo">Correct PO…</button>' : ''].join(' ');
+  const details = `<div class="card">${section(credit ? 'Credit note details' : 'Invoice details', '', detActions)}<div class="bldet">
+      ${cell('Client', link('#/clients/' + i.client_id, i.client_name))}${cell('Order', link('#/orders/' + i.lab_order_id, i.order_code))}
+      ${cell('Client PO', esc(i.po_number || ''))}
+      ${draft ? cell('Invoice date', 'when issued') : cell(credit ? 'Date' : 'Invoice date', d8(i.invoice_date))}
+      ${credit ? '' : cell('Due', draft ? `net ${esc(i.payment_terms_days ?? '')} days from issue` : `${d8(i.due_date)} <span class="help">(net ${esc(i.payment_terms_days)})</span>`)}
+      ${issuedInvoice ? cell('Payment', `${pay}${i.paid_on ? ` <span class="help">${d8(i.paid_on)}${i.paid_note ? ', ' + esc(i.paid_note) : ''}</span>` : ''}`) : ''}
+      ${draft ? '' : cell('Bill to', `${esc(i.bill_to_name || '')}${i.bill_to_address ? '<br><span class="help">' + esc(i.bill_to_address) + '</span>' : ''}`)}
+      ${cell('Note on the invoice', esc(i.note || ''))}${cell('Internal note', esc(i.internal_note || ''))}
+    </div>${i.paid_recorded_at ? `<p class="help">Payment recorded by ${esc(i.paid_recorded_by_name || '')} ${dt(i.paid_recorded_at)}. Recorded by hand until QuickBooks is connected.</p>` : ''}</div>`;
+  const corrections = (d.corrections || []).length ? `<div class="card">${section('Corrections', 'Each correction changed the PO number only, was signed with a reason, and sent the client a corrected copy. The original PDF is kept unchanged.')}
+      <ul>${d.corrections.map((k) => `<li>${dt(k.created_at)}: PO ${esc(k.old_value || 'none')} → ${esc(k.new_value || 'none')} by ${esc(k.by_name)} (${esc(k.reason)}).
+        ${k.document_id ? `<a href="/api/billing/corrections/${k.id}/pdf${sq()}" target="_blank">Corrected copy</a>` : ''} <span class="help">QuickBooks: ${esc(k.push_status)}</span></li>`).join('')}</ul></div>` : '';
   main.innerHTML = pageHeader(title, esc(sub), actions, { kind: 'invoice', id: i.id })
     + (i.catchup ? '<div class="blbanner">Catch-up invoice: work completed before invoicing moved into LIMS3, dated the Friday of the week its COA was issued. It was not emailed or queued for QuickBooks.</div>' : '')
     + (credit ? `<div class="blbanner cn">Credits invoice ${link('#/billing/invoices/' + i.credit_of_id, i.credits_number)}. Reason: ${esc(i.reason || '')}</div>` : '')
     + (d.credits.length ? `<div class="blbanner cn">Credited by ${d.credits.map((x) => `${link('#/billing/invoices/' + x.id, x.code)} (${money(-Number(x.total))}, ${esc(x.reason || '')})`).join('; ')}.</div>` : '')
+    + details
     + `<div class="blinv"><div>
-        <div class="card">${section('Lines', draft ? (mine ? 'Check each line against the quote. Price… corrects the price billed (with a reason, printed under the line); Rush… bills a late rush at the tier whose turnaround was met, or standard. Take off what should not be invoiced yet.' : 'Only the person checking this draft changes it.') : '')}
-          ${mine ? '<div class="blfil"><button class="btn" id="rm">Take selected lines off</button></div>' : ''}<div id="lg"></div></div>
+        <div class="card">${section('Lines', draft ? (mine ? 'Check each line against the quote. Price… corrects the price billed (with a reason, printed under the line); Rush… bills a late rush at the tier whose turnaround was met, or standard. Take off what should not be invoiced yet. Add a charge… puts a kit, shipping, a fee or a discount on this invoice (it is recorded on the order too).' : 'Only the person checking this draft changes it.') : '')}
+          ${mine ? '<div class="blfil"><button class="btn" id="addc">Add a charge…</button> <button class="btn" id="rm">Take selected lines off</button></div>' : ''}<div id="lg"></div></div>
+        ${corrections}
         ${d.push ? `<div class="card">${section('QuickBooks Online', `Queued ${dt(d.push.created_at)} as ${esc(d.push.entity)}: ${esc(d.push.status)}${d.push.last_error ? ' (' + esc(d.push.last_error) + ')' : ''}.`, '<button class="btn ghost" id="pj">Show what is sent</button>')}<pre class="bljson" id="pjson" style="display:none">${esc(JSON.stringify(d.push.payload, null, 2))}</pre></div>` : ''}
         ${d.emails.length ? `<div class="card">${section('Emailed', 'Sandbox: stored in the Outbox, not actually sent.')}<ul>${d.emails.map((e) => `<li>${esc(e.to_address)}: ${esc(e.subject)} <span class="help">${dt(e.created_at)}</span></li>`).join('')}</ul></div>` : ''}
       </div><div>
         <div class="card bltot">${section(credit ? 'Credit' : 'Totals')}
           <div><span>List value</span><span>${money(i.list_total)}</span></div><div><span>Discounts</span><span>${money(-Number(i.discount_total))}</span></div>
           <div><span>Rush fees</span><span>${money(i.rush_total)}</span></div><div class="big"><span>${credit ? 'Credited' : 'Total'}</span><span>${money(i.total)}</span></div></div>
-        <div class="card">${section('Details', '', mine ? '<button class="btn" id="edit">Change…</button>' : '')}<dl class="kv">
-          <dt>Client</dt><dd>${link('#/clients/' + i.client_id, i.client_name)}</dd><dt>Order</dt><dd>${link('#/orders/' + i.lab_order_id, i.order_code)}</dd>
-          <dt>PO</dt><dd>${esc(i.po_number || '')}</dd>
-          ${draft ? '' : `<dt>Date</dt><dd>${d8(i.invoice_date)}</dd>${credit ? '' : `<dt>Due</dt><dd>${d8(i.due_date)} (net ${esc(i.payment_terms_days)})</dd>`}<dt>Bill to</dt><dd>${esc(i.bill_to_name || '')}${i.bill_to_address ? '<br><span class="help">' + esc(i.bill_to_address) + '</span>' : ''}</dd>`}
-          <dt>Note on the invoice</dt><dd>${esc(i.note || '')}</dd><dt>Internal note</dt><dd>${esc(i.internal_note || '')}</dd></dl></div>
       </div></div>`;
   const late = (l) => Number(l.late_days) > 0 && l.rush_ordered;
-  const g = new Grid(main.querySelector('#lg'), { readOnly: true, rows: d.lines, rowClass: (l) => (late(l) ? 'bllate' : l.retest_of_id ? 'blretest' : ''), columns: [
+  const g = new Grid(main.querySelector('#lg'), { readOnly: true, rows: d.lines, rowClass: (l) => (late(l) ? 'bllate' : l.retest_of_id ? 'blretest' : l.is_charge ? 'blcharge' : ''), columns: [
     { field: 'line_no', title: '#', type: 'readonly', width: 35 },
-    { field: 'sample_code', title: 'Sample', type: 'link', width: 125, href: (l) => '#/samples/' + l.sample_id },
+    { field: 'sample_code', title: 'Sample', type: 'link', width: 125, href: (l) => (l.sample_id ? '#/samples/' + l.sample_id : null), format: (v, l) => v || (l.is_charge ? 'Order' : '') },
     { field: 'client_sample_id', title: 'Client sample ID', type: 'readonly', width: 110 },
-    { field: 'test_name', title: 'Test', type: 'readonly', width: 190, format: (v, l) => (l.retest_of_id ? 'Retest: ' : '') + v },
-    { field: 'completed_on', title: 'Reported', type: 'readonly', width: 105, format: d8 },
+    { field: 'test_name', title: 'Test or charge', type: 'readonly', width: 210, format: (v, l) => (l.retest_of_id ? 'Retest: ' : l.is_charge ? 'Charge: ' : '') + v },
+    { field: 'completed_on', title: 'Date', type: 'readonly', width: 105, format: d8 },
     { field: 'list_price', title: 'List', type: 'money', width: 75 },
     { field: 'quoted_price', title: 'Ordered at', type: 'money', width: 85 },
     { field: 'price', title: 'Billed', type: 'money', width: 80, cellClass: (l) => (Number(l.price) !== Number(l.quoted_price) ? 'bllate' : '') },
@@ -262,11 +303,11 @@ export async function invoice(main, id) {
     { field: 'rush_fee', title: 'Rush fee', type: 'money', width: 80 },
     { field: 'late_days', title: 'Late', type: 'readonly', width: 75, format: (v) => (Number(v) > 0 ? `${v} day${Number(v) === 1 ? '' : 's'}` : ''), cellClass: (l) => (late(l) ? 'bllate' : '') },
     { field: 'amount', title: 'Amount', type: 'money', width: 90, cellClass: (l) => (Number(l.amount) < 0 ? 'blneg' : '') },
-    { field: 'notes', title: 'Notes', type: 'readonly', width: 280, compute: (l) => [l.line_note, l.price_note ? 'Price: ' + l.price_note : '', l.rush_note ? 'Rush: ' + l.rush_note : '', l.credited_by ? 'Credited by ' + l.credited_by : ''].filter(Boolean).join(' · ') },
-    ...(mine ? [{ field: 'p', title: '', type: 'button', width: 70, label: 'Price…', onClick: (l) => priceDialog(l, () => invoice(main, id)) },
+    { field: 'notes', title: 'Notes', type: 'readonly', width: 280, compute: (l) => [l.charge_no, l.line_note, l.price_note ? 'Price: ' + l.price_note : '', l.rush_note ? 'Rush: ' + l.rush_note : '', l.credited_by ? 'Credited by ' + l.credited_by : ''].filter(Boolean).join(' · ') },
+    ...(mine ? [{ field: 'p', title: '', type: 'button', width: 70, label: (l) => (l.is_charge ? '' : 'Price…'), onClick: (l) => { if (!l.is_charge) priceDialog(l, () => invoice(main, id)); } },
       { field: 'r', title: '', type: 'button', width: 70, label: (l) => (l.rush_options && l.rush_options.length > 1 ? 'Rush…' : ''), onClick: (l) => rushDialog(l, () => invoice(main, id)) }] : []),
   ] });
-  const $ = (s) => main.querySelector(s);
+  const $ = (q) => main.querySelector(q);
   $('#pdf').onclick = () => pdfOf(i.id);
   if ($('#pj')) $('#pj').onclick = () => { const p = $('#pjson'); p.style.display = p.style.display === 'none' ? '' : 'none'; };
   if ($('#issue')) $('#issue').onclick = () => issueDrafts([{ id: i.id, code: i.draft_code, total: i.total }], (r) => { const x = (r.issued || [])[0]; location.hash = '#/billing/invoices/' + (x ? x.id : i.id); invoice(main, i.id); });
@@ -274,10 +315,11 @@ export async function invoice(main, id) {
     try { await api(`/billing/invoices/${i.id}/release`, { method: 'POST', body: {} }); toast(`${i.draft_code} released: its work is ready to invoice again.`); location.hash = '#/billing?tab=ready'; } catch (e) { toast(e.message, 'err'); }
   };
   if ($('#rm')) $('#rm').onclick = async () => {
-    const s = g.selectedRows(); if (!s.length) { toast('Select the lines to take off.', 'err'); return; }
-    try { await api('/billing/lines/remove', { method: 'POST', body: { lines: s.map((l) => l.id) } }); toast('Taken off: that work is ready to invoice again.');
-      if (s.length >= d.lines.length) location.hash = '#/billing?tab=mine'; else invoice(main, id); } catch (e) { toast(e.message, 'err'); }
+    const sl = g.selectedRows(); if (!sl.length) { toast('Select the lines to take off.', 'err'); return; }
+    try { await api('/billing/lines/remove', { method: 'POST', body: { lines: sl.map((l) => l.id) } }); toast('Taken off: that work is ready to invoice again.');
+      if (sl.length >= d.lines.length) location.hash = '#/billing?tab=mine'; else invoice(main, id); } catch (e) { toast(e.message, 'err'); }
   };
+  if ($('#addc')) $('#addc').onclick = () => addChargeDialog(i, d, () => invoice(main, id));
   if ($('#edit')) $('#edit').onclick = async () => {
     const v = await modal({ title: 'Invoice details', okText: 'Save', fields: [
       { name: 'po_number', label: 'Client PO number', value: i.po_number || '' },
@@ -286,7 +328,44 @@ export async function invoice(main, id) {
     if (!v) return;
     try { await api('/billing/invoices/' + i.id, { method: 'PUT', body: v }); toast('Saved.'); invoice(main, id); } catch (e) { toast(e.message, 'err'); }
   };
+  if ($('#paid')) $('#paid').onclick = async () => {
+    const v = await modal({ title: `Payment of ${i.invoice_number}`, okText: 'Continue',
+      intro: `Total ${money(i.total)}. Record the date the client paid (leave it empty to clear a payment recorded by mistake). Recorded by hand until QuickBooks reports payments.`,
+      fields: [{ name: 'paid_on', label: 'Paid on', type: 'date', value: i.paid_on ? String(i.paid_on).slice(0, 10) : '' },
+        { name: 'paid_note', label: 'Note (cheque number, transfer reference)', value: i.paid_note || '' }] });
+    if (!v) return;
+    const reason = await askReason(v.paid_on ? `the payment of ${i.invoice_number}` : `clearing the payment of ${i.invoice_number}`); if (reason === null) return;
+    try { await api(`/billing/invoices/${i.id}/payment`, { method: 'POST', body: { ...v, reason } }); toast(v.paid_on ? 'Payment recorded.' : 'Payment record cleared.'); invoice(main, id); } catch (e) { toast(e.message, 'err'); }
+  };
+  if ($('#cpo')) $('#cpo').onclick = async () => {
+    const v = await modal({ title: `Correct the PO number of ${i.invoice_number}`, okText: 'Continue to sign',
+      intro: `Only the PO number changes; the amounts never do (use a credit note for those). The client is sent a corrected copy of the PDF; the original is kept.`,
+      fields: [{ name: 'po_number', label: 'Correct PO number', value: i.po_number || '', required: true }] });
+    if (!v) return;
+    const ok = await signDialog({ title: 'Correct the PO number', meaning: 'Corrected by', needReason: true, okText: 'Sign and correct',
+      what: `${i.invoice_number}: PO ${i.po_number || 'none'} → ${v.po_number}`,
+      submit: ({ signature, reason }) => api(`/billing/invoices/${i.id}/correct-po`, { method: 'POST', body: { po_number: v.po_number, signature, reason } }) });
+    if (!ok) return;
+    toast(`PO corrected; the corrected copy was sent to ${ok.emails} contact${ok.emails === 1 ? '' : 's'}.`);
+    invoice(main, id);
+  };
   if ($('#credit')) $('#credit').onclick = () => creditDialog(i, d.lines.filter((l) => l.kind === 'Charge' && !l.credited_by), g.selectedRows(), (cn) => { location.hash = '#/billing/invoices/' + cn.id; });
+}
+
+async function addChargeDialog(i, d, done) {
+  const items = d.charge_items || [];
+  if (!items.length) { toast('No charges are in the catalogue for this lab yet (Test catalogue > Charges).', 'err'); return; }
+  const v = await modal({ title: `Add a charge to ${i.draft_code}`, okText: 'Add',
+    intro: 'A discount is taken off the invoice. The price defaults to the catalogue price; type another if agreed with the client.', fields: [
+      { name: 'charge_item_id', label: 'Charge', type: 'select', blank: false, required: true,
+        options: items.map((c) => ({ value: c.id, label: `${c.charge_name} (${c.kind}, ${money(c.price)})` })) },
+      { name: 'quantity', label: 'Quantity', type: 'number', value: 1 },
+      { name: 'price', label: 'Price each (empty: the catalogue price)', type: 'number', value: '' },
+      { name: 'sample_id', label: 'For a sample (optional)', type: 'select', options: (d.samples || []).map((x) => ({ value: x.id, label: x.sample_code + (x.client_sample_id ? ' (' + x.client_sample_id + ')' : '') })) },
+      { name: 'note', label: 'Printed under the line', value: '' }] });
+  if (!v) return;
+  const reason = await askReason('a charge added at invoicing'); if (reason === null) return;
+  try { await api(`/billing/invoices/${i.id}/charges`, { method: 'POST', body: { ...v, reason } }); toast('Charge added.'); done(); } catch (e) { toast(e.message, 'err'); }
 }
 
 async function priceDialog(l, done) {

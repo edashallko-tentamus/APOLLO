@@ -53,7 +53,7 @@ export class Grid {
   }
   editable(ri, ci) {
     const c = this.cols[ci];
-    if (this.o.readOnly || !c || ['readonly', 'button', 'link'].includes(c.type || 'text') || c.compute) return false;
+    if (this.o.readOnly || !c || ['readonly', 'button', 'link'].includes(c.type || 'text') || (c.compute && !c.assign)) return false;
     if (typeof c.editable === 'function') return !!c.editable(this.rows[ri], this.isNew[ri]);
     return c.editable !== false;
   }
@@ -131,7 +131,9 @@ export class Grid {
     const res = parsed || this.parse(col, raw, this.rows[ri]);
     let err = res.error;
     if (!err && col.validate) err = col.validate(res.value, this.rows[ri]) || null;
-    this.rows[ri][col.field] = res.value;
+    // a computed column with assign(row, value) is typed into: it sets the fields it is computed from (0.36.0)
+    if (col.assign) { if (!err && res.value !== null && res.value !== undefined && res.value !== '') col.assign(this.rows[ri], res.value); }
+    else this.rows[ri][col.field] = res.value;
     const key = ri + ':' + col.field;
     if (err) this.errors.set(key, err); else this.errors.delete(key);
     return true;

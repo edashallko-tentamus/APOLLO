@@ -3,6 +3,7 @@ import { api, esc, pageHeader, toast, modal, state, money, badge, setDirtyCheck,
 import { Grid, fmt } from '../grid.js';
 import { section, specDialog, pagedList } from './common.js';
 import { testPicker, sendQuote, decide } from './quotes.js';
+import { quoteChargesCard } from './charges.js';
 
 export async function newProject(clientId) {
   const clients = await api('/clients');
@@ -107,8 +108,8 @@ export async function version(main, vid) {
   ${v.sent_at ? `<div class="qsent">Sent ${esc(new Date(v.sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }))} to <b>${esc(v.sent_to_name || '')}</b> &lt;${esc(v.sent_to_email || '')}&gt;. The client accepts or declines through the link in the email${v.client_token ? `; you can also paste it in a chat or email yourself:<input readonly id="qlink" value="${esc(location.origin + '/quote-response.html?t=' + v.client_token)}">` : '.'}</div>` : ''}
   ${ed ? '' : `<div class="notice">This version is ${esc(v.status)} and locked. ${v.status === 'Accepted' ? 'Orders use these terms.' : ''} To change prices or tests, start a new version.</div>`}
   <div class="card">${section('Tests on this quote', lpa ? 'List price acceptance: final price always equals list price.' :
-    'List price comes from the catalogue and cannot be typed over. Enter the final price per sample; discounts update as you type. For analyte-priced tests, click the analyte button to remove analytes: the list price recalculates and the discount % is kept.',
-    '')}
+    'List price comes from the catalogue and cannot be typed over. Type the final price per sample, or the discount % (the final price follows); paste and fill down work in both. For analyte-priced tests, click the analyte button to remove analytes: the list price recalculates and the discount % is kept.',
+    ed && !lpa ? '<button class="btn" id="pctall">Apply a discount % to every line…</button>' : '')}
     <div class="savebar" id="lsb"><span class="pending"></span><button class="btn ghost" id="lundo">Discard</button><button class="btn primary" id="lsave">Save lines</button></div>
     <div id="lg"></div></div>
   ${pk.rows.length || (ed && pk.allowed) ? `<div class="card">${section('Packages on this quote', 'A package is several tests at one price per sample, taken from the Test catalogue. Type over the package price to negotiate it; each test\'s share follows. On the order, cancelling one of its tests takes off only that test\'s share.')}
@@ -117,6 +118,7 @@ export async function version(main, vid) {
     ${ed && pk.allowed ? `<div class="pkadd"><select id="pkpick"><option value="">Add a package…</option>${pk.options.filter((o) => !pk.rows.some((r) => r.package_id === o.id)).map((o) => `<option value="${o.id}" ${o.errors ? 'disabled' : ''}>${esc(o.package_code)} ${esc(o.package_name)} · ${money(o.package_price)}${o.errors ? ' (has problems to fix in the catalogue)' : ''}</option>`).join('')}</select>
       <input id="pkqty" type="number" min="1" value="1" style="width:70px" title="Samples"> <button class="btn" id="pkadd">+ Add package</button></div>` : ''}</div>` : ''}
   <div class="card"><div class="totals" id="tot"></div></div>
+  <div class="card" id="qchg" style="display:none"></div>
   ${ed ? `<div class="card">${section('Add tests', 'Switch between labs to quote tests from any of them on the same quote; each line shows the lab that does the work.',
     '<button class="btn" id="servline" title="Adds the lab\'s Serving weight or Density test at its catalogue price, so the client sees what results per serving cost">+ Per-serving calculation…</button>')}<div id="qpick"></div></div>` : ''}
   <div class="card">${section('Rush terms on this quote', 'Surcharges are copied from each rush schedule. Set a discount per tier: e.g. keep Same Day at full price, make a 5 Day rush free (100%). Example amounts use the first test on this quote with that schedule.')}
@@ -139,7 +141,10 @@ export async function version(main, vid) {
       { field: 'list_price', title: 'List', type: 'money', width: 95, compute: (r) => r.list_price },
       { field: 'final_price', title: 'Final price', type: 'money', min: 0, width: 105, editable: () => !lpa },
       { field: 'd_amt', title: 'Discount $', type: 'money', width: 95, compute: (r) => (r.final_price === null || r.final_price === undefined ? null : r.list_price - r.final_price) },
-      { field: 'd_pct', title: 'Discount %', type: 'pct', width: 90, compute: (r) => (r.final_price === null || r.final_price === undefined || !r.list_price ? null : (r.list_price - r.final_price) / r.list_price * 100) },
+      // 0.36.0 (Cecilia): a discount typed as a percentage sets the final price (to the cent)
+      { field: 'd_pct', title: 'Discount %', type: 'pct', width: 90, compute: (r) => (r.final_price === null || r.final_price === undefined || !r.list_price ? null : (r.list_price - r.final_price) / r.list_price * 100),
+        assign: (r, v) => { r.final_price = Math.round(Number(r.list_price || 0) * (1 - Number(v) / 100) * 100) / 100; }, editable: () => !lpa,
+        help: 'Type a discount % to set the final price, or type the final price and the % follows' },
       { field: 'total', title: 'Line total', type: 'money', width: 105, compute: (r) => (r.final_price === null || r.final_price === undefined ? null : r.final_price * (r.quantity || 0)) },
       { field: 'tat', title: 'Std TAT', type: 'readonly', width: 90, compute: (r) => `${r.standard_tat} ${r.tat_unit === 'Business Days' ? 'bus.' : 'cal.'} days` },
       { field: 'rush_schedule', title: 'Rush schedule', type: 'readonly', width: 120 },
@@ -184,7 +189,8 @@ export async function version(main, vid) {
       { field: 'quantity', title: 'Qty', type: 'int', min: 1, width: 60 },
       { field: 'list_price', title: 'Tests at list', type: 'money', width: 100, editable: () => false },
       { field: 'package_price', title: 'Package price', type: 'money', min: 0, width: 110 },
-      { field: 'd_pct', title: 'Discount %', type: 'pct', width: 90, compute: (r) => (r.list_price ? (r.list_price - (r.package_price || 0)) / r.list_price * 100 : null) },
+      { field: 'd_pct', title: 'Discount %', type: 'pct', width: 90, compute: (r) => (r.list_price ? (r.list_price - (r.package_price || 0)) / r.list_price * 100 : null),
+        assign: (r, v) => { r.package_price = Math.round(Number(r.list_price || 0) * (1 - Number(v) / 100) * 100) / 100; }, help: 'Type a discount % to set the package price' },
       { field: 'total', title: 'Total', type: 'money', width: 105, compute: (r) => (r.package_price || 0) * (r.quantity || 0) },
       { field: 'specs', title: 'Specs', type: 'button', width: 120, label: (r) => `${r.tests.reduce((n, t) => n + Number(t.spec_count || 0), 0)} limits…`,
         help: 'Specification limits for the package\'s tests', onClick: (r) => pkSpecs(r) },
@@ -228,8 +234,21 @@ export async function version(main, vid) {
     main.querySelector('#tot').innerHTML = `<span>List value <b>${money(list)}</b></span><span>Discount <b>${money(list - fin)}</b> (${list ? ((list - fin) / list * 100).toFixed(2) : '0.00'}%)</span><span class="big">Quote total <b>${money(fin)}</b></span>`;
   }
   totals();
+  quoteChargesCard(main.querySelector('#qchg'), vid).catch(() => {});   // 0.36.0: kits, shipping, fees, discounts at this client's price
   setDirtyCheck(() => lg.changeCount() > 0 || rg.changeCount() > 0 || (pg && pg.changeCount() > 0));
   main.querySelector('#lundo').onclick = () => version(main, vid);
+  // 0.36.0: one discount % for every line still on the quote (then check and Save lines)
+  const pa = main.querySelector('#pctall');
+  if (pa) pa.onclick = async () => {
+    const v = await modal({ title: 'Discount every line', okText: 'Apply', intro: 'Sets each line\'s final price to its list price less this percentage (rounded to the cent). Nothing is saved until you click Save lines.',
+      fields: [{ name: 'pct', label: 'Discount %', type: 'number', required: true }] });
+    if (!v) return;
+    const pct = Number(v.pct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) { toast('Give a discount between 0 and 100 %.', 'err'); return; }
+    lg.rows.forEach((r) => { if (r.status !== 'Removed') r.final_price = Math.round(Number(r.list_price || 0) * (1 - pct / 100) * 100) / 100; });
+    lg.render(); lineBar(); totals();
+    toast(`${pct} % applied to every line: check, then Save lines.`);
+  };
   main.querySelector('#lsave').onclick = async () => {
     if (lg.hasErrors()) { toast('Fix the cells marked in red first.', 'err'); return; }
     const rows = lg.getChanges().map((r) => { const o = { ...r }; delete o.d_amt; delete o.d_pct; delete o.total; return o; });

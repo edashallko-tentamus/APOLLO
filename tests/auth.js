@@ -35,7 +35,8 @@ async function prepareUsers(base) {
   for (const u of list) {
     if (u.username === ADMIN || !u.is_active) continue;
     try { await login(base, u.username, PASSWORD); continue; } catch (_) { /* not set yet */ }
-    const temp = 'Temp' + Math.random().toString(36).slice(2, 10) + '9z';
+    // a random temporary password must not contain the user ID (e.g. "gm"): draw again until it does not (0.36.0; was flaky)
+    let temp; do { temp = 'Temp' + Math.random().toString(36).slice(2, 10) + '9z'; } while (temp.toLowerCase().includes(u.username.toLowerCase()));
     const t = await call(base, `/admin/users/${u.id}/temp-password`, { method: 'POST', cookie: admin, body: { password: temp } });
     if (!t.ok) throw new Error(`temp password ${u.username}: ${t.data.error}`);
     const c = await login(base, u.username, temp);

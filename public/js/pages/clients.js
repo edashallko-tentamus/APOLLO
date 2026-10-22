@@ -4,6 +4,7 @@ import { Grid } from '../grid.js';
 import { editableGrid, section, pagedList } from './common.js';
 import { newProject } from './projects.js';
 import { newOrder } from './orders.js';
+import { clientServiceLinesCard } from './charges.js';
 
 export async function list(main) {
   main.innerHTML = pageHeader('Clients', 'Hold and status apply to each client only. Nothing cascades from a parent client. Newest first, 50 at a time; search finds any client.',
@@ -80,12 +81,14 @@ export async function detail(main, id) {
       <p class="help">Active: everything allowed. On Hold: testing continues, reports are held. Inactive: no new orders; reports for work already in the lab can still go out. Holds never cascade to child clients.</p></div>
   </div>
   ${licWarn(d.licenses)}
+  <div class="card" id="csl" style="display:none"></div>
   <div class="card">${section('Licenses', 'Added over time and never deleted: when a license is renewed, add the new one; retire the old one (it stays in the history). A lab order names the license it is for, and the COA prints it.',
     d.can_edit ? '<button class="btn" id="addlic">+ Add license</button>' : '')}<div id="lg"></div></div>
   <div class="card">${section('Contacts and roles', 'Roles are per client: the same person can be Ordering here and Report-only elsewhere. One Primary per client; any number of Secondary.',
     '<button class="btn" id="link">+ Link existing contact</button> <button class="btn" id="newc">+ New contact</button>')}<div id="cg"></div></div>
   <div class="card">${section('Projects', 'Reusable quoted test packages for this client.', '<button class="btn" id="newp">+ New project</button>')}<div id="pg"></div></div>
-  <div class="card">${section('What this client can order', 'Only tests on an accepted, unexpired quote can be ordered (including parent-client projects shared with child sites).')}<div id="og"></div></div>`;
+  <div class="card">${section('Quoted prices', 'Tests on accepted, unexpired quotes (including parent-client projects shared with child sites) are ordered at these prices; any other test of the lab is ordered at its list price.')}<div id="og"></div></div>`;
+  clientServiceLinesCard(main.querySelector('#csl'), id, d.can_edit).catch(() => {});
 
   main.querySelector('#edit').onclick = async () => {
     const v = await clientForm(c, all); if (!v) return;
@@ -150,7 +153,7 @@ export async function detail(main, id) {
   main.querySelector('#neworder').onclick = () => newOrder(id);
 
   new Grid(main.querySelector('#og'), {
-    readOnly: true, rows: d.orderable, emptyText: 'Nothing orderable yet: no accepted quote. The client must be quoted or accept list pricing first.',
+    readOnly: true, rows: d.orderable, emptyText: 'No accepted quote: every test is ordered at its list price.',
     columns: [
       { field: 'project_code', title: 'Quote', type: 'link', width: 110, compute: (r) => `${r.project_code} v${r.version_no}`, href: (r) => '#/quote/' + r.project_version_id },
       { field: 'project_name', title: 'Project name', type: 'link', href: (r) => '#/projects/' + r.project_id },

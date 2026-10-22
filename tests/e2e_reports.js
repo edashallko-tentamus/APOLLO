@@ -129,7 +129,7 @@ const results = []; const check = (l, ok, x = '') => { results.push(!!ok); conso
   const pm = await session('projmgr');
   const cv = (await pm(`/reports/samples/${s1.id}/coa`)).data.versions[0];
   const pdf = await page.evaluate(async (u) => { const r = await fetch(u); const t = new Uint8Array(await r.arrayBuffer());
-    return { type: r.headers.get('content-type'), hash: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', t))).map((x) => x.toString(16).padStart(2, '0')).join(''), b64: btoa(String.fromCharCode(...t)) }; },
+    return { type: r.headers.get('content-type'), hash: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', t))).map((x) => x.toString(16).padStart(2, '0')).join(''), b64: (() => { let x = ''; for (let i = 0; i < t.length; i += 0x8000) x += String.fromCharCode.apply(null, t.subarray(i, i + 0x8000)); return btoa(x); })() }; },   // in chunks: a large PDF overflows a spread
   `/api/reports/coa/${cv.id}/pdf`);
   check('The issued PDF downloads unchanged (its SHA-256 is the recorded one)', pdf.type === 'application/pdf' && pdf.hash === cv.sha256);
   const pdfPath = path.join(OUT, 'r1_coa.pdf'); fs.writeFileSync(pdfPath, Buffer.from(pdf.b64, 'base64'));

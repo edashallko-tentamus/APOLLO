@@ -6,6 +6,8 @@ import { section, specDialog, pagedList } from './common.js';
 import { printLabels } from '../labels.js';
 import { orderBillingCard } from './billing.js';
 import { custodyCard, receiveDialog, openPhotoDialog, photosCard } from './custody.js';
+import { testPicker } from './picker.js';
+import { orderChargesCard } from './charges.js';
 import { contextMenu } from './testing.js';
 
 const CONDITIONS = ['Acceptable', 'Damaged', 'Temperature excursion', 'Short shipped', 'Leaking', 'Other'];
@@ -91,18 +93,21 @@ export async function detail(main, id) {
     <div><span>Order value</span><b>${money(o.order_value)}</b></div><div><span>Rush</span><b>${o.rush_pending ? o.rush_pending + ' awaiting approval' : o.rush_active ? o.rush_active + ' active' : 'None'}</b></div>
   </div>
   <div class="card">${section('Samples and tests', 'Add rows, paste from Excel, fill down with Ctrl+D. Several bottles or bags can be one sample (Containers). Each sample\'s tests are listed under it (▾ shows or hides them). Logging assigns the sample ID and starts the clock (Day 0).',
-    `<button class="btn" id="applyP" ${projects.length ? '' : 'disabled'}>Apply project to ticked samples</button> <button class="btn" id="addT" ${d.orderable.length ? '' : 'disabled'}>Add a test to ticked samples</button>
+    `<button class="btn" id="applyP" ${projects.length ? '' : 'disabled'}>Apply project to ticked samples</button> <button class="btn" id="addT">Add tests to ticked samples…</button>
      ${(d.packages || []).length ? '<button class="btn" id="addPk">Add a package to ticked samples</button>' : ''}
      <button class="btn" id="rushAll">Rush the whole order</button> <button class="btn ghost" id="cancelS" title="Cancel the ticked samples and their tests (kept, greyed; a reason is asked)">Cancel ticked samples…</button> <button class="btn ghost" id="toggleAll"></button>`)}
     ${(d.elsewhere || []).length ? `<p class="help" id="subc">Quoted tests that belong to another lab are subcontracted from ${esc(o.site_code)} and cannot be ordered here yet: ${esc(d.elsewhere.map((x) => `${x.test_name} (${x.site_code})`).join(', '))}. Order them at that lab.</p>` : ''}
     <div class="savebar" id="tsb"><span class="pending"></span><button class="btn ghost" id="tundo">Discard test changes</button><button class="btn primary" id="tsave">Save tests</button></div>
     <div id="sg"></div></div>
   ${d.attachments && d.attachments.length ? `<div class="card">${section('Attachments', 'Submission forms, chains of custody and other files (added from a sample\'s page).')}<ul>${d.attachments.map((a) => `<li><a href="/api/attachments/${a.id}/file?s=${encodeURIComponent(state.site || '')}" target="_blank" rel="noopener">${esc(a.label || a.file_name)}</a> <span class="help">${esc(a.kind)}${a.sample_id ? '' : ', whole order'}</span></li>`).join('')}</ul></div>` : ''}
+  <div class="card" id="ochg" style="display:none"></div>
   <div class="card" id="ocus"></div>
   <div class="card" id="obill" style="display:none"></div>
   <div class="card" id="ocoas" style="display:none">${section('Certificates of Analysis', 'Every COA issued for this order\'s samples, newest version first (the report ID is the sample ID followed by R and the version).')}<div id="ocg"></div></div>
   ${d.emails.length ? `<div class="card">${section('Emails sent for this order', 'Sandbox: stored in the Outbox, not actually sent.')}<div id="eg"></div></div>` : ''}`;
   custodyCard(main.querySelector('#ocus'), id, { data: cus, onChange: () => detail(main, id) }).catch(() => {});
+  // miscellaneous charges (0.36.0): kits, shipping, fees, discounts; billed at once
+  orderChargesCard(main.querySelector('#ochg'), id, { samples: d.samples }).catch(() => {});
   // the order's billing (I-1, migration 036): shown to people who see invoicing
   orderBillingCard(main.querySelector('#obill'), id).catch(() => {});
   // the order's COAs (Alex, 2026-10-14)
@@ -126,8 +131,8 @@ export async function detail(main, id) {
   const tierOpts = (r) => [{ value: null, label: 'Standard' }, ...d.tiers.filter((t) => r && t.schedule_id === r.test_rush_schedule_id).map((t) => ({ value: t.id, label: tierLabel(t) }))];
   const testColumns = [
     { field: 'test_name', title: 'Test', type: 'link', width: 200, href: (r) => '#/catalog/' + r.test_id },
-    { field: 'quote', title: 'Quote', type: 'link', width: 100, compute: (r) => (r.project_code ? `${r.project_code} v${r.project_version_no}` : r.media_lot_id ? 'Lot QA testing' : r.serving_order ? 'Catalogue price' : ''),
-      href: (r) => (r.project_version_id ? '#/quote/' + r.project_version_id : r.media_lot_id ? '#/inventory/lots/' + r.media_lot_id : null), help: 'The accepted quote version this test is priced from (a lot\'s QA test has no quote)' },
+    { field: 'quote', title: 'Quote', type: 'link', width: 100, compute: (r) => (r.project_code ? `${r.project_code} v${r.project_version_no}` : r.media_lot_id ? 'Lot QA testing' : r.serving_order ? 'Catalogue price' : r.catalogue_order ? 'List price' : ''),
+      href: (r) => (r.project_version_id ? '#/quote/' + r.project_version_id : r.media_lot_id ? '#/inventory/lots/' + r.media_lot_id : null), help: 'The accepted quote version this test is priced from; List price: not on the client\'s quote (0.36.0)' },
     { field: 'analytes', title: 'Analytes', type: 'button', width: 85, label: (r) => (r.pricing_mode === 'Analyte Selection' ? `${r.analytes_included} of ${r.analytes_total}` : '—'),
       onClick: (r) => { if (r.pricing_mode === 'Analyte Selection') analyteDialog(r, () => detail(main, id)); } },
     { field: 'list_price', title: 'List', type: 'money', width: 85 },
@@ -161,7 +166,7 @@ export async function detail(main, id) {
   const testGrids = [];
   function testPanel(s, el) {
     el.innerHTML = `<div class="dtool"><span class="dtitle">Tests on ${esc(s.sample_code || s.client_sample_id || 'this sample')}</span>
-      <button class="mini" data-addt ${d.orderable.length ? '' : 'disabled'}>+ Add a test</button> <button class="mini" data-applyp ${projects.length ? '' : 'disabled'}>+ Apply a project</button>${(d.packages || []).length ? ' <button class="mini" data-addpk>+ Add a package</button>' : ''}</div><div class="stests"></div>`;   // not "dgrid": the dashboards' layout style uses that name
+      <button class="mini" data-addt>+ Add tests</button> <button class="mini" data-applyp ${projects.length ? '' : 'disabled'}>+ Apply a project</button>${(d.packages || []).length ? ' <button class="mini" data-addpk>+ Add a package</button>' : ''}</div><div class="stests"></div>`;   // not "dgrid": the dashboards' layout style uses that name
     const g = new Grid(el.querySelector('.stests'), { rows: testsBySample.get(s.id) || [], emptyText: 'No tests yet: add a test or apply a project.', onChange: tBar,
       rowClass: (r) => (r.status === 'Cancelled' ? 'mutedrow' : r.rush_status === 'Pending Approval' ? 'warnrow' : ''), columns: testColumns });
     testGrids.push(g);
@@ -307,14 +312,14 @@ export async function detail(main, id) {
     if (!v) return;
     try { const r = await api(`/orders/${id}/apply-project`, { method: 'POST', body: { sample_ids: ids, project_id: v.project_id } }); ids.forEach((x) => hidden.delete(x)); toast(`${r.added} test${r.added === 1 ? '' : 's'} added.`); detail(main, id); } catch (e) { toast(e.message, 'err'); }
   }
+  // 0.36.0: the drill-down picker (service line > type > department, or search); any test of this lab, the client's
+  // quoted price when there is one, else the list price
   async function addTest(ids) {
     if (!ready()) return;
     if (!ids.length) { toast('Tick one or more samples first.', 'err'); return; }
-    const v = await modal({ title: `Add a quoted test to ${ids.length} sample${ids.length === 1 ? '' : 's'}`, okText: 'Add', intro: 'Only tests on this client\'s accepted quotes are listed. Type to search.',
-      fields: [{ name: 'line_id', label: 'Test', type: 'select', required: true, blank: false,
-        options: d.orderable.map((l) => ({ value: l.line_id, label: `${l.test_name} · ${money(l.final_price)} (${l.project_code})` })) }] });
-    if (!v) return;
-    try { const r = await api(`/orders/${id}/add-test`, { method: 'POST', body: { sample_ids: ids, line_id: v.line_id } }); ids.forEach((x) => hidden.delete(x)); toast(`${r.added} test${r.added === 1 ? '' : 's'} added.`); detail(main, id); } catch (e) { toast(e.message, 'err'); }
+    const names = ids.map((x) => { const s = d.samples.find((y) => y.id === x) || {}; return s.sample_code || s.client_sample_id || 'sample'; });
+    testPicker({ orderId: id, sampleIds: ids, sampleLabel: ids.length === 1 ? names[0] : `${ids.length} samples`, tiers: d.tiers,
+      onAdded: () => { ids.forEach((x) => hidden.delete(x)); detail(main, id); } });
   }
   async function addPackage(ids) {
     if (!ready()) return;

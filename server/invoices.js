@@ -18,7 +18,7 @@ async function data(db, id) {
   return { inv, lines };
 }
 
-function html({ inv, lines }, { preview = false } = {}) {
+function html({ inv, lines }, { preview = false, corrected = null } = {}) {
   const credit = inv.kind === 'Credit note';
   const sign = credit ? -1 : 1;
   const draft = inv.status === 'Draft';
@@ -26,8 +26,9 @@ function html({ inv, lines }, { preview = false } = {}) {
   const lateLine = (l) => (l.rush_ordered && Number(l.late_days) > 0
     ? `<div class="m late">Rush ordered: ${esc(l.rush_ordered)}, due ${esc(dOnly(l.due_date))}; reported ${esc(dOnly(l.completed_on))} (${l.late_days} working day${Number(l.late_days) === 1 ? '' : 's'} late).
        ${l.rush_billed !== l.rush_ordered ? `Billed ${l.rush_billed ? 'at the ' + esc(l.rush_billed) + ' rush rate' : 'without a rush fee'}.` : ''}</div>` : '');
+  // 058: a charge (kit, shipping, fee, discount) has no test; its sample is shown when it was added for one
   const row = (l) => `<tr${l.retest_of_id ? ' class="retest"' : ''}>
-      <td><b>${esc(l.sample_code)}</b>${l.client_sample_id ? `<div class="m">${esc(l.client_sample_id)}</div>` : ''}</td>
+      <td>${l.sample_code ? `<b>${esc(l.sample_code)}</b>` : (l.order_charge_id ? '<span class="m">Order</span>' : '')}${l.client_sample_id ? `<div class="m">${esc(l.client_sample_id)}</div>` : ''}</td>
       <td>${l.retest_of_id ? '<span class="tag">Retest</span> ' : ''}${esc(l.test_name)}${l.line_note ? `<div class="m">${esc(l.line_note)}</div>` : ''}${lateLine(l)}
         ${l.price_note ? `<div class="m">${esc(l.price_note)}</div>` : ''}</td>
       <td>${esc(dOnly(l.completed_on))}</td>
@@ -53,6 +54,7 @@ function html({ inv, lines }, { preview = false } = {}) {
     .reason { border-left: 3px solid #1f3a2c; padding: 4px 10px; margin: 6px 0 12px; background: #f6f8f7; }
   </style></head><body>
   ${preview || draft ? '<div class="banner">DRAFT: not issued. This is a preview for checking; the invoice number and date are given when it is issued.</div>' : ''}
+  ${corrected ? `<div class="banner">CORRECTED COPY (${esc(dOnly(corrected.at))}): the PO number has changed from ${esc(corrected.old_value || 'none')} to ${esc(corrected.new_value || 'none')}. Nothing else on this invoice has changed.</div>` : ''}
   ${inv.catchup ? '<div class="banner">Catch-up invoice: work completed before invoicing moved into LIMS3, dated the Friday of the week its report was issued. Not sent to the client.</div>' : ''}
   <div class="head"><div><div class="brand">${esc(inv.site_name)}</div><div class="m">Tentamus North America${inv.site_address ? '<br>' + esc(inv.site_address) : ''}</div></div>
     <div><h1>${credit ? 'Credit note' : 'Invoice'}</h1><div class="meta">${esc(draft ? inv.draft_code + ' (draft)' : inv.invoice_number)}<br>
@@ -62,7 +64,7 @@ function html({ inv, lines }, { preview = false } = {}) {
     <div><b>Order</b>${esc(inv.order_code)}${inv.po_number ? `<br>Your PO: ${esc(inv.po_number)}` : ''}</div>
     ${credit ? '' : `<div><b>Terms</b>${Number(terms) === 0 ? 'Due on receipt' : `Net ${esc(terms)} days`}</div>`}</div>
   ${credit && inv.reason ? `<div class="reason"><b>Reason:</b> ${esc(inv.reason)}</div>` : ''}
-  <table><thead><tr><th>Sample</th><th>Test</th><th>Reported</th><th class="n">List price</th><th class="n">Discount</th><th class="n">Price</th><th class="n">Rush</th><th class="n">Amount</th></tr></thead>
+  <table><thead><tr><th>Sample</th><th>Test</th><th>Date</th><th class="n">List price</th><th class="n">Discount</th><th class="n">Price</th><th class="n">Rush</th><th class="n">Amount</th></tr></thead>
     <tbody>${lines.map(row).join('')}</tbody></table>
   <div class="tot">
     <div><span>List value</span><span>${money(inv.list_total)}</span></div>
@@ -71,13 +73,14 @@ function html({ inv, lines }, { preview = false } = {}) {
     <div class="big"><span>${credit ? 'Total credited' : 'Total due'}</span><span>${money(inv.total)}</span></div></div>
   ${inv.note ? `<h2>Note</h2><div>${esc(inv.note)}</div>` : ''}
   <div class="terms">${credit ? 'This credit note reduces the amount owed on the invoice named above.' : `<b>Payment.</b> ${inv.invoice_remit_to ? esc(inv.invoice_remit_to) : 'Please quote the invoice number with your payment. Payment details are available from our accounts team.'}`}
-    Prices are in USD per sample and test, as quoted. Work is invoiced once its report has been issued.${lines.some((l) => l.retest_of_id) ? ' Retests are listed with the test they repeat; a retest ordered by the laboratory for its own investigation is not charged.' : ''}</div>
+    Prices are in USD per sample and test, as quoted. Work is invoiced once its report has been issued${lines.some((l) => l.order_charge_id) ? '; kits, shipping and other charges when they are added' : ''}.${lines.some((l) => l.retest_of_id) ? ' Retests are listed with the test they repeat; a retest ordered by the laboratory for its own investigation is not charged.' : ''}</div>
   </body></html>`;
 }
 
 async function pdf(db, id, opts = {}) {
   const d = await data(db, id);
-  const label = d.inv.status === 'Draft' ? `${d.inv.draft_code} · DRAFT, NOT ISSUED` : `${d.inv.invoice_number}${d.inv.catchup ? ' · catch-up copy from the record' : ''}`;
+  const label = d.inv.status === 'Draft' ? `${d.inv.draft_code} · DRAFT, NOT ISSUED`
+    : `${d.inv.invoice_number}${opts.corrected ? ' · corrected copy' : ''}${d.inv.catchup ? ' · catch-up copy from the record' : ''}`;
   const out = await COA.htmlToPdf(html(d, opts), `${label} · ${d.inv.site_name} · Tentamus North America`);
   return { ...out, data: d };
 }

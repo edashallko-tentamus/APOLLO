@@ -28,10 +28,13 @@ async function data(db, vid) {
   // packages (047): one line each, its tests listed under it
   const packages = await db.rows(`SELECT qp.*, (SELECT string_agg(t.test_name, ', ' ORDER BY q.created_at) FROM quoted_test_configuration q JOIN test t ON t.id = q.test_id
       WHERE q.quoted_package_id = qp.id AND q.status = 'Active') AS tests FROM quoted_package qp WHERE qp.project_version_id = $1 AND qp.status = 'Active' ORDER BY qp.created_at`, [vid]);
-  return { v, lines, rush, packages };
+  // charges (058): kits, shipping, fees and discounts at this client's price
+  const charges = await db.rows(`SELECT qc.quantity, qc.list_price, qc.unit_price, qc.note, ci.charge_name, ci.kind, charge_sign(ci.kind) AS sign
+    FROM quoted_charge qc JOIN charge_item ci ON ci.id = qc.charge_item_id WHERE qc.project_version_id = $1 AND qc.status = 'Active' ORDER BY ci.kind = 'Discount', ci.charge_name`, [vid]);
+  return { v, lines, rush, packages, charges };
 }
 
-function html({ v, lines, rush, packages = [] }, { preview = false } = {}) {
+function html({ v, lines, rush, packages = [], charges = [] }, { preview = false } = {}) {
   const total = lines.reduce((s, l) => s + Number(l.line_total || 0), 0) + packages.reduce((s, p) => s + Number(p.package_price) * Number(p.quantity), 0);
   const listTotal = lines.reduce((s, l) => s + Number(l.list_price) * Number(l.quantity), 0) + packages.reduce((s, p) => s + Number(p.list_price) * Number(p.quantity), 0);
   const pkgRows = packages.map((p) => `<tr class="pkg"><td><b>${esc(p.package_name)}</b> <span class="m">(${esc(p.package_code)}, package)</span><div class="m">Includes: ${esc(p.tests || '')}</div></td>
@@ -69,6 +72,10 @@ function html({ v, lines, rush, packages = [] }, { preview = false } = {}) {
   <table><thead><tr><th>Test</th><th class="n">Qty</th><th class="n">List price</th><th class="n">Your price</th><th class="n">Discount</th><th class="n">Line total</th><th>Standard turnaround</th></tr></thead>
     <tbody>${pkgRows}${body}</tbody></table>
   <div class="tot"><span>List value ${money(listTotal)}</span><span>You save ${money(listTotal - total)}</span><span class="big">Total ${money(total)}</span></div>
+  ${charges.length ? `<h2>Other charges</h2><table><thead><tr><th>Charge</th><th class="n">Qty</th><th class="n">List price</th><th class="n">Your price</th><th class="n">Total</th></tr></thead><tbody>
+    ${charges.map((x) => `<tr><td><b>${esc(x.charge_name)}</b> <span class="m">(${esc(x.kind)})</span>${x.note ? `<div class="m">${esc(x.note)}</div>` : ''}</td><td class="n">${x.quantity}</td>
+      <td class="n">${money(x.sign * x.list_price)}</td><td class="n">${money(x.sign * x.unit_price)}</td><td class="n">${money(x.sign * x.unit_price * x.quantity)}</td></tr>`).join('')}</tbody></table>
+    <p class="m">Charges are invoiced when they are added to an order (for example, shipping when a kit is sent); a discount is taken off the invoice it is added to.</p>` : ''}
   ${scheds.length ? `<h2>Rush options</h2><table><thead><tr><th>Schedule</th><th>Tier</th><th>Turnaround</th><th class="n">Surcharge</th><th class="n">Your rush discount</th></tr></thead><tbody>
     ${rush.map((r) => `<tr><td>${esc(r.schedule_name)}</td><td>${esc(r.tier_name)}</td><td>${esc(days(r.rush_tat, r.tat_unit))}</td>
       <td class="n">${r.surcharge_type === 'Flat' ? money(r.surcharge_value) : Number(r.surcharge_value) + '% of price'}</td><td class="n">${Number(r.discount_pct) ? Number(r.discount_pct) + '%' : '-'}</td></tr>`).join('')}</tbody></table>` : ''}

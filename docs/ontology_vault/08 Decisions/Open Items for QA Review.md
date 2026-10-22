@@ -134,3 +134,9 @@ Decisions built into LIMS3 that QA (Jake Teller) should confirm during his syste
 84. The internal switches the app uses for its own steps can be set by whoever holds the app account's password. Acceptable with that password held by IT only, or must they be closed (a larger change)?
 85. The audit trail pages show a lab's people their own lab's entries and shared records (clients, the catalogue); all-labs groups see every lab. Is that the right reach, and should the central Audit trail page also need audit.view?
 86. Uploaded files are stored as uploaded and judged by their content when shown (only real PDFs and pictures open in the browser; everything else downloads). Acceptable, or should uploads of other types be refused?
+
+
+**0.36.0: charges, ordering at list price, invoice corrections** ([[Decision - Charges, Service Lines, Ordering at List Price and Invoice Corrections]])
+87. Correcting the PO number of an issued invoice changes that field on the record (signed, with a reason, the correction kept with both values and a corrected copy sent; the original PDF unchanged). Acceptable for finance and audit, or must every change to an issued invoice be a credit note and a new invoice?
+88. Payment status recorded by hand (who, when, a reason) until QuickBooks reports payments: who may record it (built: invoicing.issue)?
+89. Tests ordered without a quote at list price: any control needed for regulated (GMP) clients, for example that a quote exists before testing starts?

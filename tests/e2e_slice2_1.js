@@ -87,14 +87,13 @@ const results = []; const check = (l, ok, x = '') => { results.push(ok); console
   await page.locator('.savebar.show button', { hasText: 'Save samples' }).click(); await page.waitForTimeout(800);
   check('Samples saved with list matrices', (await page.locator(samples).allInnerTexts()).filter((t) => /Powder|Capsule/.test(t)).length === 2);
 
-  // ---- smart dropdown with only the arrow keys: Add a test to ticked samples
-  await page.click('#addT'); await page.waitForSelector('.modal .combo-input');
-  await page.locator('.modal .combo-input').first().focus(); await page.keyboard.press('ArrowDown'); await page.waitForTimeout(100);
-  check('Down arrow opens the list', (await page.locator('.combo-list .combo-item').count()) > 1);
-  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
-  const picked = await page.locator('.modal select').first().evaluate((s) => s.options[s.selectedIndex].text);
-  await page.click('.modal [data-ok]'); await page.waitForTimeout(800);
-  check('Arrow keys picked the second test and it was added under both samples', (await page.locator(testRows).count()) === 2, picked);
+  // ---- the test picker (0.36.0): service line > type > department, or search; the client's quoted tests first
+  await page.click('#addT'); await page.waitForSelector('.modal.tpk [data-t]');
+  check('The picker opens on the client\'s quoted tests', /On this client's quotes/.test(await page.locator('.modal.tpk [data-c="line"] button.on').innerText()));
+  await page.locator('.modal.tpk [data-t]:not([disabled])').nth(1).check();
+  const picked = await page.locator('.modal.tpk [data-t]:checked').evaluate((c) => c.closest('tr').innerText);
+  await page.click('.modal.tpk [data-ok]'); await page.waitForTimeout(800);
+  check('The ticked test was added under both samples', (await page.locator(testRows).count()) === 2, picked);
   await shot('33_new_order_tests_under_samples');
 
   // ---- lab access: the demo Intake Tech works in CFL only

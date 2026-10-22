@@ -42,7 +42,7 @@ async function as(who) {
   // ---- 1. Test catalogue > Packages: a new package
   await signIn(page, BASE, 'Alex Kiddle', '#/catalog');
   await go('#/catalog?tab=packages');
-  check('The catalogue has Tests, Packages and Price changes tabs', (await page.locator('main .tabs .tab').allInnerTexts()).join('|') === 'Tests|Packages|Price changes');
+  check('The catalogue has Tests, Packages and Price changes tabs (and, since 0.36.0, Charges and Service lines)', (await page.locator('main .tabs .tab').allInnerTexts()).join('|') === 'Tests|Packages|Price changes|Charges|Service lines');
   await page.click('#newpkg'); await page.waitForSelector('.modal');
   await page.fill('#f_package_name', 'E2E supplement basics');
   check('The new package asks no pricing mode or discount (049)', (await page.locator('.modal #f_discount_pct, .modal #f_pricing_mode').count()) === 0);

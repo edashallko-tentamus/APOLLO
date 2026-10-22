@@ -1,10 +1,11 @@
 // Test catalogue and the Test Workflow Designer, step 1: pricing, TAT, cutoff and rush
 import { api, esc, pageHeader, toast, modal, state, money, askReason, setDirtyCheck, badge, can, confirmBox } from '../app.js';
 import { Grid } from '../grid.js';
-import { section } from './common.js';
+import { section, editableGrid } from './common.js';
 
 // Tabs (P-1, migration 047): Tests | Packages | Price changes
-const TABS = [['tests', 'Tests'], ['packages', 'Packages'], ['prices', 'Price changes']];
+// 0.36.0 (migration 058): Charges (kits, shipping, fees, discounts) and Service lines (the order's test picker)
+const TABS = [['tests', 'Tests'], ['packages', 'Packages'], ['prices', 'Price changes'], ['charges', 'Charges'], ['lines', 'Service lines']];
 const tabBar = (tab) => `<div class="tabs">${TABS.map(([k, l]) => `<a class="tab ${k === tab ? 'on' : ''}" href="#/catalog${k === 'tests' ? '' : '?tab=' + k}">${esc(l)}</a>`).join('')}</div>`;
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -12,6 +13,8 @@ export async function list(main) {
   const tab = TABS.some(([k]) => k === state.query?.get('tab')) ? state.query.get('tab') : 'tests';
   if (tab === 'packages') return packagesTab(main);
   if (tab === 'prices') return pricesTab(main);
+  if (tab === 'charges') return chargesTab(main);
+  if (tab === 'lines') return linesTab(main);
   const rows = await api('/catalog');
   const site = state.site;
   main.innerHTML = pageHeader('Test catalogue', 'Built by the Test Workflow Designer (step 1). Pricing lives here, outside the validated test version.',
@@ -259,11 +262,69 @@ async function pricesTab(main) {
   };
 }
 
+// ---------------------------------------------------------------- charges (0.36.0)
+async function chargesTab(main) {
+  const d = await api('/charge-items');
+  const lines = (await api('/service-lines')).lines;
+  main.innerHTML = pageHeader('Test catalogue', 'Charges that are not tests: sampling kits, shipping, report fees, surcharges and discounts. They go on lab orders (billed at once, never on a COA), on quotes at a price per client, and on draft invoices. A Discount is taken off.',
+    '', { kind: 'charges' }) + tabBar('charges')
+    + `<p class="help">${d.can_edit ? `Add rows or paste from Excel; fill down with Ctrl+D. A new charge is this lab's${d.is_admin ? ', or every lab\'s (choose in Applies to; system administrators only)' : ''}. Retire a charge by setting it Inactive.` : 'Changed by people with catalog.edit (General Managers).'}</p><div id="g"></div>`;
+  editableGrid({ el: main.querySelector('#g'), rows: d.rows, search: true, readOnly: !d.can_edit, allowAdd: d.can_edit, what: 'charges',
+    newRow: () => ({ kind: 'Other', price: 0, status: 'Active', scope: 'This lab' }), rowClass: (r) => (r.status === 'Inactive' ? 'mutedrow' : ''),
+    emptyText: 'No charges yet. Add rows: e.g. Sampling kit (Kit), Ground shipping (Shipping), Rush report fee (Report fee), Loyalty discount (Discount).',
+    columns: [
+      { field: 'charge_code', title: 'Code', type: 'readonly', width: 80 },
+      { field: 'charge_name', title: 'Charge', width: 220, required: true },
+      { field: 'kind', title: 'Kind', type: 'select', width: 110, options: ['Kit', 'Shipping', 'Report fee', 'Surcharge', 'Discount', 'Other'] },
+      { field: 'price', title: 'Price', type: 'money', min: 0, width: 95, help: 'The default price (a Discount: the amount taken off). Each client\'s price can be set on their quote.' },
+      { field: 'description', title: 'Description', width: 240 },
+      { field: 'service_line_id', title: 'Service line', type: 'select', width: 150, options: () => [{ value: null, label: '' }, ...lines.map((l) => ({ value: l.id, label: l.line_name }))],
+        format: (v) => (lines.find((l) => l.id === v) || {}).line_name || '' },
+      { field: 'scope', title: 'Applies to', type: 'select', width: 110, options: d.is_admin ? ['This lab', 'Every lab'] : ['This lab'], editable: (r, isNew) => isNew,
+        format: (v, r) => (r.id ? (r.site_id ? r.site_code : 'Every lab') : v) },
+      { field: 'status', title: 'Status', type: 'select', width: 95, options: ['Active', 'Inactive'] },
+      { field: 'used', title: 'Used', type: 'readonly', width: 60, help: 'How many times it is on lab orders' }],
+    save: (rows, reason) => api('/charge-items', { method: 'POST', body: { rows, reason } }), afterSave: () => chargesTab(main) });
+}
+
+// ---------------------------------------------------------------- service lines (0.36.0)
+async function linesTab(main) {
+  const [d, tests] = await Promise.all([api('/service-lines'), api('/service-lines/tests')]);
+  const typeLabel = (id) => { const t = d.types.find((x) => x.id === id); return t ? `${t.line_name} > ${t.type_name}` : ''; };
+  main.innerHTML = pageHeader('Test catalogue', 'Service line > service line type > department: how the order\'s test picker narrows this lab\'s tests (Cecilia, 2026-10-21). Service lines and types are shared by every lab; each lab puts its own tests under them. Clients\' service lines are set on the client page.',
+    '', { kind: 'service_lines' }) + tabBar('lines')
+    + `<div class="cols"><div class="card">${section('Service lines', d.can_edit ? 'Add, rename or set Inactive. Paste and fill down work.' : '')}<div id="lg"></div></div>
+       <div class="card">${section('Service line types', d.can_edit ? 'Each type sits under one service line. Paste and fill down work.' : '')}<div id="tg"></div></div></div>
+       <div class="card">${section('This lab\'s tests', 'Pick each test\'s service line type (type to search); select a block and fill down with Ctrl+D, or paste from Excel. Its department is set in the Workflow Designer.')}<div id="xg"></div></div>`;
+  editableGrid({ el: main.querySelector('#lg'), rows: d.lines, readOnly: !d.can_edit, allowAdd: d.can_edit, what: 'service lines', newRow: () => ({ status: 'Active', sort_order: (d.lines.length + 1) * 10 }),
+    rowClass: (r) => (r.status === 'Inactive' ? 'mutedrow' : ''), columns: [
+      { field: 'line_name', title: 'Service line', width: 200, required: true },
+      { field: 'sort_order', title: 'Order', type: 'int', width: 70 },
+      { field: 'status', title: 'Status', type: 'select', width: 95, options: ['Active', 'Inactive'] }],
+    save: (rows, reason) => api('/service-lines', { method: 'POST', body: { rows, reason } }), afterSave: () => linesTab(main) });
+  editableGrid({ el: main.querySelector('#tg'), rows: d.types, readOnly: !d.can_edit, allowAdd: d.can_edit, what: 'service line types', newRow: () => ({ status: 'Active', sort_order: 10 }),
+    rowClass: (r) => (r.status === 'Inactive' ? 'mutedrow' : ''), columns: [
+      { field: 'service_line_id', title: 'Service line', type: 'select', width: 170, required: true, editable: (r, isNew) => isNew,
+        options: () => d.lines.map((l) => ({ value: l.id, label: l.line_name })), format: (v) => (d.lines.find((l) => l.id === v) || {}).line_name || '' },
+      { field: 'type_name', title: 'Type', width: 190, required: true },
+      { field: 'sort_order', title: 'Order', type: 'int', width: 70 },
+      { field: 'status', title: 'Status', type: 'select', width: 95, options: ['Active', 'Inactive'] },
+      { field: 'test_count', title: 'Tests here', type: 'readonly', width: 80 }],
+    save: (rows, reason) => api('/service-lines/types', { method: 'POST', body: { rows, reason } }), afterSave: () => linesTab(main) });
+  editableGrid({ el: main.querySelector('#xg'), rows: tests, search: true, readOnly: !d.can_edit, what: 'the service line types of tests', columns: [
+    { field: 'test_code', title: 'Code', type: 'link', width: 85, href: (r) => '#/catalog/' + r.id },
+    { field: 'test_name', title: 'Test', type: 'readonly', width: 260 },
+    { field: 'department_name', title: 'Department', type: 'readonly', width: 140 },
+    { field: 'service_line_type_id', title: 'Service line > type', type: 'select', width: 280,
+      options: () => [{ value: null, label: '' }, ...d.types.filter((t) => t.status === 'Active').map((t) => ({ value: t.id, label: `${t.line_name} > ${t.type_name}` }))], format: typeLabel }],
+    save: (rows, reason) => api('/service-lines/tests', { method: 'POST', body: { rows, reason } }), afterSave: () => linesTab(main) });
+}
+
 export async function editor(main, testId) {
   const [d, schedules, analytes] = await Promise.all([api('/catalog/' + testId), api('/rush-schedules'), api('/analytes')]);
   const e = d.entry; const en = state.meta.enums;
   const form = {
-    test_name: d.test.test_name, status: d.test.status, serving_role: d.test.serving_role || '', description: e.description || '', pricing_mode: e.pricing_mode,
+    test_name: d.test.test_name, status: d.test.status, serving_role: d.test.serving_role || '', service_line_type_id: d.test.service_line_type_id || '', description: e.description || '', pricing_mode: e.pricing_mode,
     base_price: e.base_price, prep_fee: e.prep_fee, standard_tat: e.standard_tat, tat_unit: e.tat_unit,
     cutoff_time: (e.cutoff_time || '').slice(0, 5), rush_schedule_id: e.rush_schedule_id || '', show_in_public_catalogue: e.show_in_public_catalogue,
   };
@@ -279,6 +340,8 @@ export async function editor(main, testId) {
         <label>Description<input data-f="description" value="${esc(form.description)}"></label>
         <label>Serving test<select data-f="serving_role" id="f_serving_role">${[['', 'No: an ordinary test'], ['Serving weight', 'Serving weight (its result is the average unit weight)'], ['Density', 'Density (g/mL)']].map(([v, l]) => `<option value="${v}" ${v === form.serving_role ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
           <small>Its approved result is fed back to the sample for results per serving (ordered by the "Per serving" tick on an order).</small></label>
+        <label>Service line > type<select data-f="service_line_type_id"><option value=""></option>${(d.service_line_types || []).map((t) => `<option value="${esc(t.id)}" ${t.id === form.service_line_type_id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select>
+          <small>Where the order's test picker lists this test (Test catalogue > Service lines).</small></label>
         <div class="radios">${en.pricing_mode.map((m) => `<label class="radio"><input type="radio" name="pm" value="${esc(m)}" ${m === form.pricing_mode ? 'checked' : ''}>
           <b>${esc(m)}</b><small>${{ 'Base Price Only': 'One price for the whole test.', 'Base + Preparation Fee': 'Base price plus a preparation fee.', 'Analyte Selection': 'Each analyte has a price and can be switched on or off. Base and prep fee are added if filled in.' }[m]}</small></label>`).join('')}</div>
         <div class="row3">
@@ -383,7 +446,7 @@ export async function editor(main, testId) {
     const reason = await askReason(`catalogue terms for ${d.test.test_code}`); if (!reason) return;
     const body = {
       reason,
-      test: { test_name: form.test_name, status: form.status, serving_role: form.serving_role || null },
+      test: { test_name: form.test_name, status: form.status, serving_role: form.serving_role || null, service_line_type_id: form.service_line_type_id || null },
       entry: { description: form.description, pricing_mode: form.pricing_mode, base_price: Number(form.base_price) || 0,
         prep_fee: form.pricing_mode === 'Base Price Only' ? 0 : Number(form.prep_fee) || 0, standard_tat: Number(form.standard_tat),
         tat_unit: form.tat_unit, cutoff_time: form.cutoff_time, rush_schedule_id: form.rush_schedule_id || null,

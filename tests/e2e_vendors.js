@@ -121,7 +121,7 @@ async function as(who, lab = 'CFL') {
   await go('#/purchasing/suppliers');
   const nt = await page.locator('#notices').innerText();
   check('CFL\'s QA sees the notices: the approval and the suspension', /approved Budget Lab Supplies for every lab/.test(nt) && /suspended Meridian Chemical Co\. for every lab/.test(nt));
-  await page.click('#ack'); await page.waitForTimeout(1000);
+  await page.click('#ack'); await page.waitForSelector('#notices', { state: 'detached', timeout: 10000 }).catch(() => {}); await page.waitForTimeout(300);
   check('Marked as read', (await page.locator('#notices').count()) === 0 && (await qaApi('/purchasing/vendors')).notices.every((n) => n.acknowledged_at));
   await go('#/purchasing/risk-classes');
   check('A lab\'s QA cannot change the supply scopes', (await page.locator('#sg [data-add]').count()) === 0);

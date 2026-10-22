@@ -259,11 +259,14 @@ route('GET', '/api/catalog/:testId', async (c) => {
     rush_requires_approval($1, rt.id) AS effective FROM rush_fee_tier rt WHERE rt.schedule_id = $2 AND rt.status = 'Active'
     ORDER BY sort_order`, [entry.id, entry.rush_schedule_id]) : [];
   const versions = await c.db.rows('SELECT version_no, status, effective_from FROM test_version WHERE test_id = $1 ORDER BY version_no', [c.params.testId]);
-  return { test, entry, list_price: list ? list.list_price : 0, analytes, tiers, versions };
+  // 058: the service line type the test is listed under (the order's test picker)
+  const service_line_types = await c.db.rows(`SELECT t.id, sl.line_name || ' > ' || t.type_name AS label FROM service_line_type t JOIN service_line sl ON sl.id = t.service_line_id
+    WHERE (t.status = 'Active' AND sl.status = 'Active') OR t.id = $1 ORDER BY sl.sort_order, sl.line_name, t.sort_order, t.type_name`, [test.service_line_type_id || null]);
+  return { test, entry, list_price: list ? list.list_price : 0, analytes, tiers, versions, service_line_types };
 });
 route('PUT', '/api/catalog/:testId', (c) => tx(c, async (t) => {
   const { test = {}, entry = {}, analytes = [], approvals = [] } = c.body;
-  await upsertRows(t, 'test', [{ ...test, id: c.params.testId }], ['test_name', 'status', 'serving_role']);   // serving_role: 033
+  await upsertRows(t, 'test', [{ ...test, id: c.params.testId }], ['test_name', 'status', 'serving_role', 'service_line_type_id']);   // serving_role: 033; service line type: 058
   const e = await t.one('SELECT id FROM test_catalog_entry WHERE test_id = $1', [c.params.testId]);
   await upsertRows(t, 'test_catalog_entry', [{ ...entry, id: e.id }], ['description', 'pricing_mode', 'base_price', 'prep_fee',
     'standard_tat', 'tat_unit', 'cutoff_time', 'rush_schedule_id', 'show_in_public_catalogue']);
@@ -372,7 +375,8 @@ const QUOTE_PARTS = (where) => `
     JOIN project_version pv ON pv.id = q.project_version_id WHERE ${where}`;
 const AUDIT_SCOPES = {
   order: `SELECT 'lab_order', $1::uuid UNION ALL SELECT 'sample', s.id FROM sample s WHERE s.lab_order_id = $1 ${SAMPLE_PARTS('s.lab_order_id = $1')}
-    UNION ALL SELECT 'email_outbox', e.id FROM email_outbox e WHERE e.lab_order_id = $1`,
+    UNION ALL SELECT 'email_outbox', e.id FROM email_outbox e WHERE e.lab_order_id = $1
+    UNION ALL SELECT 'order_charge', oc.id FROM order_charge oc WHERE oc.lab_order_id = $1`,
   sample: `SELECT 'sample', $1::uuid ${SAMPLE_PARTS('s.id = $1')}
     UNION ALL SELECT 'coa', c.id FROM coa c WHERE c.sample_id = $1 UNION ALL SELECT 'coa_version', v.id FROM coa_version v JOIN coa c ON c.id = v.coa_id WHERE c.sample_id = $1
     UNION ALL SELECT 'coa_note', n.id FROM coa_note n WHERE n.sample_id = $1
@@ -502,7 +506,7 @@ route('GET', '/api/orders/:id', async (c) => {
   order.client_license_id = (await c.db.one('SELECT client_license_id FROM lab_order WHERE id = $1', [order.id])).client_license_id;   // 055: not in lab_order_view
   const samples = await c.db.rows(`SELECT sv.*, (SELECT count(*) FROM sample_photo ph WHERE ph.sample_id = sv.id AND ph.status = 'Active')::int AS photo_count, s2.serving_size, s2.serving_unit, s2.serving_count, s2.serving_count_unit, s2.servings_per_package, s2.report_per_serving, s2.unit_weight, s2.unit_weight_unit, s2.unit_weight_result_id, s2.density, s2.density_unit, s2.density_result_id, s2.metrc_id FROM sample_view sv JOIN sample s2 ON s2.id = sv.id
     WHERE sv.lab_order_id = $1 ORDER BY sv.created_at, sv.client_sample_id`, [c.params.id]);   // (serving size: migration 028)
-  const tests = await c.db.rows(`SELECT v.*, rt2.serving_order, (SELECT count(*) FROM specification sp WHERE sp.requested_test_id = v.id AND sp.status = 'Active') AS spec_count,
+  const tests = await c.db.rows(`SELECT v.*, rt2.serving_order, rt2.catalogue_order, (SELECT count(*) FROM specification sp WHERE sp.requested_test_id = v.id AND sp.status = 'Active') AS spec_count,
       rt2.ordered_package_id, op.order_package_code, op.status AS package_status, tp.package_code, tp.package_name
     FROM requested_test_view v JOIN requested_test rt2 ON rt2.id = v.id LEFT JOIN ordered_package op ON op.id = rt2.ordered_package_id LEFT JOIN test_package tp ON tp.id = op.package_id
     WHERE v.lab_order_id = $1 ORDER BY v.logged_at NULLS LAST, v.client_sample_id, v.test_name`, [c.params.id]);   // packages: 047
@@ -532,7 +536,7 @@ route('GET', '/api/samples/:id', async (c) => {
   if (!sample) throw new Error('Sample not found');
   const order = await c.db.one('SELECT * FROM lab_order_view WHERE id = $1', [sample.lab_order_id]);
   await checkSite(c, order.site_id);
-  const tests = await c.db.rows(`SELECT v.*, rt2.serving_order, (SELECT count(*) FROM specification sp WHERE sp.requested_test_id = v.id AND sp.status = 'Active') AS spec_count,
+  const tests = await c.db.rows(`SELECT v.*, rt2.serving_order, rt2.catalogue_order, (SELECT count(*) FROM specification sp WHERE sp.requested_test_id = v.id AND sp.status = 'Active') AS spec_count,
       rt2.ordered_package_id, op.order_package_code, op.status AS package_status, tp.package_code, tp.package_name
     FROM requested_test_view v JOIN requested_test rt2 ON rt2.id = v.id LEFT JOIN ordered_package op ON op.id = rt2.ordered_package_id LEFT JOIN test_package tp ON tp.id = op.package_id
     WHERE v.sample_id = $1 ORDER BY v.test_name`, [c.params.id]);
@@ -712,6 +716,7 @@ require('./routes_waste')({ route, tx, currentSite, hasPermission, isUuid, AUDIT
 // the chain of custody, receipts and sample photos (0.29.0, migration 051)
 require('./routes_custody')({ route, signedTx, tx, checkSite, hasPermission, isUuid, AUDIT_SCOPES });
 require('./routes_labels')({ route, checkSite, currentSite, isUuid });
+require('./routes_charges')({ route, tx, currentSite, checkSite, hasPermission, isUuid, AUDIT_SCOPES, AUDIT_LISTS });   // 0.36.0: charges, service lines, the test picker
 require('./routes_search')(route, { currentSite, hasPermission });   // 0.35.0: search everything (the box at the top of every page)
 // Background jobs: automatic equipment tag-outs (expired calibration, maintenance due) at start and every hour
 module.exports.startJobs = (db) => {

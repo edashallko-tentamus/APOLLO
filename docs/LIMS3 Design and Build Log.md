@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.36.2** (2026-10-23) |
+| Current version | **0.36.3** (2026-10-23) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1898 database rule tests (0.36.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and 41 browser test suites (0.36.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.36.3 | 2026-10-23 | Backend and front end separated | Claude Code (Edashall Konah) | none | Folders `backend/` (server, db, data) and `frontend/` (public, a small server); two programs, the front end serving the screens and forwarding `/api` to the backend; `npm start` runs both |
 | 0.36.2 | 2026-10-23 | Web server hardening | Claude Code (Edashall Konah) | none | A broken %-code in an address no longer stops the server; the page folder check needs the folder separator; uploads over 5 MB are cut off instead of read to the end; behind a proxy the rate limit takes the last X-Forwarded-For entry (the proxy's) |
 | 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
 | 0.36.0 | 2026-10-21 | Charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections | Claude in the cloud | 058 | Discount % typed on quote lines and packages (and one % for every line); miscellaneous charges (kits, shipping, fees, discounts) in the catalogue, on quotes, on orders (billed at once) and on draft invoices; service line > type > department on tests and service lines on clients; the order's drill-down test picker; any test of the lab ordered at its list price (a quote line still wins); the invoice details first, payment status recorded by hand; the PO of an issued invoice corrected (signed) with a corrected copy sent |
@@ -154,6 +155,19 @@ A living record of how LIMS3 is designed and built: what changed in each version
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.36.3: backend and front end separated (2026-10-23, Claude Code for Edashall Konah; no migration)
+
+- **Why.** Edashall Konah asked for the back and front end to be separate parts, for developers who take the system over: both separate folders and separate programs. Alex to confirm (CLAUDE.md, "Project layout").
+- **What changed.**
+  - Folders (moved with history kept): `server/` to `backend/server/`, `db/` to `backend/db/`, `public/` to `frontend/public/`; the embedded database is now `backend/data/`. Code inside each half kept its relative paths.
+  - `backend/server/server.js`: the API only, on `127.0.0.1:3001` (`LIMS_API_PORT`); any other address is 404. `PORT` still names the address people open (links in emails and PDFs, verification screenshots). Uploads over 5 MB are now read and thrown away with a "Request too large" answer (0.36.2 cut the connection, which the front end could only report as "backend not running").
+  - `frontend/server.js` (new): serves the screens with the page security headers and the 0.36.2 path checks, and forwards `/api/...` unchanged to `LIMS_API_URL` (default `http://127.0.0.1:3001`), one backend connection per request. The browser sees one address, so the session cookie, the security policy and the public pages work as before (no CORS). It passes the person's computer in X-Forwarded-For. If the backend answers before an upload has all arrived, the browser's connection is closed afterwards (found by `test:security`: the next request on it hung). Backend down: 502 with a plain message.
+  - `start.js` (new): `npm start` runs both, with `LIMS_TRUST_PROXY=1` on the backend; if one stops, the other is stopped. `npm run start:backend` / `start:frontend` run one half; `start:pg` runs both on the local PostgreSQL.
+  - Paths updated in `package.json`, four browser test files, the README and CLAUDE.md (a map from the old paths at the top; the slice sections keep the old paths).
+- **How it was checked (PGlite, fresh databases).** 1898 rule tests pass. Browser suites through the front end, each on its own fresh database: `test:browser` 19/19, `test:dialogs` all pass, `test:wd6` 25/25 (screenshots captured through the front end), `test:reports` 36/36, `test:custody` 33/33 (one failure in the first run, before the connection fix; passed on the rerun), `test:security` 32/32. The other 37 suites were not run.
+- **Alex's data.** Move `data/` to `backend/data/` on his laptop before the first start of this version. Not done here (his laptop is not this machine).
+- **For Claude in the cloud:** deliver files at the new paths (map at the top of CLAUDE.md).
 
 ### 0.36.2: web server hardening (2026-10-23, Claude Code for Edashall Konah; no migration)
 

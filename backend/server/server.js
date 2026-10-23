@@ -1,18 +1,15 @@
-// LIMS3 Sandbox server: serves the screens in /public and a JSON API.
-// Start: npm start   (then open http://localhost:3000)
+// LIMS3 backend: the JSON API (/api/...) only. The screens are served by frontend/server.js, which forwards /api here.
+// Start both: npm start (then open http://localhost:3000). The backend alone: npm run start:backend (LIMS_API_PORT, 3001).
 'use strict';
 const http = require('http');
-const fs = require('fs');
 const path = require('path');
 const { Database, migrate } = require('./db');
 const routes = require('./routes');
 const { sessionUser } = require('./auth');
 const rate = require('./ratelimit');
 
-const PORT = Number(process.env.PORT || 3000);
-const PUBLIC = path.join(__dirname, '..', 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
+// PORT stays the address people open (the front end): links in emails and PDFs and the evidence screenshots use it
+const API_PORT = Number(process.env.LIMS_API_PORT || 3001);
 
 // Security headers (0.32.0). Pages: scripts only from this server (no inline scripts), nothing from elsewhere,
 // framed only by this app. HSTS only when the app is served over HTTPS (LIMS_HTTPS=1).
@@ -65,20 +62,11 @@ function safeRaw(out) {
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 5e6) { data = ''; req.destroy(); reject(new Error('Request too large')); } });
+    let data = ''; let big = false;
+    // over 5 MB: the rest is read and thrown away (never kept in memory), and the answer says why
+    req.on('data', (c) => { if (big) return; data += c; if (data.length > 5e6) { big = true; data = ''; reject(new Error('Request too large')); } });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(new Error('Invalid JSON')); } });
   });
-}
-
-function serveStatic(req, res, urlPath) {
-  let decoded;
-  try { decoded = decodeURIComponent(urlPath); } catch (_) { return send(res, 400, { error: 'Bad address' }); } // a broken %-code used to stop the server
-  let p = path.normalize(path.join(PUBLIC, decoded));
-  if (p !== PUBLIC && !p.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'Forbidden' });
-  if (urlPath === '/' || !fs.existsSync(p) || fs.statSync(p).isDirectory()) p = path.join(PUBLIC, 'index.html');
-  send(res, 200, fs.readFileSync(p), MIME[path.extname(p)] || 'application/octet-stream',
-    /\.(js|css|png|svg|ico)$/.test(p) ? { 'Cache-Control': 'no-cache' } : {});
 }
 
 // Reachable without being signed in (sign in, first-time setup, sign out, change password, state)
@@ -105,7 +93,6 @@ async function start() {
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
     const match = routes.match(req.method, url.pathname);
     if (!match) return send(res, 404, { error: 'Not found' });
     const ip = rate.clientIp(req);
@@ -137,8 +124,8 @@ async function start() {
     }
   });
   if (routes.startJobs) routes.startJobs(db);
-  server.listen(PORT, '127.0.0.1', () => {
-    console.log(`\nLIMS3 Sandbox running: http://localhost:${PORT}\n(Engine: ${db.engine.kind}. Press Ctrl+C to stop.)\n`);
+  server.listen(API_PORT, '127.0.0.1', () => {
+    console.log(`LIMS3 backend (API) running: http://127.0.0.1:${API_PORT}/api (engine: ${db.engine.kind})`);
   });
 }
 

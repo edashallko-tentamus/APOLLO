@@ -5,8 +5,8 @@
 // checked against figures worked out here independently from the scenario.
 'use strict';
 const path = require('path');
-const mock = require(path.join(__dirname, '..', 'server', 'connectors', 'imonnit_mock.js'));
-const F = require(path.join(__dirname, '..', 'server', 'connectors', 'imonnit.js'));
+const mock = require(path.join(__dirname, '..', 'backend', 'server', 'connectors', 'imonnit_mock.js'));
+const F = require(path.join(__dirname, '..', 'backend', 'server', 'connectors', 'imonnit.js'));
 
 const results = []; const check = (l, ok, x = '') => { results.push(!!ok); console.log((ok ? 'PASS ' : 'FAIL ') + l + (x ? '  ' + x : '')); };
 const TZ = 'America/Los_Angeles'; const MIN = 60000;

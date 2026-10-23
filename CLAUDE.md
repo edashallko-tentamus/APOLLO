@@ -9,12 +9,30 @@ Writing style for Alex: lead with the answer, keep it short, push back directly 
 - A **Sandbox** (non-GxP) build of LIMS3. Demo data is fictional. It is a working prototype that will later be promoted, under change control, through Test/Validation to Production (first lab: CFL). Validation is GAMP 5 Category 5 (bespoke), documented per module (URS, FS, RTM, risk assessment, IQ/OQ/PQ).
 - The design source of truth is the ontology vault in `docs/ontology_vault/` (Obsidian format). Read the relevant Business Objects, Rules and Decisions there before designing anything. When Alex makes a new design decision, add a decision note in `docs/ontology_vault/08 Decisions/` in the same format as the existing ones, and update the affected objects and rules.
 
+## Project layout: backend and front end (0.36.3, 2026-10-23; read this first)
+
+The project was split into two folders and two programs (asked by Edashall Konah; Alex to confirm). **Every path in the rest of this file and in the build log is the old one; read it through this map:**
+
+| Old path | Now |
+|---|---|
+| `server/` | `backend/server/` |
+| `db/` (migrations, seeds, rule tests) | `backend/db/` |
+| `data/` (Alex's embedded database) | `backend/data/` |
+| `public/` (the screens) | `frontend/public/` |
+| (none) | `frontend/server.js`: serves the screens, forwards `/api/...` to the backend |
+| (none) | `start.js`: `npm start` runs both |
+
+- **Two programs.** The backend is the API only, on `127.0.0.1:3001` (`LIMS_API_PORT`); the front end serves the screens on port 3000 (`PORT`) and forwards `/api` unchanged (`LIMS_API_URL`), so the browser still sees one address (same cookie, same security policy, no CORS). `npm start` runs both and sets `LIMS_TRUST_PROXY=1` on the backend (the front end passes the person's computer in X-Forwarded-For for the rate limits). `PORT` on the backend still means the address people open: links in emails and PDFs and the verification screenshots use it. Security headers for pages are in `frontend/server.js`; those for API answers and files stay in `backend/server/server.js`.
+- **Code inside each half kept its relative paths** (`backend/server/` still reads `../db` and `../data`), so only the moved roots changed.
+- **For Claude in the cloud:** deliver files to the new paths. A file delivered at an old path (`server/x.js`, `db/migrations/059_...sql`, `public/js/...`) goes to its new place.
+- **Alex's data:** on his laptop, move `data/` to `backend/data/` before the first start of this version, or the app starts a fresh demo database (his data is not lost, just not found).
+
 ## How to run it (do this for Alex)
 
 1. `npm install` (installs the embedded PostgreSQL, PGlite; no admin rights or database server needed)
 2. `npm test` (builds a fresh in-memory database and runs every rule test; all must pass)
-3. `npm start`, then open http://localhost:3000 in the Browser pane
-4. `npm run reset` deletes the local database (`data/pgdata`) so the next start rebuilds it with demo data. Use it after changing migrations or the seed.
+3. `npm start` (backend and front end together), then open http://localhost:3000 in the Browser pane
+4. `npm run reset` deletes the local database (`backend/data/pgdata`) so the next start rebuilds it with demo data. Use it after changing migrations or the seed.
 
 Alternative engine: set `DATABASE_URL=postgres://user:pass@host:port/db` to use a real PostgreSQL server instead of PGlite. Both engines are supported by `server/db.js`.
 

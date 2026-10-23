@@ -24,9 +24,16 @@ Needs Node.js 18 or later. No other software: the database is embedded (PGlite).
 ```
 npm install      # the embedded database package
 npm test         # builds a fresh database and runs every rule test
-npm start        # then open http://localhost:3000
+npm start        # starts the backend and the front end; then open http://localhost:3000
 npm run reset    # deletes the local database; the next start rebuilds it with demo data
 ```
+
+The app runs as two programs, started together by `npm start` (`start.js`); stopping one stops the other:
+
+- **Backend** (`backend/`): the JSON API only, on `http://127.0.0.1:3001/api` (`LIMS_API_PORT`). Start it alone with `npm run start:backend`.
+- **Front end** (`frontend/`): serves the screens on `http://localhost:3000` (`PORT`) and forwards every `/api/...` request to the backend (`LIMS_API_URL`, default `http://127.0.0.1:3001`), so the browser sees one address. Start it alone with `npm run start:frontend`.
+
+When starting them separately, set `LIMS_TRUST_PROXY=1` on the backend (so its rate limits see each person's computer, not the front end's), and keep `PORT` on the backend equal to the front end's port (links in emails and PDFs, and the verification screenshots, use it).
 
 On first start the system administrator sets their own password. To use a PostgreSQL server instead, set `DATABASE_URL`. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a fresh database.
 
@@ -53,12 +60,15 @@ On a Windows laptop the simplest way is the Claude desktop app's Code tab: open 
 
 | Path | What |
 |---|---|
-| `db/migrations/` | The schema and every rule, one numbered migration per change |
-| `db/seed*.sql` | Fictional demo data |
-| `db/tests/` | Database rule tests |
-| `server/` | Plain Node server (no framework): the JSON API, PDFs, Excel, the sensor feed |
-| `public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
-| `tests/` | Browser tests (Playwright) |
+| `backend/db/migrations/` | The schema and every rule, one numbered migration per change |
+| `backend/db/seed*.sql` | Fictional demo data |
+| `backend/db/tests/` | Database rule tests |
+| `backend/server/` | The backend: plain Node (no framework), the JSON API, PDFs, Excel, the sensor feed |
+| `backend/data/` | The embedded database (not in Git) |
+| `frontend/public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
+| `frontend/server.js` | The front-end server: the screens, and `/api` forwarded to the backend |
+| `start.js` | Starts both |
+| `tests/` | Browser tests (Playwright), run against the front end on port 3000 |
 | `docs/LIMS3 Design and Build Log.md` | Every version: what changed, why, how it was checked |
 | `docs/ontology_vault/` | The design (Obsidian vault): business objects, rules, workflows and every decision (`08 Decisions`) |
 | `docs/project_docs/` | Other project documents (scale test, demo scripts) |

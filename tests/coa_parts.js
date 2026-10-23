@@ -6,8 +6,8 @@
 // with a second template. Needs PostgreSQL and the demo data:
 //   DATABASE_URL=postgres://... node tests/coa_parts.js
 process.chdir(require('path').join(__dirname, '..'));
-const { Database } = require('../server/db');
-const COA = require('../server/coa');
+const { Database } = require('../backend/server/db');
+const COA = require('../backend/server/coa');
 const results = []; const check = (l, ok, x = '') => { results.push(!!ok); console.log((ok ? 'PASS ' : 'FAIL ') + l + (x ? '  ' + x : '')); };
 
 (async () => {

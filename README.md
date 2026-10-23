@@ -30,6 +30,23 @@ npm run reset    # deletes the local database; the next start rebuilds it with d
 
 On first start the system administrator sets their own password. To use a PostgreSQL server instead, set `DATABASE_URL`. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a fresh database.
 
+### Local PostgreSQL (optional)
+
+To keep the data in a real PostgreSQL 16 server instead of the embedded one, with Docker:
+
+1. Create `.env` in this folder (it is never committed):
+   ```
+   POSTGRES_PASSWORD=<choose one>
+   DATABASE_URL=postgres://lims:<same password>@localhost:5432/lims3?sslmode=disable
+   ```
+2. Start the server once (the data stays in the `apollo-pgdata` volume across restarts):
+   ```
+   docker run -d --name apollo-pg --restart unless-stopped --env-file .env -e POSTGRES_USER=lims -e POSTGRES_DB=lims3 -p 127.0.0.1:5432:5432 -v apollo-pgdata:/var/lib/postgresql/data postgres:16
+   ```
+3. `npm run start:pg` runs the app on it (database `lims3`); `npm run test:pg` runs the rule tests in a separate `lims3_test` database, dropped and rebuilt each run.
+
+`npm run reset` only clears the embedded database. To start the PostgreSQL one again: `docker rm -f apollo-pg` and `docker volume rm apollo-pgdata`, then step 2.
+
 On a Windows laptop the simplest way is the Claude desktop app's Code tab: open this folder and ask Claude to read `CLAUDE.md`, set up, start the app and run the tests.
 
 ## Where things are

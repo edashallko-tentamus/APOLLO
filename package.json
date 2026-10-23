@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node server/server.js",
     "test": "node server/run-tests.js",
+    "start:pg": "node --env-file=.env server/server.js",
+    "test:pg": "node --env-file=.env server/run-tests.js",
     "test:browser": "node tests/e2e_smoke.js http://localhost:3000",
     "test:browser2": "node tests/e2e_slice2.js http://localhost:3000",
     "test:dialogs": "node tests/e2e_no_native_dialogs.js http://localhost:3000",

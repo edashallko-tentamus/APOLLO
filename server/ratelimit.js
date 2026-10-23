@@ -2,7 +2,7 @@
 // - Wrong passwords (sign in, change password, electronic signatures): 20 in 15 minutes from one address,
 //   then that address is refused for 15 minutes. The 5-try account lock still applies on top.
 // - Pages and links that need no sign-in (/api/public/...): 120 requests a minute from one address.
-// The address is the connection's, or the first X-Forwarded-For entry when LIMS_TRUST_PROXY=1 (behind a proxy).
+// The address is the connection's, or the last X-Forwarded-For entry when LIMS_TRUST_PROXY=1 (behind one proxy).
 'use strict';
 const FAIL_LIMIT = Number(process.env.LIMS_FAIL_LIMIT || 20);
 const FAIL_WINDOW = 15 * 60 * 1000;
@@ -13,7 +13,8 @@ const hits = new Map();
 
 function clientIp(req) {
   if (process.env.LIMS_TRUST_PROXY === '1') {
-    const f = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    // the last entry is the one our proxy added; earlier entries come from the client and can be faked
+    const f = String(req.headers['x-forwarded-for'] || '').split(',').pop().trim();
     if (f) return f;
   }
   return (req.socket && req.socket.remoteAddress) || 'unknown';

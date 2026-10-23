@@ -66,14 +66,16 @@ function safeRaw(out) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => { data += c; if (data.length > 5e6) reject(new Error('Request too large')); });
+    req.on('data', (c) => { data += c; if (data.length > 5e6) { data = ''; req.destroy(); reject(new Error('Request too large')); } });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(new Error('Invalid JSON')); } });
   });
 }
 
 function serveStatic(req, res, urlPath) {
-  let p = path.normalize(path.join(PUBLIC, decodeURIComponent(urlPath)));
-  if (!p.startsWith(PUBLIC)) return send(res, 403, { error: 'Forbidden' });
+  let decoded;
+  try { decoded = decodeURIComponent(urlPath); } catch (_) { return send(res, 400, { error: 'Bad address' }); } // a broken %-code used to stop the server
+  let p = path.normalize(path.join(PUBLIC, decoded));
+  if (p !== PUBLIC && !p.startsWith(PUBLIC + path.sep)) return send(res, 403, { error: 'Forbidden' });
   if (urlPath === '/' || !fs.existsSync(p) || fs.statSync(p).isDirectory()) p = path.join(PUBLIC, 'index.html');
   send(res, 200, fs.readFileSync(p), MIME[path.extname(p)] || 'application/octet-stream',
     /\.(js|css|png|svg|ico)$/.test(p) ? { 'Cache-Control': 'no-cache' } : {});

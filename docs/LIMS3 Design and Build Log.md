@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.36.1** (2026-10-22) |
+| Current version | **0.36.2** (2026-10-23) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1898 database rule tests (0.36.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and 41 browser test suites (0.36.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.36.2 | 2026-10-23 | Web server hardening | Claude Code (Edashall Konah) | none | A broken %-code in an address no longer stops the server; the page folder check needs the folder separator; uploads over 5 MB are cut off instead of read to the end; behind a proxy the rate limit takes the last X-Forwarded-For entry (the proxy's) |
 | 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
 | 0.36.0 | 2026-10-21 | Charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections | Claude in the cloud | 058 | Discount % typed on quote lines and packages (and one % for every line); miscellaneous charges (kits, shipping, fees, discounts) in the catalogue, on quotes, on orders (billed at once) and on draft invoices; service line > type > department on tests and service lines on clients; the order's drill-down test picker; any test of the lab ordered at its list price (a quote line still wins); the invoice details first, payment status recorded by hand; the PO of an issued invoice corrected (signed) with a corrected copy sent |
 | 0.35.0 | 2026-10-21 | Lists one page at a time, search everything, widgets on request, the performance report | Claude in the cloud | none | Every long list shows the 50 most recent with pages, tabs with counts and a search on the server (a typed or scanned ID opens its record); a search box at the top of every page finds any record by ID or name; dashboard widgets refresh on request (Refresh all, ↻ per widget, the time last worked out), the 7 live ones every 5 minutes; Finance figures and the GM and executive dashboards download a performance report to Excel (Summary plus the LIMS data on separate tabs) |
@@ -153,6 +154,17 @@ A living record of how LIMS3 is designed and built: what changed in each version
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.36.2: web server hardening (2026-10-23, Claude Code for Edashall Konah; no migration)
+
+- **Why.** A security check of the code against an AI-built-app checklist (prompt injection, secrets, headers, CORS, rate limits, exposed files, database access) found four small faults in the web server. The rest of the checklist was already covered (0.33.0).
+- **What changed.**
+  - `server/server.js` `serveStatic`: an address with a broken %-code (e.g. `/%E0%A4%A`) threw outside the error handler and stopped the whole server; it now answers 400. The page folder check now requires `public` plus the folder separator (a sibling folder such as `public2` would have passed).
+  - `server/server.js` `readBody`: a request over 5 MB was refused but still read into memory to the end; the connection is now closed.
+  - `server/ratelimit.js` `clientIp`: with `LIMS_TRUST_PROXY=1` the limit used the first X-Forwarded-For entry, which the client controls (a new fake address on every try got past the 20-try limit); it now uses the last entry, the one the proxy adds. Assumes one proxy in front of the app.
+  - `tests/e2e_security.js`: 3 new checks (broken address, outside the page folder, upload over 5 MB), each confirming the server keeps running.
+- **Found, not changed (for Alex):** lab separation on reads is enforced in the server routes only, not in the database (writes are). Row-level security in PostgreSQL would be the lasting fix.
+- **How it was checked (PGlite, fresh database).** 1898 rule tests pass; `test:security` 32/32; the proxy address checked directly. Other browser suites not run (only these two files changed). Not applied to Alex's data (code only: a restart picks it up).
 
 ### 0.36.1: batch page redraws, the header search box, bench test timing (2026-10-22, Claude Code; no migration)
 

@@ -49,6 +49,13 @@ public class AccessPolicy {
         if (!load(ctx.userId()).systemAdmin()) throw new RuleException("Only a system administrator can do this.");
     }
 
+    /** The lab chosen in the header, which the person must be able to open: the Node backend's currentSite. */
+    public String currentSite(RequestContext ctx) {
+        if (ctx.siteId() == null) throw new RuleException("Choose your lab (top right) first. If none is listed, ask an administrator to assign you to a lab.");
+        if (!load(ctx.userId()).canView(ctx.siteId())) throw new RuleException("You are not assigned to this lab. Choose another lab (top right) or ask an administrator.");
+        return ctx.siteId();
+    }
+
     /** A record of another lab: refused unless the person can at least view that lab. */
     public void checkSite(RequestContext ctx, String siteId) {
         if (!RequestContext.isUuid(siteId) || !load(ctx.userId()).canView(siteId))

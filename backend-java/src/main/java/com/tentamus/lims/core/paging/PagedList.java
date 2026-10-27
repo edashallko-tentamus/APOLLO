@@ -86,7 +86,7 @@ public final class PagedList {
         out.put("page", page);
         out.put("pages", pages);
         out.put("size", size);
-        out.put("filter", f);
+        if (f != null) out.put("filter", f);   // Node leaves it out (undefined) when the list has no filter tabs
         out.put("counts", counts);
         out.put("q", q);
         out.put("exact", exact);

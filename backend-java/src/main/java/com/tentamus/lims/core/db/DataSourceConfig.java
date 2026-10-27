@@ -38,7 +38,12 @@ public class DataSourceConfig {
         c.setMaximumPoolSize(poolSize);
         c.setPoolName("lims");
         long ms = DurationStyle.detectAndParse(statementTimeout).toMillis();
-        c.setConnectionInitSql("SET search_path = lims, public; SET statement_timeout = " + ms);
+        // The JDBC driver always sends the computer's time zone; the Node backend's connections use the database server's default
+        // (UTC on the Docker and cloud servers). Timestamps turned into text and "today" in SQL depend on it, so it is set here
+        // (LIMS_DB_TIMEZONE when the server's default is not UTC).
+        String zone = System.getenv().getOrDefault("LIMS_DB_TIMEZONE", "UTC");
+        if (!zone.matches("[A-Za-z0-9/_+-]+")) throw new IllegalStateException("LIMS_DB_TIMEZONE is not a time zone name: " + zone);
+        c.setConnectionInitSql("SET search_path = lims, public; SET statement_timeout = " + ms + "; SET TIME ZONE '" + zone + "'");
         c.setConnectionTimeout(Duration.ofSeconds(10).toMillis());
         return new HikariDataSource(c);
     }

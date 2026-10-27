@@ -19,6 +19,9 @@ public class RuleException extends RuntimeException {
     /** The same refusal as the database rule this replaces. */
     public static RuleException database(String message) { return new RuleException(message, "P0001", 400); }
 
+    /** A refusal that keeps the database's SQL state (e.g. a database message reworded for the screen). */
+    public static RuleException withCode(String message, String code) { return new RuleException(message, code, 400); }
+
     /** Too many requests from one computer (answered 429). */
     public static RuleException tooMany(String message) { return new RuleException(message, null, 429); }
 

@@ -32,22 +32,22 @@ public class ApiExceptionHandler {
         "matrix_matrix_name_check", "Matrix name cannot be blank.");
 
     @ExceptionHandler(RuleException.class)
-    ResponseEntity<Map<String, Object>> rule(RuleException e) {
+    public ResponseEntity<Map<String, Object>> rule(RuleException e) {
         return body(HttpStatus.valueOf(e.status()), e.getMessage(), e.code());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
-    ResponseEntity<Map<String, Object>> notFound(NoResourceFoundException e) {
+    public ResponseEntity<Map<String, Object>> notFound(NoResourceFoundException e) {
         return body(HttpStatus.NOT_FOUND, "Not found", null);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ResponseEntity<Map<String, Object>> badJson(HttpMessageNotReadableException e) {
+    public ResponseEntity<Map<String, Object>> badJson(HttpMessageNotReadableException e) {
         return body(HttpStatus.BAD_REQUEST, "Invalid JSON", null);
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<Map<String, Object>> other(Exception e) {
+    public ResponseEntity<Map<String, Object>> other(Exception e) {
         PSQLException pg = find(e);
         if (pg != null && pg.getServerErrorMessage() != null) {
             ServerErrorMessage m = pg.getServerErrorMessage();
@@ -58,7 +58,7 @@ public class ApiExceptionHandler {
     }
 
     /** server.js friendly(): readable messages for the screen. */
-    static String friendly(String m, String detail) {
+    public static String friendly(String m, String detail) {
         if (m == null) return "Database error";
         if (m.contains("duplicate key value")) return "That value already exists (must be unique). " + (detail == null ? "" : detail);
         Matcher check = Pattern.compile("violates check constraint \"?(\\w+)").matcher(m);
@@ -73,7 +73,7 @@ public class ApiExceptionHandler {
         return m;
     }
 
-    private static PSQLException find(Throwable t) {
+    public static PSQLException find(Throwable t) {
         for (Throwable x = t; x != null; x = x.getCause()) if (x instanceof PSQLException p) return p;
         return null;
     }

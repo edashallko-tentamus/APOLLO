@@ -14,7 +14,12 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/client-contacts\/bulk$/, /^\/api\/licenses(\/[^/]+(\/file)?)?$/,
   // master data (sites and holidays, matrices, categories, analytes, units); lab images (/api/sites/.../media) stay in Node
   /^\/api\/sites(\/bulk)?$/, /^\/api\/sites\/[^/]+\/holidays(\/bulk)?$/, /^\/api\/timezones$/, /^\/api\/compliance-categories$/,
-  /^\/api\/(analytes|matrices|product-categories|units|unit-conversions)(\/bulk)?$/, /^\/api\/units\/(convertible|convert)$/];
+  /^\/api\/(analytes|matrices|product-categories|units|unit-conversions)(\/bulk)?$/, /^\/api\/units\/(convertible|convert)$/,
+  // catalogue, rush schedules, projects and quotes; sending a quote, its PDF and the client's quote page stay in Node
+  // (documents), as do a version's charges, packages and serving line (their own features)
+  /^\/api\/rush-schedules(\/bulk|\/[^/]+\/tiers\/bulk)?$/, /^\/api\/catalog(\.csv|\/[^/]+)?$/,
+  /^\/api\/projects(\/[^/]+(\/versions)?)?$/, /^\/api\/versions\/[^/]+(\/(status|lines|rush-terms))?$/, /^\/api\/lines\/[^/]+\/analytes$/,
+  /^\/api\/quotes(\/[^/]+)?$/, /^\/api\/quotes\/versions\/[^/]+\/decide$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

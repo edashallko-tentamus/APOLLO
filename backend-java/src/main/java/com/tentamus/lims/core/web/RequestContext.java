@@ -21,7 +21,19 @@ public record RequestContext(String userId, String siteId, String rawSite, Strin
         String site = req.getHeader("x-site-id");
         Object reason = body == null ? null : body.get("reason");
         return new RequestContext((String) req.getAttribute(USER_ATTRIBUTE), isUuid(site) ? site : null, site == null ? "" : site,
-            reason == null ? "" : reason.toString(), req.getRemoteAddr());
+            reason == null ? "" : reason.toString(), clientIp(req));
+    }
+
+    /** The person's computer: behind the front end (LIMS_TRUST_PROXY=1) the last X-Forwarded-For entry, as the Node backend reads it. */
+    static String clientIp(HttpServletRequest req) {
+        if ("1".equals(System.getenv("LIMS_TRUST_PROXY"))) {
+            String f = req.getHeader("x-forwarded-for");
+            if (f != null && !f.isBlank()) {
+                String last = f.substring(f.lastIndexOf(',') + 1).trim();
+                if (!last.isEmpty()) return last;
+            }
+        }
+        return req.getRemoteAddr();
     }
 
     public RequestContext withReason(String r) { return new RequestContext(userId, siteId, rawSite, r == null ? "" : r, ip); }

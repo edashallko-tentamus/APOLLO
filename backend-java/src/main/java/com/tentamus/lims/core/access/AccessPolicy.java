@@ -37,6 +37,24 @@ public class AccessPolicy {
         return load(ctx.userId()).can(permission, ctx.siteId());
     }
 
+    /** "You do not have permission to <what> in this lab (code: description). …": the Node backend's requirePermission. */
+    public void require(RequestContext ctx, String permission, String what) {
+        if (has(ctx, permission)) return;
+        Map<String, Object> p = db.one("SELECT lower(description) AS d FROM permission WHERE code = ?", permission);
+        throw new RuleException("You do not have permission to " + what + " in this lab (" + permission + (p == null ? "" : ": " + p.get("d"))
+            + "). Ask your lab administrator.");
+    }
+
+    public void requireSystemAdmin(RequestContext ctx) {
+        if (!load(ctx.userId()).systemAdmin()) throw new RuleException("Only a system administrator can do this.");
+    }
+
+    /** A record of another lab: refused unless the person can at least view that lab. */
+    public void checkSite(RequestContext ctx, String siteId) {
+        if (!RequestContext.isUuid(siteId) || !load(ctx.userId()).canView(siteId))
+            throw new RuleException("This record belongs to a lab you are not assigned to. Ask an administrator for access.");
+    }
+
     /**
      * Refuses a change to a shared list without the permission, with the message of the database's
      * require_list_permission trigger: "You do not have permission to change client: create and change clients, … (master.clients). …".

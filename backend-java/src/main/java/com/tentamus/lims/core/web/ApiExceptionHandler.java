@@ -33,7 +33,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(RuleException.class)
     ResponseEntity<Map<String, Object>> rule(RuleException e) {
-        return body(HttpStatus.BAD_REQUEST, e.getMessage(), e.code());
+        return body(HttpStatus.valueOf(e.status()), e.getMessage(), e.code());
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

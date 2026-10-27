@@ -11,7 +11,10 @@ const API = new URL(process.env.LIMS_API_URL || 'http://127.0.0.1:3001');
 // The Java backend (backend-java), feature by feature: when LIMS_JAVA_URL is set, the routes it has taken over go there.
 const JAVA = process.env.LIMS_JAVA_URL ? new URL(process.env.LIMS_JAVA_URL) : null;
 const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/licenses$/, /^\/api\/contacts(\/bulk)?$/,
-  /^\/api\/client-contacts\/bulk$/, /^\/api\/licenses(\/[^/]+(\/file)?)?$/];
+  /^\/api\/client-contacts\/bulk$/, /^\/api\/licenses(\/[^/]+(\/file)?)?$/,
+  // master data (sites and holidays, matrices, categories, analytes, units); lab images (/api/sites/.../media) stay in Node
+  /^\/api\/sites(\/bulk)?$/, /^\/api\/sites\/[^/]+\/holidays(\/bulk)?$/, /^\/api\/timezones$/, /^\/api\/compliance-categories$/,
+  /^\/api\/(analytes|matrices|product-categories|units|unit-conversions)(\/bulk)?$/, /^\/api\/units\/(convertible|convert)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

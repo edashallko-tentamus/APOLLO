@@ -94,6 +94,7 @@ public class BulkService {
             for (BulkSheet.Row x : todo) {
                 Map<String, Object> payload = new LinkedHashMap<>(x.payload());
                 Object analytes = payload.remove("__analytes");
+                Object owners = payload.remove("__owners");
                 Object id = payload.get("id");
                 try {
                     Map<String, Object> fixed = k.siteScoped() && id == null ? Map.of("site_id", site) : Map.of();
@@ -103,6 +104,7 @@ public class BulkService {
                         if (!res.isEmpty() && res.get(0) != null && res.get(0).get("id") != null) rowId = res.get(0).get("id");
                     }
                     if (analytes != null) lots.syncAnalytes(d, rowId, (List<Map<String, Object>>) analytes);
+                    if (owners != null && k.afterRow() != null) k.afterRow().apply(d, rowId, owners);
                     if (id != null) updated++; else created++;
                 } catch (RuntimeException e) {
                     throw InventoryMessages.forRow(e, x.row(), x.key());

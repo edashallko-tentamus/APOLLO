@@ -6,13 +6,14 @@ import static com.tentamus.lims.inventory.bulk.BulkColumn.readOnly;
 import static com.tentamus.lims.inventory.bulk.BulkColumn.text;
 
 import com.tentamus.lims.core.excel.Js;
+import com.tentamus.lims.equipment.repo.EquipmentOwners;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
  * What each list exports and accepts back (the Node backend's bulk.js KINDS): the inventory tabs and the Units lists.
- * The equipment list's upload belongs to the Equipment feature and stays in the Node backend for now.
+ * Equipment's owners are a column of groups or people, saved after each row.
  */
 public final class BulkKinds {
     private BulkKinds() {}
@@ -39,7 +40,30 @@ public final class BulkKinds {
 
     private static Object yesNo(Object v) { return Boolean.TRUE.equals(v) ? "Yes" : "No"; }
 
+    @SuppressWarnings("unchecked")
     public static final Map<String, BulkKind> KINDS = Map.of(
+        "equipment", new BulkKind("Equipment", "equipment", true, "equipment_code", true, true,
+            "SELECT * FROM equipment_view WHERE site_id = ?::uuid ORDER BY lower(type_name), lower(equipment_name)", List.of(
+            readOnly("ID", "equipment_code", 10, null),
+            text("Name", "equipment_name", 30),
+            looked("ref", "Type", "equipment_type_id", "equipmentTypes", 18, r -> s(r.get("type_name"))),
+            looked("ref", "Department", "department_id", "departments", 11, r -> s(r.get("department_code"))),
+            text("Manufacturer", "manufacturer", 18), text("Model", "model", 18),
+            text("Serial number", "serial_number", 16), text("Asset tag", "asset_tag", 12),
+            looked("ref", "Location", "location_id", "locations", 12, r -> s(r.get("location_code"))),
+            text("Location note", "location_note", 18),
+            of("bool", "Calibration required", "calibration_required", 11, r -> yesNo(r.get("calibration_required"))),
+            of("number", "Calibration interval (months)", "calibration_interval_months", 12, r -> num(r.get("calibration_interval_months"))),
+            of("number", "Calibration warning (days)", "calibration_alert_days", 11, r -> num(r.get("calibration_alert_days"))),
+            of("bool", "IQ/OQ/PQ required", "qualification_required", 10, r -> yesNo(r.get("qualification_required"))),
+            of("date", "In service since", "in_service_date", 12, r -> d10(r.get("in_service_date"))),
+            of("owners", "Owners", "__owners", 30, r -> s(r.get("owners"))),
+            looked("choice", "Status", "admin_status", "adminStatuses", 13, null),
+            text("Notes", "notes", 26),
+            readOnly("Availability", null, 18, r -> s(r.get("availability")) + (r.get("tagged_for") != null && !"".equals(r.get("tagged_for")) ? " (" + s(r.get("tagged_for")) + ")" : "")),
+            readOnly("Calibration expires", null, 12, r -> d10(r.get("cal_expires"))),
+            readOnly("Calibration status", null, 13, r -> s(r.get("calibration_status")))),
+            "Equipment", (d, id, owners) -> EquipmentOwners.sync(d, id, (List<Map<String, Object>>) owners)),
         "lots", new BulkKind("Inventory", "inventory_lot", true, "lot_code", true, true,
             "SELECT * FROM inventory_lot_view WHERE site_id = ?::uuid ORDER BY material, lot_code", List.of(
             readOnly("ID", "lot_code", 12, null),

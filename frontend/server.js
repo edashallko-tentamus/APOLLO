@@ -25,8 +25,9 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/orders(\/[^/]+)?$/, /^\/api\/orders\/[^/]+\/(samples|apply-project|add-test|tests|rush|log|cancel)$/,
   /^\/api\/samples\/[^/]+(\/serving-request)?$/, /^\/api\/order-setup\/[^/]+$/, /^\/api\/requested-tests\/[^/]+\/analytes$/,
   /^\/api\/(intake|rush-decisions)$/, /^\/api\/outbox(\/templates)?$/,
-  // inventory, and Excel export / upload of every list except equipment (its own feature)
-  /^\/api\/inventory(\/.*)?$/, /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions)\/(export|preview|apply)$/];
+  // inventory and equipment, and Excel export / upload of their lists and the Units lists
+  /^\/api\/inventory(\/.*)?$/, /^\/api\/equipment(\/.*)?$/,
+  /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

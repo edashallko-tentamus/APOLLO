@@ -75,6 +75,22 @@ public final class BulkSheet {
                 if (c.readOnly() || (c.field().equals(kind.key()) && kind.newKeyGenerated())) continue;
                 Object v = cell(t, raw, c);
                 if (v == ABSENT) continue;
+                if (c.type().equals("owners")) {
+                    List<Map<String, Object>> owners = new ArrayList<>();
+                    String bad = null;
+                    for (String it : Js.string(v).split("[;,]")) {
+                        if (it.trim().isEmpty()) continue;
+                        String g = L.id("ownerGroups", it.trim()), u = L.id("ownerPeople", it.trim());
+                        if (g != null) owners.add(Map.of("group_id", g)); else if (u != null) owners.add(Map.of("user_id", u)); else { bad = it.trim(); break; }
+                    }
+                    if (bad != null) { errors.add("Owners: \"" + bad + "\" is not a group of this lab or a person working here"); continue; }
+                    if (owners.isEmpty()) { errors.add("Owners: name at least one group or person responsible for it"); continue; }
+                    if (existing == null || !canonOwners(Js.string(v)).equals(canonOwners(Js.string(existing.get("owners"))))) {
+                        changes.put(c.header(), List.of(existing == null ? "" : Js.string(existing.get("owners")), Js.string(v)));
+                        payload.put("__owners", owners);
+                    }
+                    continue;
+                }
                 if (c.type().equals("analytes")) {
                     Parsed p = analytes(v, L);
                     if (p.error() != null) { errors.add(p.error()); continue; }
@@ -186,6 +202,10 @@ public final class BulkSheet {
         };
     }
 
+    private static String canonOwners(String x) {
+        return Arrays.stream(x.toLowerCase().split("[;,]")).map(String::trim).filter(t -> !t.isEmpty()).sorted().collect(Collectors.joining(";"));
+    }
+
     private static String canonAnalytes(String x) {
         return Arrays.stream(x.toLowerCase().replaceAll("\\s+", " ").split(";")).map(String::trim).filter(s -> !s.isEmpty()).sorted().collect(Collectors.joining(";"));
     }
@@ -215,6 +235,7 @@ public final class BulkSheet {
             v.put("forms", List.of("Solid", "Liquid"));
             v.put("activeInactive", List.of("Active", "Inactive"));
             v.put("appliesTo", List.of("Any", "Liquid", "Solid"));
+            v.put("adminStatuses", List.of("In Service", "Out of Service", "Retired"));
             Map<String, Map<String, String>> ids = new HashMap<>();
             ids.put("suppliers", map(db.rows("SELECT id, supplier_code, supplier_name FROM supplier"), "supplier_code", "supplier_name"));
             ids.put("sites", map(db.rows("SELECT id, site_code FROM lab_site"), "site_code"));
@@ -223,6 +244,12 @@ public final class BulkSheet {
             if (site != null) {
                 ids.put("locations", map(db.rows("SELECT id, location_code FROM storage_location WHERE site_id = ?::uuid", site), "location_code"));
                 ids.put("sampleLocations", map(db.rows("SELECT id, location_code FROM storage_location WHERE site_id = ?::uuid AND holds_samples", site), "location_code"));
+                ids.put("equipmentTypes", map(db.rows("SELECT id, type_name FROM equipment_type WHERE site_id = ?::uuid AND status = 'Active'", site), "type_name"));
+                ids.put("departments", map(db.rows("SELECT id, department_code, department_name FROM department WHERE site_id = ?::uuid AND status = 'Active'", site),
+                    "department_code", "department_name"));
+                ids.put("ownerGroups", map(db.rows("SELECT id, group_name FROM lab_group WHERE site_id = ?::uuid AND status = 'Active'", site), "group_name"));
+                ids.put("ownerPeople", map(db.rows("SELECT id, username, full_name FROM app_user WHERE is_active AND username <> 'system' AND user_can_access_site(id, ?::uuid)", site),
+                    "username", "full_name"));
             } else ids.put("locations", Map.of());
             return new Lookups(v, ids);
         }

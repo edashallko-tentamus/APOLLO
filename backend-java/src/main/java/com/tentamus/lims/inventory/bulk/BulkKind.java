@@ -1,5 +1,6 @@
 package com.tentamus.lims.inventory.bulk;
 
+import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
 import java.util.List;
 
@@ -11,9 +12,19 @@ import java.util.List;
  * @param creates         whether rows without a match are created
  * @param newKeyGenerated whether the system gives new rows their key (then the key column must be empty for a new row)
  * @param module          the module the upload's signature is recorded under
+ * @param afterRow        what is saved after each row besides its fields (equipment: its owners); null when nothing
  */
 public record BulkKind(String title, String table, boolean siteScoped, String key, boolean creates, boolean newKeyGenerated, String list,
-                       List<BulkColumn> cols, String module) {
+                       List<BulkColumn> cols, String module, AfterRow afterRow) {
+
+    /** A step after a row is written, given what the row's derived column read (e.g. the owners). */
+    @FunctionalInterface
+    public interface AfterRow { void apply(Db d, Object id, Object value); }
+
+    public BulkKind(String title, String table, boolean siteScoped, String key, boolean creates, boolean newKeyGenerated, String list,
+                    List<BulkColumn> cols, String module) {
+        this(title, table, siteScoped, key, creates, newKeyGenerated, list, cols, module, null);
+    }
 
     public BulkColumn keyColumn() { return cols.stream().filter(c -> key.equals(c.field())).findFirst().orElseThrow(); }
 

@@ -8,6 +8,11 @@ const path = require('path');
 
 const PORT = Number(process.env.PORT || 3000);
 const API = new URL(process.env.LIMS_API_URL || 'http://127.0.0.1:3001');
+// The Java backend (backend-java), feature by feature: when LIMS_JAVA_URL is set, the routes it has taken over go there.
+const JAVA = process.env.LIMS_JAVA_URL ? new URL(process.env.LIMS_JAVA_URL) : null;
+const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/licenses$/, /^\/api\/contacts(\/bulk)?$/,
+  /^\/api\/client-contacts\/bulk$/, /^\/api\/licenses(\/[^/]+(\/file)?)?$/];
+const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
@@ -45,7 +50,7 @@ function clientIp(req) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
-function forward(req, res) {
+function forward(req, res, API) {
   const headers = { ...req.headers, host: API.host, 'x-forwarded-for': clientIp(req) };
   // Answered before the upload was all sent (e.g. refused as too large): the rest of it would never be read, and the
   // browser's next request on the same connection hung behind it. So that connection is closed once answered.
@@ -67,7 +72,7 @@ function forward(req, res) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  if (url.pathname.startsWith('/api/')) return forward(req, res);
+  if (url.pathname.startsWith('/api/')) return forward(req, res, backendFor(url.pathname));
   try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) send(res, 500, { error: 'Could not read that file' }); }
 });
 if (require.main === module) {

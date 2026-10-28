@@ -299,6 +299,240 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
   W.lab_finance = async (db, s) => ({ finance: await financeRows(db, s), note: FIN_NOTE });
   function fmtMoney(v) { return '$' + Math.round(N(v)).toLocaleString('en-US'); }
 
+  // ---------------------------------------------------------------- K-1 KPIs (0.37.0, migration 059)
+  // Revenue here is the invoice lines issued (credit notes taken off), from revenue_line_view; it adds up to the
+  // Revenue widget. Periods, on the first lab's date: CM this month to date, PM last month, CY this year to date,
+  // PY YTD last year to the same date, PY the whole of last year.
+  const PY0 = `(date_trunc('year', $2::date) - interval '1 year')::date`;
+  const PYSP = `(($2::date - interval '1 year')::date + 1)`;
+  const PERIODS = `
+      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= ${M0} AND r.invoice_date < ${M1}), 0) AS cm,
+      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= ${PM} AND r.invoice_date < ${M0}), 0) AS pm,
+      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= ${Y0} AND r.invoice_date < ${Y1}), 0) AS cy,
+      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= ${PY0} AND r.invoice_date < ${PYSP}), 0) AS pyytd,
+      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= ${PY0} AND r.invoice_date < ${Y0}), 0) AS py`;
+  const cyTotal = async (db, s, d) => N((await one(db, `SELECT COALESCE(sum(r.amount), 0) AS v FROM revenue_line_view r
+      WHERE r.site_id = ANY($1) AND r.invoice_date >= ${Y0} AND r.invoice_date < ${Y1}`, [s, d])).v);
+  const share = (a, total) => (N(total) ? Math.round((1000 * N(a)) / N(total)) / 10 : null);
+  const money = (v) => ({ v: N(v), f: 'money' });
+  const pctc = (v) => ({ v, f: 'pct' });
+  const labCodes = async (db, s) => Object.fromEntries((await q(db, 'SELECT id, site_code FROM lab_site WHERE id = ANY($1)', [s])).map((x) => [x.id, x.site_code]));
+
+  // The Lab Score (Alex, 2026-10-28): samples on time 60 %, revenue against the budget forecast 10 %, against the
+  // monthly forecast 30 %. This month is judged to date: the month's budget and forecast are taken in proportion to
+  // the days gone. Revenue attainment counts up to 100 % (beating the plan does not make up for late samples). A part
+  // with nothing to judge (no sample completed, no budget typed) is left out and the other weights scaled up.
+  const SCORE_WEIGHTS = { on_time: 60, budget: 10, forecast: 30 };
+  async function labScoreFor(db, site, d, month) {
+    const cur = month === 'cm';
+    const from = cur ? M0 : PM; const to = cur ? M1 : M0;
+    const x = await one(db, `SELECT
+        (SELECT count(*) FILTER (WHERE on_time) FROM sample_tat_view WHERE site_id = $1 AND completed_on >= ${from} AND completed_on < ${to}) AS ok,
+        (SELECT count(*) FROM sample_tat_view WHERE site_id = $1 AND completed_on >= ${from} AND completed_on < ${to}) AS n,
+        (SELECT COALESCE(sum(total), 0) FROM revenue_view WHERE site_id = $1 AND invoice_date >= ${from} AND invoice_date < ${to}) AS rev,
+        (SELECT sum(revenue) FROM finance_plan WHERE site_id = $1 AND status = 'Active' AND month = ${from} AND plan = 'Budget forecast') AS bud,
+        (SELECT sum(revenue) FROM finance_plan WHERE site_id = $1 AND status = 'Active' AND month = ${from} AND plan = 'Monthly forecast') AS fc,
+        extract(day FROM $2::date)::int AS day, extract(day FROM (${M1} - 1))::int AS days`, [site, d]);
+    const frac = cur ? N(x.day) / N(x.days) : 1;
+    const att = (plan) => (plan === null || plan === undefined || !N(plan) ? null : Math.min(100, (100 * N(x.rev)) / (N(plan) * frac)));
+    const parts = { on_time: N(x.n) ? (100 * N(x.ok)) / N(x.n) : null, budget: att(x.bud), forecast: att(x.fc) };
+    let wsum = 0; let sum = 0;
+    for (const [k, w] of Object.entries(SCORE_WEIGHTS)) if (parts[k] !== null) { wsum += w; sum += w * parts[k]; }
+    const r1 = (v) => (v === null ? null : Math.round(v * 10) / 10);
+    return { score: wsum ? Math.round(sum / wsum) : null, on_time: r1(parts.on_time), budget: r1(parts.budget), forecast: r1(parts.forecast),
+      samples: N(x.n), rev: N(x.rev), bud: x.bud === null ? null : N(x.bud) * frac, fc: x.fc === null ? null : N(x.fc) * frac, partial: wsum && wsum < 100 };
+  }
+  W.lab_score = async (db, s) => {
+    const d = await today(db, s); const codes = await labCodes(db, s);
+    const rows = [];
+    for (const site of s) rows.push({ site, cm: await labScoreFor(db, site, d, 'cm'), pm: await labScoreFor(db, site, d, 'pm') });
+    rows.sort((a, b) => N(b.cm.score) - N(a.cm.score));
+    const tone = (v) => (v === null ? '' : v >= 85 ? 'good' : v < 70 ? 'bad' : 'warn');
+    const out = { table: { columns: [{ t: 'Lab' }, { t: 'Score this month', num: true }, { t: 'Last month', num: true }, { t: 'Samples on time', num: true, help: '60 % of the score' },
+      { t: 'Revenue vs budget', num: true, help: '10 % of the score; this month against the budget for the days gone' }, { t: 'Revenue vs forecast', num: true, help: '30 % of the score; this month against the monthly forecast for the days gone' },
+      { t: 'Revenue this month', num: true }],
+    rows: rows.map((r) => [{ text: codes[r.site] }, { v: r.cm.score, f: 'score', tone: tone(r.cm.score) }, { v: r.pm.score, f: 'score', tone: tone(r.pm.score) },
+      pctc(r.cm.on_time), pctc(r.cm.budget), pctc(r.cm.forecast), money(r.cm.rev)]), empty: 'No lab to score.' },
+    note: 'Score out of 100: samples on time (complete COA by the due date, this month) 60 %, revenue against the budget forecast 10 %, against the monthly forecast 30 %. '
+      + 'This month is judged to date (the month\'s budget and forecast in proportion to the days gone); revenue counts up to 100 % of the plan. A part with nothing to judge is left out and the others scaled up.' };
+    if (rows.length === 1) {
+      const r = rows[0];
+      out.kpis = [{ label: 'Lab Score this month', value: r.cm.score, fmt: 'score', tone: tone(r.cm.score), sub: r.cm.partial ? 'some parts not scored yet' : '' },
+        { label: 'Last month', value: r.pm.score, fmt: 'score', tone: tone(r.pm.score) }];
+    }
+    return out;
+  };
+
+  // The top 20 tests by orders in the last 12 months. Swing flag: last month's orders against the mean and standard
+  // deviation of the 12 months before it (outside 2 SD = flagged high or low).
+  W.top_tests = async (db, s) => {
+    const d = await today(db, s); const codes = await labCodes(db, s); const many = s.length > 1;
+    const top = await q(db, `SELECT o.test_id, o.test_name, o.test_code, t.site_id, count(*) AS n12,
+        count(*) FILTER (WHERE o.ordered_on >= ${M0}) AS n_cm
+      FROM test_order_view o JOIN test t ON t.id = o.test_id
+      WHERE o.site_id = ANY($1) AND o.ordered_on > ($2::date - interval '1 year')::date AND o.ordered_on <= $2::date
+      GROUP BY 1, 2, 3, 4 ORDER BY count(*) DESC, o.test_name LIMIT 20`, [s, d]);
+    if (!top.length) return { table: { columns: [{ t: 'Test' }], rows: [], empty: 'No client test was ordered in the last 12 months.' } };
+    const ids = top.map((x) => x.test_id);
+    const months = await q(db, `WITH m AS (SELECT generate_series((date_trunc('month', $2::date) - interval '13 months')::date, (date_trunc('month', $2::date) - interval '1 month')::date, interval '1 month')::date AS month)
+      SELECT t.id AS test_id, m.month, (SELECT count(*) FROM test_order_view o WHERE o.test_id = t.id AND o.site_id = ANY($1) AND date_trunc('month', o.ordered_on) = m.month) AS n
+        FROM unnest($3::uuid[]) t(id) CROSS JOIN m ORDER BY 1, 2`, [s, d, ids]);
+    const rev = await q(db, `SELECT r.test_id, ${PERIODS} FROM revenue_line_view r WHERE r.site_id = ANY($1) AND r.test_id = ANY($3::uuid[]) AND r.invoice_date >= ${PY0} GROUP BY 1`, [s, d, ids]);
+    const clients = await q(db, `SELECT x.test_id, x.client_id, x.name, x.n FROM (
+        SELECT o.test_id, o.client_id, COALESCE(c.display_name, c.legal_name) AS name, count(*) AS n,
+               row_number() OVER (PARTITION BY o.test_id ORDER BY count(*) DESC, COALESCE(c.display_name, c.legal_name)) AS rk
+          FROM test_order_view o JOIN client c ON c.id = o.client_id
+         WHERE o.site_id = ANY($1) AND o.test_id = ANY($3::uuid[]) AND o.ordered_on > ($2::date - interval '1 year')::date
+         GROUP BY 1, 2, 3) x WHERE x.rk <= 3 ORDER BY x.test_id, x.rk`, [s, d, ids]);
+    const total = await cyTotal(db, s, d);
+    const byRev = Object.fromEntries(rev.map((x) => [x.test_id, x]));
+    const rows = top.map((t) => {
+      const ns = months.filter((m) => m.test_id === t.test_id).map((m) => N(m.n));
+      const base = ns.slice(0, 12); const last = ns[12];
+      const mean = base.reduce((a, b) => a + b, 0) / base.length;
+      const sd = Math.sqrt(base.reduce((a, b) => a + (b - mean) ** 2, 0) / (base.length - 1));
+      const swing = last > mean + 2 * sd && last !== mean ? 'high' : last < mean - 2 * sd && last !== mean ? 'low' : '';
+      const rv = byRev[t.test_id] || {};
+      const cl = clients.filter((c) => c.test_id === t.test_id);
+      return [{ text: t.test_name, href: `#/catalog/${t.test_id}` }, ...(many ? [{ text: codes[t.site_id] || '' }] : []),
+        { v: N(t.n12), f: 'int' }, { v: N(t.n_cm), f: 'int' },
+        { v: last, f: 'int', tone: swing ? 'flag' : '', title: `12 months before: average ${mean.toFixed(1)} a month, SD ${sd.toFixed(1)}` },
+        { text: swing === 'high' ? '▲ high' : swing === 'low' ? '▼ low' : '', tone: swing ? 'flag' : '' },
+        money(rv.cm), money(rv.cy), pctc(share(rv.cy, total)),
+        { links: cl.map((c) => ({ text: `${c.name} (${N(c.n)})`, href: `#/clients/${c.client_id}` })) }];
+    });
+    return { table: { columns: [{ t: 'Test' }, ...(many ? [{ t: 'Lab' }] : []), { t: 'Orders, 12 months', num: true }, { t: 'This month', num: true },
+      { t: 'Last month', num: true, help: 'Flagged when outside 2 standard deviations of the 12 months before' }, { t: 'Swing' },
+      { t: 'Revenue this month', num: true }, { t: 'Revenue this year', num: true }, { t: '% of revenue', num: true, help: 'Share of this year\'s revenue of ' + (many ? 'the labs shown' : 'the lab') },
+      { t: 'Top 3 clients (orders, 12 months)' }], rows },
+    note: 'Ranked by client tests ordered in the last 12 months (internal work left out). Swing: last month\'s orders outside 2 standard deviations of the monthly average of the 12 months before. Revenue = invoice lines issued, credit notes taken off.' };
+  };
+
+  // The top 20 clients by revenue this year
+  W.top_clients = async (db, s) => {
+    const d = await today(db, s); const many = s.length > 1;
+    const rows = await q(db, `SELECT r.client_id, COALESCE(c.display_name, c.legal_name) AS name, c.client_code, ${PERIODS}
+        FROM revenue_line_view r JOIN client c ON c.id = r.client_id
+       WHERE r.site_id = ANY($1) AND r.invoice_date >= ${PY0} AND NOT c.is_internal
+       GROUP BY 1, 2, 3 ORDER BY 6 DESC, 8 DESC, 2 LIMIT 20`, [s, d]);
+    const total = await cyTotal(db, s, d);
+    return { table: { columns: [{ t: 'Client' }, { t: 'CM', num: true, help: 'This month to date' }, { t: 'PM', num: true, help: 'Last month' }, { t: 'CY', num: true, help: 'This year to date' },
+      { t: 'PY to date', num: true, help: 'Last year to the same date' }, { t: 'PY', num: true, help: 'The whole of last year' }, { t: 'CY vs PY to date', num: true },
+      { t: many ? '% of group' : '% of lab', num: true, help: 'Share of this year\'s revenue' }],
+    rows: rows.map((x) => [{ text: x.name, href: `#/clients/${x.client_id}` }, money(x.cm), money(x.pm), money(x.cy), money(x.pyytd), money(x.py),
+      { v: dev(x.cy, x.pyytd), f: 'dev' }, pctc(share(x.cy, total))]), empty: 'No revenue from clients since the start of last year.' },
+    note: `Ranked by revenue this year to date (invoice lines issued, credit notes taken off, kits and other charges included). % of ${many ? 'the revenue of every lab shown' : 'the lab\'s revenue'} this year.` };
+  };
+
+  // Departments. GM (and any board with one lab or a few): every department of the labs, with revenue and work.
+  // Executive: the top 10 departments across all labs by revenue this year, with their share of the lab and the group.
+  W.departments = async (db, s, c) => {
+    const d = await today(db, s); const codes = await labCodes(db, s);
+    const exec = c && c.board === 'executive';
+    const rev = await q(db, `SELECT dp.id, dp.site_id, dp.department_name, ${PERIODS}
+        FROM department dp LEFT JOIN revenue_line_view r ON r.department_id = dp.id AND r.invoice_date >= ${PY0}
+       WHERE dp.site_id = ANY($1) AND dp.status = 'Active' GROUP BY 1, 2, 3`, [s, d]);
+    const labTot = Object.fromEntries((await q(db, `SELECT r.site_id, COALESCE(sum(r.amount), 0) AS v FROM revenue_line_view r WHERE r.site_id = ANY($1)
+        AND r.invoice_date >= ${Y0} AND r.invoice_date < ${Y1} GROUP BY 1`, [s, d])).map((x) => [x.site_id, N(x.v)]));
+    const group = Object.values(labTot).reduce((a, b) => a + b, 0);
+    rev.sort((a, b) => N(b.cy) - N(a.cy) || String(a.department_name).localeCompare(b.department_name));
+    const revCols = [{ t: 'CM', num: true, help: 'This month to date' }, { t: 'PM', num: true, help: 'Last month' }, { t: 'CY', num: true, help: 'This year to date' },
+      { t: 'PY to date', num: true, help: 'Last year to the same date' }, { t: 'PY', num: true, help: 'The whole of last year' }, { t: '% of lab', num: true, help: 'Share of the lab\'s revenue this year' }];
+    const revCells = (x) => [money(x.cm), money(x.pm), money(x.cy), money(x.pyytd), money(x.py), pctc(share(x.cy, labTot[x.site_id]))];
+    if (exec) {
+      const top = rev.slice(0, 10);
+      return { table: { columns: [{ t: 'Lab' }, { t: 'Department' }, ...revCols, { t: '% of group', num: true, help: 'Share of every lab\'s revenue this year' }],
+        rows: top.map((x) => [{ text: codes[x.site_id] }, { text: x.department_name }, ...revCells(x), pctc(share(x.cy, group))]), empty: 'No department has revenue.' },
+      note: 'The 10 departments with the most revenue this year across every lab (a test\'s revenue counts to its department; kits and other charges have none). For each lab\'s departments in detail, open the GM dashboard.' };
+    }
+    const ops = await q(db, `SELECT dp.id,
+        (SELECT count(*) FROM test_tat_view v WHERE v.department_id = dp.id AND v.reported_on >= ${M0}) AS reported,
+        (SELECT count(*) FILTER (WHERE q.on_time) FROM test_qc_tat_view q JOIN requested_test rt ON rt.id = q.requested_test_id JOIN test t ON t.id = rt.test_id
+          WHERE t.department_id = dp.id AND q.approved_on >= ${M0}) AS ot_ok,
+        (SELECT count(*) FROM test_qc_tat_view q JOIN requested_test rt ON rt.id = q.requested_test_id JOIN test t ON t.id = rt.test_id
+          WHERE t.department_id = dp.id AND q.approved_on >= ${M0}) AS ot_n,
+        (SELECT count(*) FROM test_pool_view p WHERE p.department_id = dp.id AND NOT p.is_media) AS backlog,
+        (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v.lab_days) FROM test_tat_view v WHERE v.department_id = dp.id AND v.reported_at > now() - interval '30 days') AS lab_med,
+        (SELECT count(*) FROM test_batch b JOIN test t ON t.id = b.test_id JOIN lab_site si ON si.id = b.site_id
+          WHERE t.department_id = dp.id AND NOT b.is_verification AND b.returned_at IS NOT NULL AND (b.returned_at AT TIME ZONE si.time_zone)::date >= ${M0}) AS returned
+      FROM department dp WHERE dp.site_id = ANY($1) AND dp.id = ANY($3::uuid[])`, [s, d, rev.map((x) => x.id)]);
+    const byOps = Object.fromEntries(ops.map((x) => [x.id, x]));
+    const many = s.length > 1;
+    return { table: { columns: [...(many ? [{ t: 'Lab' }] : []), { t: 'Department' }, ...revCols, { t: 'Tests reported (CM)', num: true }, { t: 'On time (CM)', num: true, help: 'Tests approved in QC Review by their due date this month' },
+      { t: 'Backlog now', num: true, help: 'Tests waiting to be batched' }, { t: 'Median lab days', num: true, help: 'Logged to QC Review approval, tests reported in the last 30 days' },
+      { t: 'Batches returned (CM)', num: true, help: 'Batches returned to the analyst from QC Review this month' }],
+    rows: rev.map((x) => { const o = byOps[x.id] || {};
+      return [...(many ? [{ text: codes[x.site_id] }] : []), { text: x.department_name }, ...revCells(x),
+        { v: N(o.reported), f: 'int' }, pctc(N(o.ot_n) ? Math.round((1000 * N(o.ot_ok)) / N(o.ot_n)) / 10 : null), { v: N(o.backlog), f: 'int' },
+        { v: o.lab_med === null || o.lab_med === undefined ? null : Math.round(N(o.lab_med) * 10) / 10, f: 'dec' }, { v: N(o.returned), f: 'int' }]; }),
+    empty: 'The lab has no departments.' },
+    note: 'Revenue: invoice lines issued for the department\'s tests (kits and other charges have no department). Work: this month unless stated.' };
+  };
+
+  // People: each person's work and quality figures at the labs, this month and last month (Alex: work + quality,
+  // seen by General Managers and Lab Supervisors; each person sees their own on Home, My numbers).
+  async function peopleFigures(db, s, d, onlyUser) {
+    const P = { cm: [M0, M1], pm: [PM, M0] };
+    const out = {};
+    for (const [k, [a, b]] of Object.entries(P)) {
+      const rows = await q(db, `WITH steps AS (
+          SELECT sr.performed_by AS u, sr.batch_id FROM step_run sr JOIN test_batch b ON b.id = sr.batch_id JOIN lab_site si ON si.id = b.site_id JOIN workflow_step ws ON ws.id = sr.step_id
+           WHERE b.site_id = ANY($1) AND NOT b.is_verification AND sr.status = 'Completed' AND sr.performed_by IS NOT NULL AND ws.step_type <> 'QC Review'
+             AND (sr.completed_at AT TIME ZONE si.time_zone)::date >= ${a} AND (sr.completed_at AT TIME ZONE si.time_zone)::date < ${b} AND ($3::uuid IS NULL OR sr.performed_by = $3)),
+        worked AS (SELECT DISTINCT u, batch_id FROM steps),
+        tests AS (SELECT DISTINCT w.u, e.requested_test_id FROM worked w JOIN batch_entry e ON e.batch_id = w.batch_id AND e.entry_type = 'Sample' AND e.status = 'Active'),
+        rv AS (SELECT b.reviewed_by AS u, count(*) AS n FROM test_batch b JOIN lab_site si ON si.id = b.site_id
+           WHERE b.site_id = ANY($1) AND NOT b.is_verification AND b.reviewed_by IS NOT NULL AND (b.reviewed_at AT TIME ZONE si.time_zone)::date >= ${a}
+             AND (b.reviewed_at AT TIME ZONE si.time_zone)::date < ${b} AND ($3::uuid IS NULL OR b.reviewed_by = $3) GROUP BY 1),
+        fz AS (SELECT rf.finalized_by AS u, count(*) AS n FROM result_finalization rf JOIN requested_test rt ON rt.id = rf.requested_test_id JOIN sample sm ON sm.id = rt.sample_id
+             JOIN lab_order o ON o.id = sm.lab_order_id JOIN lab_site si ON si.id = o.site_id
+           WHERE o.site_id = ANY($1) AND (rf.finalized_at AT TIME ZONE si.time_zone)::date >= ${a} AND (rf.finalized_at AT TIME ZONE si.time_zone)::date < ${b}
+             AND ($3::uuid IS NULL OR rf.finalized_by = $3) GROUP BY 1),
+        people AS (SELECT u FROM steps UNION SELECT u FROM rv UNION SELECT u FROM fz)
+        SELECT p.u, au.full_name,
+          (SELECT count(*) FROM steps x WHERE x.u = p.u) AS steps,
+          (SELECT count(*) FROM worked x WHERE x.u = p.u) AS batches,
+          (SELECT count(*) FROM tests x WHERE x.u = p.u) AS tests,
+          (SELECT count(*) FROM worked x JOIN test_batch b ON b.id = x.batch_id WHERE x.u = p.u AND b.returned_at IS NOT NULL) AS returned,
+          (SELECT count(*) FILTER (WHERE qv.on_time) FROM tests x JOIN test_qc_tat_view qv ON qv.requested_test_id = x.requested_test_id WHERE x.u = p.u) AS ot_ok,
+          (SELECT count(*) FROM tests x JOIN test_qc_tat_view qv ON qv.requested_test_id = x.requested_test_id WHERE x.u = p.u) AS ot_n,
+          COALESCE((SELECT n FROM rv WHERE rv.u = p.u), 0) AS reviews,
+          COALESCE((SELECT n FROM fz WHERE fz.u = p.u), 0) AS finalized,
+          (SELECT string_agg(DISTINCT dp.department_name, ', ') FROM group_member m JOIN lab_group g ON g.id = m.group_id JOIN department dp ON dp.id = g.department_id
+            WHERE m.user_id = p.u AND m.status = 'Active' AND g.status = 'Active' AND g.site_id = ANY($1)) AS departments
+        FROM people p JOIN app_user au ON au.id = p.u WHERE NOT au.is_automated ORDER BY au.full_name`, [s, d, onlyUser || null]);
+      out[k] = rows;
+    }
+    return out;
+  }
+  const peopleCols = [{ t: 'Person' }, { t: 'Departments' }, { t: 'Steps signed', num: true, help: 'Bench steps completed and signed (QC Review not counted)' },
+    { t: 'Batches', num: true, help: 'Batches in which the person signed a bench step' }, { t: 'Tests', num: true, help: 'Client tests in those batches' },
+    { t: 'Batches returned', num: true, help: 'Of those batches, returned to the analyst from QC Review at least once' },
+    { t: 'On time', num: true, help: 'Of those tests approved in QC Review, the share approved by their due date' },
+    { t: 'Batches reviewed', num: true }, { t: 'Tests finalized', num: true, help: 'Tests released on a COA in Report Finalization' }];
+  const peopleRow = (x) => [{ text: x.full_name }, { text: x.departments || '' }, { v: N(x.steps), f: 'int' }, { v: N(x.batches), f: 'int' }, { v: N(x.tests), f: 'int' },
+    { v: N(x.returned), f: 'int', tone: N(x.returned) ? 'flag' : '' }, pctc(N(x.ot_n) ? Math.round((1000 * N(x.ot_ok)) / N(x.ot_n)) / 10 : null),
+    { v: N(x.reviews), f: 'int' }, { v: N(x.finalized), f: 'int' }];
+  const PEOPLE_NOTE = 'Work signed at the lab this month or last month (verification runs left out). On time is judged on the tests of the batches the person worked on, so it is shared by everyone on those batches.';
+  W.staff = async (db, s) => {
+    const d = await today(db, s);
+    const f = await peopleFigures(db, s, d, null);
+    const tab = (rows) => ({ columns: peopleCols, rows: rows.map(peopleRow), empty: 'Nobody signed work in this period.' });
+    return { tabbed: { tabs: [['cm', 'This month'], ['pm', 'Last month']], tables: { cm: tab(f.cm), pm: tab(f.pm) } }, note: PEOPLE_NOTE };
+  };
+  W.my_numbers = async (db, s, c) => {
+    const d = await today(db, s);
+    const f = await peopleFigures(db, s, d, c.userId);
+    const me = (k) => f[k][0] || {};
+    const k = (label, field, x, extra = {}) => ({ label, value: N(x[field]), ...extra });
+    const cm = me('cm'); const pm = me('pm');
+    const ot = (x) => (N(x.ot_n) ? Math.round((1000 * N(x.ot_ok)) / N(x.ot_n)) / 10 : null);
+    return { kpis: [k('Steps signed this month', 'steps', cm, { sub: `last month ${N(pm.steps)}` }), k('Batches this month', 'batches', cm, { sub: `last month ${N(pm.batches)}` }),
+      k('Tests this month', 'tests', cm, { sub: `last month ${N(pm.tests)}` }), { label: 'On time this month', value: ot(cm), fmt: 'pct', sub: `last month ${ot(pm) === null ? '–' : ot(pm) + ' %'}` },
+      k('Batches returned', 'returned', cm, { sub: `last month ${N(pm.returned)}` }), k('Batches reviewed', 'reviews', cm, { sub: `last month ${N(pm.reviews)}` }),
+      k('Tests finalized', 'finalized', cm, { sub: `last month ${N(pm.finalized)}` })], note: PEOPLE_NOTE };
+  };
+
   // ---------------------------------------------------------------- the lists behind the numbers
   const TEST_COLS = `rt.id, sm.id AS sample_id, sm.sample_code, sm.client_sample_id, o.id AS lab_order_id, o.order_code, COALESCE(c.display_name, c.legal_name) AS client_name, t.test_name, rt.due_date, rt.rush_fee > 0 AS rush`;
   const DETAIL = {
@@ -355,8 +589,8 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
   // ---------------------------------------------------------------- routes
   async function widgetsFor(c, board, sites) {
     if (board === 'home') return q(c.db, 'SELECT * FROM my_home_widgets($1, $2)', [sites[0], c.userId]);
-    const order = board === 'executive' ? ['network', 'finance', 'revenue', 'projection', 'wip', 'samples', 'on_time_samples', 'on_time', 'tat']
-      : ['lab_finance', 'revenue', 'projection', 'wip', 'samples', 'on_time_samples', 'on_time', 'tat', 'network', 'overdue', 'rush', 'quotes'];
+    const order = board === 'executive' ? ['lab_score', 'network', 'finance', 'top_clients', 'top_tests', 'departments', 'revenue', 'projection', 'wip', 'samples', 'on_time_samples', 'on_time', 'tat']
+      : ['lab_score', 'lab_finance', 'revenue', 'projection', 'wip', 'samples', 'on_time_samples', 'on_time', 'tat', 'top_clients', 'top_tests', 'departments', 'staff', 'network', 'overdue', 'rush', 'quotes'];
     const ws = await q(c.db, 'SELECT * FROM dashboard_widget WHERE $1 = ANY (boards) ORDER BY sort_order', [board]);
     return ws.sort((a, b) => (order.indexOf(a.code) + 1 || 99) - (order.indexOf(b.code) + 1 || 99));
   }
@@ -375,6 +609,7 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
     const board = c.params.board;
     if (!['home', 'gm', 'executive'].includes(board)) throw new Error('Dashboard not found');
     const sites = await sitesFor(c, board, c.query.lab);
+    c.board = board;   // a widget may differ by board (departments: every department for a GM, the top 10 for executives)
     const ws = await widgetsFor(c, board, sites);
     const layout = await one(c.db, 'SELECT layout, hidden FROM user_dashboard_layout WHERE user_id = $1 AND board = $2', [c.userId, board]);
     const only = c.query.only ? String(c.query.only).split(',') : null;

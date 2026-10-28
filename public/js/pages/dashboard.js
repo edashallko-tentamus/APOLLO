@@ -68,6 +68,8 @@ css.textContent = `
 .dlinebox { width: 100%; min-height: 210px; margin-top: 4px; overflow: hidden; } .dline { display: block; } .dline text { font-size: 11px; fill: var(--muted); } .dline .grid { stroke: #EEF1F3; } .dline .zero { stroke: #b7c0c8; }
 .dt td.up { color: #1d6b3f; } .dt td.down { color: #b42318; }
 .ftabs { display: flex; gap: 6px; margin: 0 0 10px; } .ftabs button { border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 14px; font: inherit; cursor: pointer; }
+.dt.kt td.k-good { color: #1d6b3f; font-weight: 700; } .dt.kt td.k-warn { color: #8a5a00; font-weight: 700; } .dt.kt td.k-bad { color: #b42318; font-weight: 700; }
+.dt.kt td.k-flag { color: #b42318; font-weight: 600; } .dt.kt td { white-space: nowrap; }
 .ftabs button.on { background: var(--green-700, #1d6b3f); color: #fff; border-color: transparent; }
 `;
 document.head.appendChild(css);
@@ -79,6 +81,9 @@ const fmtv = (v, f) => {
   if (v === null || v === undefined) return '–';
   if (f === 'money') return '$' + Math.round(Number(v)).toLocaleString('en-US');
   if (f === 'pct') return Number(v).toFixed(1).replace(/\.0$/, '') + ' %';
+  if (f === 'score') return String(Math.round(Number(v)));
+  if (f === 'dec') return Number(v).toFixed(1);
+  if (f === 'dev') return (Number(v) > 0 ? '+' : '') + Number(v).toFixed(1).replace(/\.0$/, '') + ' %';
   return Number(v).toLocaleString('en-US');
 };
 const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString([], { dateStyle: 'medium' }) : String(v); };
@@ -249,14 +254,36 @@ function body(w) {
       return `<div class="r"><a href="${esc(r.href)}" title="${esc(r.label)}">${esc(r.label)}</a><div class="bar" style="width:${(100 * n) / max}%">${r.values.map((v, i) => (v ? `<i style="flex:${v};background:${SEQ[i]}" title="${esc(x.stacks.legend[i])}: ${v}"></i>` : '')).join('')}</div><span class="n">${n}</span></div>`; }).join('')}</div>
       <div class="dleg">${x.stacks.legend.map((l, i) => `<span><i style="background:${SEQ[i]}"></i>${esc(l)}</span>`).join('')}</div>` : '<div class="dempty">Nothing waits to be batched.</div>';
   }
-  if (x.table) {
+  if (x.table && x.table.columns.length && typeof x.table.columns[0] === 'object') h += kpiTable(x.table);
+  else if (x.table) {
     h += x.table.rows.length ? `<table class="dt"><thead><tr>${x.table.columns.map((c, i) => `<th class="${i === x.table.columns.length - 1 ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead><tbody>
       ${x.table.rows.map((r) => `<tr>${r.map((c) => `<td class="${c.num ? 'num' : ''}">${c.href ? link(c.href, c.text) : esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<div class="dempty">No lot is low or expiring.</div>';
+  }
+  if (x.tabbed) {
+    const on = tabs[w.code] && x.tabbed.tables[tabs[w.code]] ? tabs[w.code] : x.tabbed.tabs[0][0];
+    h += tabBar(x.tabbed.tabs, on) + kpiTable(x.tabbed.tables[on]);
   }
   if (x.network) h += networkTable(x.network, tabs[w.code] || 'rev');
   if (x.finance) h += financeBody(x.finance, tabs[w.code] || 'rev');
   if (x.note) h += `<div class="dnote">${esc(x.note)}</div>`;
   return h || '<div class="dempty">Nothing to show.</div>';
+}
+
+// K-1 (0.37.0): a table whose columns are {t, num, help} and whose cells are {text, href} (text), {v, f} (a number,
+// formatted like the figures), or {links: [{text, href}]}; a cell's tone ('good', 'warn', 'bad', 'flag') colours it
+function kpiTable(t) {
+  if (!t || !t.rows.length) return `<div class="dempty">${esc((t && t.empty) || 'Nothing to show.')}</div>`;
+  const cell = (c, col) => {
+    const cls = [col && col.num ? 'num' : '', c.tone ? 'k-' + c.tone : '', c.f === 'dev' && c.v !== null && c.v !== undefined ? (c.v > 0 ? 'up' : c.v < 0 ? 'down' : '') : ''].filter(Boolean).join(' ');
+    const title = c.title ? ` title="${esc(c.title)}"` : '';
+    let inner;
+    if (c.links) inner = c.links.map((l) => link(l.href, l.text)).join(', ');
+    else if (c.f) inner = esc(fmtv(c.v, c.f === 'int' ? undefined : c.f));
+    else inner = c.href ? link(c.href, c.text) : esc(c.text || '');
+    return `<td class="${cls}"${title}>${inner}</td>`;
+  };
+  return `<table class="dt kt"><thead><tr>${t.columns.map((c) => `<th class="${c.num ? 'num' : ''}"${c.help ? ` title="${esc(c.help)}"` : ''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+    <tbody>${t.rows.map((r) => `<tr>${r.map((c, i) => cell(c, t.columns[i])).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
 // a widget's tabs, top right (the picked one is kept in tabs[code])

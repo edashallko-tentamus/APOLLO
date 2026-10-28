@@ -226,6 +226,8 @@ status: Current
 - [[Decision - Cancelling Samples and Tests and the Receipt Thermometer]] (built 0.34.0; build choices proposed; potency units on hold)
 - [[Decision - Paged Lists, Search Everything, Widgets on Request and the Performance Report]] (built 0.35.0; build choices proposed)
 - [[Decision - Charges, Service Lines, Ordering at List Price and Invoice Corrections]] (built 0.36.0; build choices proposed; supersedes All Ordering Is Quoted)
+- [[Decision - KPIs, Lab Score, Departments and People K-1]] (built 0.37.0; build choices proposed)
+- [[Proposal - Lab-Added Verification Requirements]] (proposed for 0.38.0; not built)
 - [[Decision - Security Hardening SEC-1]] (built 0.33.0; build choices proposed)
 - [[Open Items for QA Review]] (for Jake Teller)
 

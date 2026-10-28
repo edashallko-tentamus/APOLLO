@@ -7,10 +7,10 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.36.1** (2026-10-22) |
+| Current version | **0.37.0** (2026-10-28) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
-**Status in plain words.** The Sandbox prototype passes its automated functional tests: 1898 database rule tests (0.36.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and 41 browser test suites (0.36.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
+**Status in plain words.** The Sandbox prototype passes its automated functional tests: 1913 database rule tests (0.37.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and every browser test suite (41 runs, 0.37.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
 
 ---
 
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.37.0 | 2026-10-28 | KPIs: Lab Score, top tests and clients, departments, people | Claude in the cloud | 059 | The Lab Score (samples on time 60 %, revenue vs budget 10 %, vs monthly forecast 30 %) on the GM and executive dashboards; top 20 tests by orders with a 2-SD swing flag, revenue and their top 3 clients; top 20 clients (CM, PM, CY, PY to date, PY); the lab's departments with revenue and work (GM), the top 10 departments across labs (executive); People (GM, Lab Supervisors) and My numbers (everyone) |
 | 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
 | 0.36.0 | 2026-10-21 | Charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections | Claude in the cloud | 058 | Discount % typed on quote lines and packages (and one % for every line); miscellaneous charges (kits, shipping, fees, discounts) in the catalogue, on quotes, on orders (billed at once) and on draft invoices; service line > type > department on tests and service lines on clients; the order's drill-down test picker; any test of the lab ordered at its list price (a quote line still wins); the invoice details first, payment status recorded by hand; the PO of an issued invoice corrected (signed) with a corrected copy sent |
 | 0.35.0 | 2026-10-21 | Lists one page at a time, search everything, widgets on request, the performance report | Claude in the cloud | none | Every long list shows the 50 most recent with pages, tabs with counts and a search on the server (a typed or scanned ID opens its record); a search box at the top of every page finds any record by ID or name; dashboard widgets refresh on request (Refresh all, ↻ per widget, the time last worked out), the 7 live ones every 5 minutes; Finance figures and the GM and executive dashboards download a performance report to Excel (Summary plus the LIMS data on separate tabs) |
@@ -148,11 +149,23 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 "Not recorded": `CLAUDE.md` records the design source (Claude chat) for these slices but not which Claude built them. Alex can fill this in.
 
-**Test counts over time:** 478 rule tests at 0.6.1; 652 at 0.8.0; 659 at 0.8.1; 693 at 0.9.0; 702 at 0.9.1; 735 at 0.10.0; 778 at 0.11.0; 786 at 0.12.0; 825 at 0.13.0; 873 at 0.14.0; 898 at 0.14.1; 922 at 0.15.0; 958 at 0.16.0; 987 at 0.16.1; 1034 at 0.17.0; 1060 at 0.17.1; 1189 at 0.18.0; 1682 at 0.28.0; 1721 at 0.29.0; 1741 at 0.30.0; 1787 at 0.31.0; 1793 at 0.31.1; 1819 at 0.32.0; 1834 at 0.33.0; 1851 at 0.34.0.
+**Test counts over time:** 478 rule tests at 0.6.1; 652 at 0.8.0; 659 at 0.8.1; 693 at 0.9.0; 702 at 0.9.1; 735 at 0.10.0; 778 at 0.11.0; 786 at 0.12.0; 825 at 0.13.0; 873 at 0.14.0; 898 at 0.14.1; 922 at 0.15.0; 958 at 0.16.0; 987 at 0.16.1; 1034 at 0.17.0; 1060 at 0.17.1; 1189 at 0.18.0; 1682 at 0.28.0; 1721 at 0.29.0; 1741 at 0.30.0; 1787 at 0.31.0; 1793 at 0.31.1; 1819 at 0.32.0; 1834 at 0.33.0; 1851 at 0.34.0; 1898 at 0.36.0; 1913 at 0.37.0.
 
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.37.0: KPIs, the Lab Score, departments and people (2026-10-28, Claude in the cloud; migration 059)
+
+- **Why.** Alex (2026-10-28): KPIs by department and by person, a Lab Score from turnaround and revenue against budget and forecast, the top 20 tests and clients, the top 10 departments across labs; lab level on the GM dashboard, all labs on the executive dashboard, with no department or people detail for executives. His answers: tests ranked by orders with a flag outside 2 SD; score weights 60 / 10 / 30 (no weekly forecast); PY shown to the same date and for the full year; people's figures seen by General Managers and Lab Supervisors, each person their own. Vault: `Decision - KPIs, Lab Score, Departments and People K-1` (build choices Proposed). The corporate OpEx KPI deck was reviewed as background only (project doc `Analysis - Tentamus OpEx KPIs vs APOLLO`).
+- **What changed.**
+  - **Migration 059:** permission `dashboard.staff` (People; standard General Manager and Lab Supervisor groups); widgets `lab_score`, `top_tests`, `top_clients`, `departments` (GM and executive), `staff` (GM and Home, needs `dashboard.staff`), `my_numbers` (Home; standard Analyst, Lab Supervisor, QA and Project Manager groups); views `revenue_line_view` (issued invoice lines with client, test and department; adds up to `revenue_view`) and `test_order_view` (client tests ordered, by the lab's date; internal work, lot QA testing and cancelled tests left out).
+  - **Server (`routes_dashboard.js`):** `W.lab_score` (`labScoreFor`, `SCORE_WEIGHTS`), `W.top_tests`, `W.top_clients`, `W.departments` (every department for a GM; the top 10 across labs on the executive board: `c.board` is set by the route), `W.staff` and `W.my_numbers` (`peopleFigures`); periods `PERIODS` (CM, PM, CY, PY to date, PY); the widget order on both boards. All are worked out on request (not live).
+  - **Screens (`dashboard.js`):** `kpiTable()` (columns with help, cells formatted like the figures, links, tones, the swing flag), tabbed tables (People: This month / Last month), formats `score`, `dec`, `dev`.
+- **How it was checked.** 1913 rule tests on PostgreSQL 16 (new `test_052_kpis.sql`, 15 checks: the permission and who holds it, the widgets and boards, invoice lines adding up to each invoice with credit notes negative, orders by test leaving internal work out). New `tests/e2e_kpis.js` (`npm run test:kpis`, 32 checks, fresh database). After `test:invoicing` on the same database, the clients' and departments' revenue this year matched the Revenue widget. All 41 browser suites then passed on fresh databases (PostgreSQL 16), `test:kpis` and `test:dashboards` included.
+- **Not built.** Targets per KPI and lab (weights fixed in code), stored monthly score history, scores per department or person, the corporate OpEx definitions.
+- **Alex's data.** Not applied. Only 059 waits (no seed). It adds a permission, six widgets and two views; nothing of his changes. Try on a copy first; apply only on his go. Never on the demo copy (3100).
+- **Next numbers.** Migration 060, seed 040, rule test test_053. The sampling slice (sample IDs and labels at submission) moves to 0.38.0, with the lab-added verification requirements proposal (vault `Proposal - Lab-Added Verification Requirements`).
 
 ### 0.36.1: batch page redraws, the header search box, bench test timing (2026-10-22, Claude Code; no migration)
 

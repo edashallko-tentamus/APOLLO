@@ -67,13 +67,18 @@ public final class RowConverter implements RowMapper<Map<String, Object>> {
     public static Object param(Object v) {
         if (v instanceof List<?> l) return toArrayLiteral(l);
         if (v instanceof Object[] a) return toArrayLiteral(Arrays.asList(a));
-        if (v instanceof Map<?, ?> || v instanceof com.fasterxml.jackson.databind.JsonNode) return v.toString();
+        if (v instanceof Map<?, ?> m) {
+            try { return JSON.writeValueAsString(m); } catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalArgumentException(e); }
+        }
+        if (v instanceof com.fasterxml.jackson.databind.JsonNode) return v.toString();
         // numbers and true/false go as text too, so PostgreSQL types them from where they are used, as with the Node client
         // (a typed double could not be passed to a function taking numeric: "function ... does not exist")
         if (v instanceof Boolean b) return b ? "true" : "false";
         if (v instanceof Number n) return com.tentamus.lims.core.excel.Js.number(n);
         return v;
     }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
 
     static String toArrayLiteral(List<?> items) {
         StringBuilder b = new StringBuilder("{");

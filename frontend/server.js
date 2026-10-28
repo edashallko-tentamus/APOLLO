@@ -27,6 +27,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/(intake|rush-decisions)$/, /^\/api\/outbox(\/templates)?$/,
   // inventory and equipment, and Excel export / upload of their lists and the Units lists
   /^\/api\/inventory(\/.*)?$/, /^\/api\/equipment(\/.*)?$/,
+  // purchasing and vendor approvals
+  /^\/api\/purchasing(\/.*)?$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

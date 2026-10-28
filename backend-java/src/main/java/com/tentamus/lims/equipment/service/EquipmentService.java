@@ -158,7 +158,7 @@ public class EquipmentService {
     public Map<String, Object> status(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> e = equipment(ctx, id);
         Object to = body.get("admin_status");
-        if (!List.of("In Service", "Out of Service", "Retired").contains(to)) throw new RuleException("Pick In Service, Out of Service or Retired");
+        if (to == null || !List.of("In Service", "Out of Service", "Retired").contains(to)) throw new RuleException("Pick In Service, Out of Service or Retired");
         return sign(ctx, body, "Changed by", label(e) + ": " + to, d -> d.raw("UPDATE equipment SET admin_status = ? WHERE id = ?::uuid", to, e.get("id")));
     }
 

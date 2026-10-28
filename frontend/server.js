@@ -35,6 +35,10 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/testing\/.+$/, /^\/api\/logbooks(\/.*)?$/,
   // sensors; the feed itself (the Sensors page's sensor list, Read now, Re-judge, the minute job) stays in Node
   /^\/api\/sensors\/(connection|links|links\/[^/]+\/(approve|retire)|equipment\/[^/]+)$/,
+  // core: people, reference lists, the start page's counts, reasons, a new test, users admin, signatures, a quote's serving
+  // line (signing in, passwords and the audit trail stay in Node: it holds the sessions and every module's audit scopes)
+  /^\/api\/(users|meta|dashboard|reasons|reasons\/all|reasons\/bulk|tests|admin\/users)$/, /^\/api\/admin\/users\/[^/]+\/signature$/,
+  /^\/api\/versions\/[^/]+\/serving-line$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

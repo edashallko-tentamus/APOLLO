@@ -39,6 +39,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   // line (signing in, passwords and the audit trail stay in Node: it holds the sessions and every module's audit scopes)
   /^\/api\/(users|meta|dashboard|reasons|reasons\/all|reasons\/bulk|tests|admin\/users)$/, /^\/api\/admin\/users\/[^/]+\/signature$/,
   /^\/api\/versions\/[^/]+\/serving-line$/,
+  // workflow verification; writing the protocol, the run, the evidence capture, the whole document and the Word file stay in Node
+  /^\/api\/verification\/versions\/[^/]+$/, /^\/api\/verification\/[^/]+\/(approve-protocol|evidence\/[^/]+|sign-report|cancel)$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

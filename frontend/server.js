@@ -55,6 +55,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/waste(\/options)?$/, /^\/api\/search$/, /^\/api\/labels\/[^/]+$/,
   // training and competency; the training report PDF stays in Node
   /^\/api\/training(\/(?!people\/[^/]+\/report\.pdf$).*)?$/,
+  // permissions and lab groups
+  /^\/api\/(permissions|groups|groups\/permissions|admin\/memberships|permission-matrix|permission-matrix\.xlsx|permission-history)$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

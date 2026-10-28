@@ -49,6 +49,10 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/packages(\/options|\/[^/]+(\/retire)?)?$/, /^\/api\/versions\/[^/]+\/packages$/, /^\/api\/quoted-packages\/[^/]+(\/remove)?$/,
   /^\/api\/orders\/[^/]+\/add-package$/, /^\/api\/requested-tests\/[^/]+\/package-cancel$/, /^\/api\/ordered-packages\/[^/]+\/cancel$/,
   /^\/api\/price-changes(\/[^/]+\/cancel)?$/,
+  // chain of custody and photos; its PDF and Receive and sign (which keeps the signed PDF) stay in Node
+  /^\/api\/orders\/[^/]+\/custody(\/paper)?$/, /^\/api\/custody\/events\/[^/]+\/file$/, /^\/api\/samples\/[^/]+\/photos$/, /^\/api\/photos\/[^/]+(\/file)?$/,
+  // waste classifications, search everything, label contents
+  /^\/api\/waste(\/options)?$/, /^\/api\/search$/, /^\/api\/labels\/[^/]+$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

@@ -969,6 +969,7 @@ Alex (2026-10-28): KPIs by department and person, a Lab Score, the top 20 tests 
 - **Tests:** `test_052_kpis.sql` (15; 1913 rule tests on PostgreSQL 16); `tests/e2e_kpis.js` (`npm run test:kpis`, 32 checks, fresh database).
 - **Alex's data:** not applied. Only 059 waits (no seed). Try on a copy first; apply only on his go. Never on the demo copy (3100).
 - **For Claude Code:** next migration 060, next seed 040, next rule test test_053. Run `npm test` and `test:kpis` on PGlite (it uses `percentile_cont`, `string_agg(DISTINCT ...)` and `row_number()` window functions). The sampling slice is now 0.38.0, with `Proposal - Lab-Added Verification Requirements`.
+- **On the laptop (Claude Code, 2026-10-28):** 1913 rule tests on PGlite and `test:kpis` 32/32 (no fix needed). Copy test of 059 clean (only the permission, widgets and views added; his records unchanged). Not applied: waits for Alex's go.
 
 ## Demo recordings (Alex, 2026-10-16)
 

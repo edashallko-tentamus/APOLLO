@@ -38,6 +38,10 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,
   // OOS investigations; the conclusion (it makes the report PDF) and the client's public page stay in Node
   /^\/api\/oos(\/(?!.*\/conclude$).*)?$/, /^\/api\/outbox\/[^/]+\/document$/,
+  // Billing; issuing, credit notes, PO corrections and a draft's PDF make PDFs and stay in Node
+  /^\/api\/billing\/(ready|invoices|claim|lines\/remove|settings|settings\/terms|settings\/connection)$/,
+  /^\/api\/billing\/invoices\/[^/]+(\/(release|charges|payment))?$/, /^\/api\/billing\/lines\/[^/]+\/(price|rush)$/,
+  /^\/api\/billing\/corrections\/[^/]+\/pdf$/, /^\/api\/orders\/[^/]+\/billing$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

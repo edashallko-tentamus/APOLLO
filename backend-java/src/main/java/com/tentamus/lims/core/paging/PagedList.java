@@ -25,6 +25,7 @@ public final class PagedList {
     private String order = "ORDER BY created_at DESC";
     private String defaultFilter;
     private Function<String, Map<String, Object>> findExact;
+    private String aggregate;
 
     private PagedList(String sql, Object... params) {
         this.sql = sql;
@@ -39,6 +40,8 @@ public final class PagedList {
     public PagedList ids(String... columns) { ids.addAll(List.of(columns)); return this; }
     public PagedList order(String clause) { order = clause; return this; }
     public PagedList findExact(Function<String, Map<String, Object>> f) { findExact = f; return this; }
+    /** Totals over every row matching the tab and search ("sum(total) AS total, ..."), answered as agg. */
+    public PagedList aggregate(String select) { aggregate = select; return this; }
 
     /** true when the screen asked for a page (callers that want the whole list send no "page"). */
     public static boolean wanted(Map<String, String> query) { return query.containsKey("page"); }
@@ -90,6 +93,7 @@ public final class PagedList {
         out.put("counts", counts);
         out.put("q", q);
         out.put("exact", exact);
+        if (aggregate != null) out.put("agg", db.one(base + " SELECT " + aggregate + " FROM base " + w, p.toArray()));
         return out;
     }
 

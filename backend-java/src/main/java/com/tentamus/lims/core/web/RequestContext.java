@@ -38,6 +38,9 @@ public record RequestContext(String userId, String siteId, String rawSite, Strin
 
     public RequestContext withReason(String r) { return new RequestContext(userId, siteId, rawSite, r == null ? "" : r, ip); }
 
+    /** The Node routes' {...c, siteId: site}: the work runs as in that lab. */
+    public RequestContext withSite(String site) { return new RequestContext(userId, site, site == null ? "" : site, reason, ip); }
+
     /** The Node routes' {...c, reason: c.reason || fallback}. */
     public RequestContext orReason(String fallback) { return reason.isEmpty() ? withReason(fallback) : this; }
 

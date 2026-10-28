@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 /** Small answer and request-reading helpers shared by the ported routes (what Node's routes write inline). */
 public final class Answers {
@@ -36,4 +38,9 @@ public final class Answers {
 
     /** A uuid when the value is one, else null. */
     public static Object uuidOrNull(Object v) { return RequestContext.isUuid(v) ? v : null; }
+
+    /** A route's answer that may be null: Node writes the JSON text null. */
+    public static ResponseEntity<Object> json(Object x) {
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(x == null ? "null" : x);
+    }
 }

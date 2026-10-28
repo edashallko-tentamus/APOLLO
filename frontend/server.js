@@ -45,6 +45,10 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   // service lines, the order's test picker, charges
   /^\/api\/service-lines(\/(types|tests))?$/, /^\/api\/clients\/[^/]+\/service-lines$/, /^\/api\/orders\/[^/]+\/(picker|catalogue-tests|charges)$/,
   /^\/api\/charge-items$/, /^\/api\/versions\/[^/]+\/charges$/, /^\/api\/(quoted-charges|order-charges)\/[^/]+$/,
+  // test packages and dated price changes (the hourly job that applies scheduled changes stays in Node)
+  /^\/api\/packages(\/options|\/[^/]+(\/retire)?)?$/, /^\/api\/versions\/[^/]+\/packages$/, /^\/api\/quoted-packages\/[^/]+(\/remove)?$/,
+  /^\/api\/orders\/[^/]+\/add-package$/, /^\/api\/requested-tests\/[^/]+\/package-cancel$/, /^\/api\/ordered-packages\/[^/]+\/cancel$/,
+  /^\/api\/price-changes(\/[^/]+\/cancel)?$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

@@ -31,8 +31,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/purchasing(\/.*)?$/,
   // the Workflow Designer and specifications
   /^\/api\/methods(\/.*)?$/, /^\/api\/specs$/,
-  // testing (backlog, batches, the bench, QC Review); a batch's logbook flags, lot entries and aliquots stay with logbooks in Node
-  /^\/api\/testing\/(?!.*\/(equipment-flags|accept-flag|lot-entries|aliquots|scan-aliquot)$).+$/,
+  // testing (backlog, batches, the bench, QC Review, a batch's logbook flags, lot entries and aliquots) and logbooks
+  /^\/api\/testing\/.+$/, /^\/api\/logbooks(\/.*)?$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

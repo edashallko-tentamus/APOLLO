@@ -3,9 +3,6 @@ package com.tentamus.lims.oos.service;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.RuleException;
-import java.math.BigDecimal;
-import java.math.MathContext;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -208,17 +205,5 @@ public class OosChecks {
     }
 
     /** Number.prototype.toPrecision(p) in JavaScript. */
-    static String toPrecision(double x, int p) {
-        if (Double.isNaN(x)) return "NaN";
-        if (Double.isInfinite(x)) return x > 0 ? "Infinity" : "-Infinity";
-        if (x == 0) return p == 1 ? "0" : "0." + "0".repeat(p - 1);
-        BigDecimal d = new BigDecimal(Math.abs(x)).round(new MathContext(p, RoundingMode.HALF_UP));
-        int e = d.precision() - d.scale() - 1;
-        String digits = d.unscaledValue().toString();
-        digits = (digits + "0".repeat(p)).substring(0, p);
-        String sign = x < 0 ? "-" : "";
-        if (e < -6 || e >= p) return sign + digits.charAt(0) + (p > 1 ? "." + digits.substring(1) : "") + "e" + (e >= 0 ? "+" : "-") + Math.abs(e);
-        if (e >= 0) return sign + digits.substring(0, e + 1) + (e + 1 < p ? "." + digits.substring(e + 1) : "");
-        return sign + "0." + "0".repeat(-e - 1) + digits;
-    }
+    static String toPrecision(double x, int p) { return Js.toPrecision(x, p); }
 }

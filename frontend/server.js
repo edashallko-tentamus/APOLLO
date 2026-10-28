@@ -41,6 +41,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/versions\/[^/]+\/serving-line$/,
   // workflow verification; writing the protocol, the run, the evidence capture, the whole document and the Word file stay in Node
   /^\/api\/verification\/versions\/[^/]+$/, /^\/api\/verification\/[^/]+\/(approve-protocol|evidence\/[^/]+|sign-report|cancel)$/,
+  // stability studies; the report PDFs (preview, issue, the issued one) and the hourly due-pulls job stay in Node
+  /^\/api\/stability\/(?!studies\/[^/]+\/(report\.pdf|report-preview\.pdf|reports)$|reports\/[^/]+\/pdf$).+$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

@@ -39,6 +39,14 @@ public class Db {
      * rows}. Only a few actions answer this way (receive, dispose...); the screens do not read it.
      */
     public Map<String, Object> raw(String sql, Object... params) {
+        if (!sql.stripLeading().regionMatches(true, 0, "SELECT", 0, 6)) {
+            // an UPDATE without RETURNING answers no rows: Node's client gives {fields: [], rows: []}
+            jdbc.update(sql, convert(params));
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("fields", List.of());
+            r.put("rows", List.of());
+            return r;
+        }
         return jdbc.query(sql, rs -> {
             ResultSetMetaData md = rs.getMetaData();
             List<Map<String, Object>> fields = new ArrayList<>();

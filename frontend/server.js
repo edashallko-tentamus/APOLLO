@@ -29,6 +29,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/inventory(\/.*)?$/, /^\/api\/equipment(\/.*)?$/,
   // purchasing and vendor approvals
   /^\/api\/purchasing(\/.*)?$/,
+  // the Workflow Designer and specifications
+  /^\/api\/methods(\/.*)?$/, /^\/api\/specs$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

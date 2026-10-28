@@ -1,5 +1,6 @@
 package com.tentamus.lims.clients.service;
 
+import com.tentamus.lims.clients.domain.Contact;
 import com.tentamus.lims.clients.domain.ContactRoles;
 import com.tentamus.lims.clients.repo.ContactRepository;
 import com.tentamus.lims.core.access.AccessPolicy;
@@ -35,6 +36,7 @@ public class ContactService {
     public List<Map<String, Object>> saveContacts(RequestContext ctx, List<Map<String, Object>> rows) {
         return uow.run(ctx, db -> {
             if (anyWrite(rows, contacts.contactWriter()::pick)) access.requireToChange(ctx, "contact", ClientService.PERMISSION);
+            for (Map<String, Object> row : rows) Contact.check(contacts.contactWriter().pick(row), row.get("id") == null);
             return contacts.contactWriter().upsert(db, rows, Map.of());
         });
     }

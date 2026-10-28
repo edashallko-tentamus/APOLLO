@@ -8,7 +8,8 @@ import java.util.Objects;
 
 /**
  * A client's license (cannabis, DEA…): added over time, never deleted; a renewal is a new license and an old one is
- * retired with a reason. Replaces the database trigger client_license_rules.
+ * retired with a reason. Replaces the database trigger client_license_rules and the checks on the type, number and dates
+ * (migration 059 drops them).
  */
 public final class ClientLicense {
     /** The columns a person types for a license. */
@@ -29,6 +30,11 @@ public final class ClientLicense {
         if (changes.containsKey("license_type")) out.put("license_type", trim(changes.get("license_type")));
         if (changes.containsKey("license_number")) out.put("license_number", trim(changes.get("license_number")));
         String status = str(after.get("status"), "Active");
+        if (str(trim(after.get("license_type")), "").isEmpty()) throw RuleException.withCode("Give the license type.", "23514");
+        if (str(trim(after.get("license_number")), "").isEmpty()) throw RuleException.withCode("Give the license number.", "23514");
+        Object issued = after.get("issued_on"), expires = after.get("expires_on");
+        if (issued != null && expires != null && !issued.toString().isEmpty() && !expires.toString().isEmpty() && expires.toString().compareTo(issued.toString()) < 0)
+            throw RuleException.withCode("The license cannot expire before it was issued.", "23514");
         if (before != null && !Objects.equals(str(before.get("client_id"), null), str(after.get("client_id"), null)))
             throw RuleException.database("A license stays with its client");
         if (before != null && "Retired".equals(str(before.get("status"), null)) && "Retired".equals(status)

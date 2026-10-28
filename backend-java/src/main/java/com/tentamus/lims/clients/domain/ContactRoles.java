@@ -10,7 +10,8 @@ import java.util.TreeSet;
 /**
  * The roles a contact holds for one client (Primary, Secondary, Ordering, Report, Billing, Quality, Alerts…).
  * Replaces the role checks of the database trigger client_contact_validate: every role must be a known one,
- * duplicates are removed and the list is kept sorted, and Primary and Secondary exclude each other.
+ * duplicates are removed and the list is kept sorted, at least one role is given, and Primary and Secondary exclude each other.
+ * One active contact per one-per-client role is checked by ContactService (it needs the client's other links).
  */
 public final class ContactRoles {
     private final List<String> roles;
@@ -20,6 +21,7 @@ public final class ContactRoles {
     /** @param raw the roles as sent: a list, or PostgreSQL array text such as {PRIMARY,ORDERING} */
     public static ContactRoles of(Object raw, Collection<String> knownRoles) {
         List<String> given = parse(raw);
+        if (given.isEmpty()) throw RuleException.withCode("Choose at least one role for the contact.", "23514");
         for (String r : given) if (!knownRoles.contains(r)) throw RuleException.database("Unknown Contact Role: " + r);
         List<String> sorted = new ArrayList<>(new TreeSet<>(given));
         if (sorted.contains("PRIMARY") && sorted.contains("SECONDARY"))

@@ -72,6 +72,7 @@ public class ClientService {
             List<Map<String, Object>> out = new ArrayList<>();
             if (row.get("id") != null && vals.isEmpty()) return out;
             access.requireToChange(ctx, "client", PERMISSION);
+            Client.check(row.get("id") == null ? null : row.get("id").toString(), vals, row.get("id") == null);
             if (row.get("id") != null) {
                 Object parent = vals.get("parent_client_id");
                 if (parent != null) Client.assertNoLoop(row.get("id").toString(), clients.selfAndAncestors(parent.toString()));

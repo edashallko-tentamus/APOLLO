@@ -71,7 +71,7 @@ SELECT pg_temp.expect_error_like('Someone without master.clients cannot add a li
   $$INSERT INTO client_license (client_id, license_type, license_number) SELECT id, 'Cannabis distributor', 'C11-0000001' FROM client WHERE display_name = 'LicTest'$$, 'permission');
 SELECT pg_temp.lc_user('akiddle');
 INSERT INTO client_license (client_id, license_type, license_number, issuing_authority, issued_on, expires_on)
-  SELECT id, ' Cannabis distributor ', 'C11-0000001', 'California DCC', current_date - 300, current_date + 65 FROM client WHERE display_name = 'LicTest';
+  SELECT id, 'Cannabis distributor', 'C11-0000001', 'California DCC', current_date - 300, current_date + 65 FROM client WHERE display_name = 'LicTest';
 INSERT INTO client_license (client_id, license_type, license_number, issued_on, expires_on)
   SELECT id, 'Cannabis manufacturer', 'CDPH-10002', current_date - 400, current_date + 10 FROM client WHERE display_name = 'LicTest';
 INSERT INTO client_license (client_id, license_type, license_number, issued_on, expires_on)
@@ -79,7 +79,7 @@ INSERT INTO client_license (client_id, license_type, license_number, issued_on, 
 INSERT INTO client_license (client_id, license_type, license_number)
   SELECT id, 'FDA registration', 'FEI-3000000' FROM client WHERE display_name = 'LicTest';
 INSERT INTO client_license (client_id, license_type, license_number) SELECT id, 'Other', 'OTH-1' FROM client WHERE display_name = 'LicOther';
-SELECT pg_temp.expect_true('Licenses get codes LIC-, and the type is trimmed',
+SELECT pg_temp.expect_true('Licenses get codes LIC- (trimming the type moved to the Java backend in migration 059)',
   (SELECT license_code ~ '^LIC-[0-9]{5}$' AND license_type = 'Cannabis distributor' FROM client_license WHERE license_number = 'C11-0000001'));
 SELECT pg_temp.expect_true('Licenses are additive: the client has all four',
   (SELECT count(*) = 4 FROM client_license_view WHERE client_name = 'LicTest'));
@@ -90,17 +90,13 @@ SELECT pg_temp.expect_true('The expiry state: Current, Expiring soon (within 30 
   AND (SELECT state = 'Current' AND days_left IS NULL FROM client_license_view WHERE license_number = 'FEI-3000000'));
 SELECT pg_temp.expect_error_like('The same license twice is refused',
   $$INSERT INTO client_license (client_id, license_type, license_number, expires_on) SELECT id, 'cannabis distributor', 'C11-0000001', current_date + 65 FROM client WHERE display_name = 'LicTest'$$, 'client_license_uq');
-SELECT pg_temp.expect_error_like('Expiry before issue is refused',
-  $$INSERT INTO client_license (client_id, license_type, license_number, issued_on, expires_on) SELECT id, 'X', 'X-1', current_date, current_date - 1 FROM client WHERE display_name = 'LicTest'$$, 'client_license_dates');
-SELECT pg_temp.expect_error_like('A license stays with its client',
-  $$UPDATE client_license SET client_id = (SELECT id FROM client WHERE display_name = 'LicOther') WHERE license_number = 'C11-0000001'$$, 'stays with its client');
-SELECT pg_temp.expect_error_like('Retiring needs a reason',
-  $$UPDATE client_license SET status = 'Retired' WHERE license_number = 'C12-0000003'$$, 'Say why');
+-- Moved to the Java backend in migration 059 (JUnit: ClientRulesTest): expiry before issue.
+-- Moved to the Java backend in migration 059 (JUnit: ClientRulesTest): a license stays with its client.
+-- Moved to the Java backend in migration 059 (JUnit: ClientRulesTest): retiring needs a reason.
 UPDATE client_license SET status = 'Retired', retired_reason = 'Replaced by a renewal' WHERE license_number = 'C12-0000003';
 SELECT pg_temp.expect_true('A retired license is kept, shown as Retired',
   (SELECT state = 'Retired' AND retired_reason = 'Replaced by a renewal' FROM client_license_view WHERE license_number = 'C12-0000003'));
-SELECT pg_temp.expect_error_like('A retired license is kept as it was',
-  $$UPDATE client_license SET expires_on = current_date + 400 WHERE license_number = 'C12-0000003'$$, 'kept as it was');
+-- Moved to the Java backend in migration 059 (JUnit: ClientRulesTest): a retired license is kept as it was.
 
 -- 4. the lab order names a license
 UPDATE lab_order SET client_license_id = pg_temp.lic('C11-0000001') WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest');

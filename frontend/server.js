@@ -33,6 +33,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/methods(\/.*)?$/, /^\/api\/specs$/,
   // testing (backlog, batches, the bench, QC Review, a batch's logbook flags, lot entries and aliquots) and logbooks
   /^\/api\/testing\/.+$/, /^\/api\/logbooks(\/.*)?$/,
+  // sensors; the feed itself (the Sensors page's sensor list, Read now, Re-judge, the minute job) stays in Node
+  /^\/api\/sensors\/(connection|links|links\/[^/]+\/(approve|retire)|equipment\/[^/]+)$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

@@ -10,6 +10,8 @@ public final class Js {
     public static String number(Number n) {
         if (n instanceof BigDecimal d) return d.signum() == 0 ? "0" : d.stripTrailingZeros().toPlainString();
         double v = n.doubleValue();
+        if (Double.isNaN(v)) return "NaN";
+        if (Double.isInfinite(v)) return v > 0 ? "Infinity" : "-Infinity";
         if (v == Math.rint(v) && Math.abs(v) < 1e21) return Long.toString((long) v);
         return BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
     }

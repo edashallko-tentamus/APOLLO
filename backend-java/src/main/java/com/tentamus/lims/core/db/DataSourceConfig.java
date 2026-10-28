@@ -56,6 +56,9 @@ public class DataSourceConfig {
             Map<String, String> params = new LinkedHashMap<>();
             params.put("stringtype", "unspecified");
             params.put("ApplicationName", "lims-backend-java");
+            // every query planned for its own values, as the Node client's unnamed statements are: a reused generic plan
+            // returned rows of unordered queries in another order (QC Review's step list, found 2026-10-28)
+            params.put("prepareThreshold", "0");
             if (u.getRawQuery() != null) {
                 for (String p : u.getRawQuery().split("&")) {
                     String[] kv = p.split("=", 2);

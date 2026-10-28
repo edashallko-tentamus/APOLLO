@@ -33,6 +33,9 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/methods(\/.*)?$/, /^\/api\/specs$/,
   // testing (backlog, batches, the bench, QC Review); a batch's logbook flags, lot entries and aliquots stay with logbooks in Node
   /^\/api\/testing\/(?!.*\/(equipment-flags|accept-flag|lot-entries|aliquots|scan-aliquot)$).+$/,
+  // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
+  /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
+  /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

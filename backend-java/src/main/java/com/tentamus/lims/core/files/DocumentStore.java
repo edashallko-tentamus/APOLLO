@@ -39,7 +39,7 @@ public class DocumentStore {
         return (String) r.get("id");
     }
 
-    static String sha256(byte[] bytes) {
+    public static String sha256(byte[] bytes) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }

@@ -38,5 +38,8 @@ public record RequestContext(String userId, String siteId, String rawSite, Strin
 
     public RequestContext withReason(String r) { return new RequestContext(userId, siteId, rawSite, r == null ? "" : r, ip); }
 
+    /** The Node routes' {...c, reason: c.reason || fallback}. */
+    public RequestContext orReason(String fallback) { return reason.isEmpty() ? withReason(fallback) : this; }
+
     public static boolean isUuid(Object v) { return v != null && UUID.matcher(v.toString()).matches(); }
 }

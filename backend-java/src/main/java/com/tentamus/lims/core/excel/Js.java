@@ -31,4 +31,36 @@ public final class Js {
         if (s.isEmpty()) return 0;
         try { return Double.parseDouble(s); } catch (NumberFormatException e) { return Double.NaN; }
     }
+
+    /** JavaScript truthiness for a request or row value: null, "", false, 0 and NaN are false. */
+    public static boolean truthy(Object v) {
+        if (v == null || Boolean.FALSE.equals(v) || "".equals(v)) return false;
+        if (v instanceof Number n) { double d = n.doubleValue(); return d != 0 && !Double.isNaN(d); }
+        return true;
+    }
+
+    /** parseInt(v, 10): the leading whole number, or null for NaN. */
+    public static Long parseInt(Object v) {
+        if (v == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*([+-]?\\d+)").matcher(v instanceof Number n ? number(n) : v.toString());
+        if (!m.find()) return null;
+        try { return Long.parseLong(m.group(1)); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** parseInt(v, 10) || d. */
+    public static long intOr(Object v, long d) {
+        Long n = parseInt(v);
+        return n == null || n == 0 ? d : n;
+    }
+
+    /** The routes' num(): null for null, undefined and "", else Number(v) (NaN stays NaN). */
+    public static Double num(Object v) {
+        return v == null || "".equals(v) ? null : toNumber(v);
+    }
+
+    /** v || null. */
+    public static Object orNull(Object v) { return truthy(v) ? v : null; }
+
+    /** v || "". */
+    public static Object orBlank(Object v) { return truthy(v) ? v : ""; }
 }

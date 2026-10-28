@@ -42,6 +42,9 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/billing\/(ready|invoices|claim|lines\/remove|settings|settings\/terms|settings\/connection)$/,
   /^\/api\/billing\/invoices\/[^/]+(\/(release|charges|payment))?$/, /^\/api\/billing\/lines\/[^/]+\/(price|rush)$/,
   /^\/api\/billing\/corrections\/[^/]+\/pdf$/, /^\/api\/orders\/[^/]+\/billing$/,
+  // service lines, the order's test picker, charges
+  /^\/api\/service-lines(\/(types|tests))?$/, /^\/api\/clients\/[^/]+\/service-lines$/, /^\/api\/orders\/[^/]+\/(picker|catalogue-tests|charges)$/,
+  /^\/api\/charge-items$/, /^\/api\/versions\/[^/]+\/charges$/, /^\/api\/(quoted-charges|order-charges)\/[^/]+$/,
   /^\/api\/bulk\/(lots|samplestorage|suppliers|locations|thresholds|units|conversions|equipment)\/(export|preview|apply)$/];
 const backendFor = (pathname) => (JAVA && JAVA_ROUTES.some((r) => r.test(pathname)) ? JAVA : API);
 const PUBLIC = path.join(__dirname, 'public');

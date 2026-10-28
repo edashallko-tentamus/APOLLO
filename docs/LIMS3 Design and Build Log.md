@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.37.0** (2026-10-28) |
+| Current version | **0.37.1** (2026-10-28) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1913 database rule tests (0.37.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and every browser test suite (41 runs, 0.37.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.37.1 | 2026-10-28 | The performance report finishes on real data | Claude Code | none | The Samples sheet asks the turnaround view for the period's samples only (over 10 minutes on Alex's data before; 6.7 s for ten months after) |
 | 0.37.0 | 2026-10-28 | KPIs: Lab Score, top tests and clients, departments, people | Claude in the cloud | 059 | The Lab Score (samples on time 60 %, revenue vs budget 10 %, vs monthly forecast 30 %) on the GM and executive dashboards; top 20 tests by orders with a 2-SD swing flag, revenue and their top 3 clients; top 20 clients (CM, PM, CY, PY to date, PY); the lab's departments with revenue and work (GM), the top 10 departments across labs (executive); People (GM, Lab Supervisors) and My numbers (everyone) |
 | 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
 | 0.36.0 | 2026-10-21 | Charges, service lines, ordering any test at list price, percent discounts, invoice payments and PO corrections | Claude in the cloud | 058 | Discount % typed on quote lines and packages (and one % for every line); miscellaneous charges (kits, shipping, fees, discounts) in the catalogue, on quotes, on orders (billed at once) and on draft invoices; service line > type > department on tests and service lines on clients; the order's drill-down test picker; any test of the lab ordered at its list price (a quote line still wins); the invoice details first, payment status recorded by hand; the PO of an issued invoice corrected (signed) with a corrected copy sent |
@@ -154,6 +155,14 @@ A living record of how LIMS3 is designed and built: what changed in each version
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.37.1: the performance report finishes on real data (2026-10-28, Claude Code; no migration)
+
+- **Why.** Alex ran Finance figures > Performance report on his data and nothing downloaded.
+- **Found.** Downloads from the browser pane work (a test file reached Downloads). The report itself never finished: built against a copy of his data (as his account, outside the app), January to October for both labs ran over 10 minutes. Every query took under a second except the Samples sheet's: `LEFT JOIN sample_tat_view` worked out the turnaround of every sample ever, once per row (119 s for October alone). Fresh test databases are too small to show it, so `test:dashboards` passed.
+- **What changed.** `server/routes_dashboard.js` (`GET /api/finance/report.xlsx`): the period's samples first, then `sample_tat_view` for just those sample IDs (`WHERE sample_id = ANY(...)`, which the view filters before it adds up), merged in the route. Same columns and order on the Samples sheet.
+- **How it was checked.** On the copy of Alex's data: January to October, both labs, 6.7 s; October, CFL, 0.9 s; September, both labs, 1.3 s. `test:dashboards` 45/45 (the report included) and `test:kpis` 32/32 on fresh databases. No SQL changed, so the rule tests are unaffected. The dashboard widgets that read `sample_tat_view` filter by lab (0.8 s on his data) and were left as they are.
+- **Alex's data.** Nothing to apply; the fix takes effect when port 3000 next starts.
 
 ### 0.37.0: KPIs, the Lab Score, departments and people (2026-10-28, Claude in the cloud; migration 059)
 

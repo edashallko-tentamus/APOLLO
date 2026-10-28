@@ -971,6 +971,11 @@ Alex (2026-10-28): KPIs by department and person, a Lab Score, the top 20 tests 
 - **For Claude Code:** next migration 060, next seed 040, next rule test test_053. Run `npm test` and `test:kpis` on PGlite (it uses `percentile_cont`, `string_agg(DISTINCT ...)` and `row_number()` window functions). The sampling slice is now 0.38.0, with `Proposal - Lab-Added Verification Requirements`.
 - **On the laptop (Claude Code, 2026-10-28):** 1913 rule tests on PGlite and `test:kpis` 32/32 (no fix needed). Copy test of 059 clean (only the permission, widgets and views added; his records unchanged). Applied on Alex's go (2026-10-28). Backup `backup-before-0.37.0-2026-10-28`.
 
+## 0.37.1: the performance report finishes on real data (Claude Code, 2026-10-28; no migration)
+
+- The report route's Samples sheet asks `sample_tat_view` by sample ID (`WHERE sample_id = ANY(...)`) for the period's samples, instead of `LEFT JOIN sample_tat_view`: the join worked the turnaround out for every sample ever, once per row (over 10 minutes on Alex's data). **Never JOIN `sample_tat_view` (or `test_tat_view`) to another table:** filter it by its own grouping columns (`sample_id`, `site_id`) so the filter reaches the rows before they are added up.
+- Fresh test databases are too small to show slow queries: time anything heavy on a copy of Alex's data (as his account, outside the app, never signing in as him: see the scratchpad's `reportcheck.js` pattern).
+
 ## Demo recordings (Alex, 2026-10-16)
 
 Alex asked Claude in the cloud to record the module demos with Claude Code as each is finished. Protocol: `..\demo-scripts\RECORDING.md`. Claude Code writes and rehearses each runner (`..\lims3-film\public\demo\<name>.js`), resets the filming copy, then runs `node record-demo.js <name> --title "NN Title"` in `..\lims3-film` (port 3300 only) and adds a line to `..\demo-videos\READY.md`. Claude in the cloud converts each recording to MP4, checks it, writes fixes to `..\demo-videos\<title>.review.md` and sends it to Alex.

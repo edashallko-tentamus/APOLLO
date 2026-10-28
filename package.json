@@ -1,6 +1,6 @@
 {
   "name": "lims3-sandbox",
-  "version": "0.37.0",
+  "version": "0.37.1",
   "private": true,
   "description": "LIMS3 Sandbox: slices 1-3 (clients, catalogue pricing, quotes, lab orders, samples, intake, due dates, inventory, login and signatures, permissions and lab groups, equipment, purchasing, Workflow Designer WD-1, chemistry execution WD-2, QC Review WD-3, micro bench WD-4, and on to invoicing I-1 and dashboards D-1)",
   "main": "server/server.js",

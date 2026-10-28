@@ -793,13 +793,20 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
       FROM finance_week w JOIN lab_site s ON s.id = w.site_id WHERE w.site_id = ANY($1) AND w.status = 'Active' AND w.week_ending BETWEEN $2 AND $3 ORDER BY w.week_ending, s.site_code`, P);
     const plans = await q(c.db, `SELECT s.site_code, p.month, p.plan, p.revenue, p.costs FROM finance_plan p JOIN lab_site s ON s.id = p.site_id
       WHERE p.site_id = ANY($1) AND p.status = 'Active' AND p.month BETWEEN date_trunc('month', $2::date) AND $3 ORDER BY p.month, s.site_code, p.plan`, P);
-    const samples = await q(c.db, `SELECT s.sample_code, s.client_sample_id, ls.site_code, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, s.matrix, s.received_at, s.logged_at,
-        t.day0, t.due_date, t.tests, t.completed_on, t.all_reported, t.hold_days, t.on_time, t.days_late,
+    // the period's samples first, then the turnaround of just those (0.37.1: joining sample_tat_view worked it out for every
+    // sample ever, once per row: over 10 minutes on Alex's data; asked by sample ID it takes about 2 s for a year)
+    const samples = await q(c.db, `SELECT s.id, s.sample_code, s.client_sample_id, ls.site_code, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, s.matrix, s.received_at, s.logged_at,
         (s.logged_at AT TIME ZONE ls.time_zone)::date AS logged_on
       FROM sample s JOIN lab_order o ON o.id = s.lab_order_id JOIN lab_site ls ON ls.id = o.site_id JOIN client cl ON cl.id = o.client_id
-      LEFT JOIN sample_tat_view t ON t.sample_id = s.id
       WHERE o.site_id = ANY($1) AND NOT cl.is_internal AND s.logged_at IS NOT NULL AND (s.logged_at AT TIME ZONE ls.time_zone)::date BETWEEN $2 AND $3
       ORDER BY s.logged_at, s.sample_code`, P);
+    const tat = new Map((samples.length ? await q(c.db, `SELECT sample_id, day0, due_date, tests, completed_on, all_reported, hold_days, on_time, days_late
+      FROM sample_tat_view WHERE sample_id = ANY($1::uuid[])`, [samples.map((x) => x.id)]) : []).map((t) => [t.sample_id, t]));
+    for (const x of samples) {
+      const t = tat.get(x.id) || {};
+      for (const k of ['day0', 'due_date', 'tests', 'completed_on', 'all_reported', 'hold_days', 'on_time', 'days_late']) x[k] = t[k] === undefined ? null : t[k];
+      delete x.id;
+    }
     const tests = await q(c.db, `SELECT t.sample_code, ls.site_code, t.order_code, t.test_name, d.department_name, t.is_rush, t.day0, t.due_date, t.received_at, t.logged_at, t.approved_at,
         t.reported_at, t.reported_on, t.login_days, t.lab_days, t.qa_days, t.hold_days, t.on_time, t.days_late
       FROM test_tat_view t JOIN lab_site ls ON ls.id = t.site_id LEFT JOIN department d ON d.id = t.department_id

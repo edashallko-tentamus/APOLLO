@@ -46,6 +46,8 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   // dashboards and finance figures; the performance report (a styled multi-sheet workbook) stays in Node
   /^\/api\/dashboard\/[^/]+(\/(detail|layout|reset))?$/, /^\/api\/departments$/, /^\/api\/admin\/dashboard-widgets$/,
   /^\/api\/finance(\/(weeks|plans|plans\/preview|plans\.xlsx))?$/,
+  // trending and control charts; the PDF stays in Node
+  /^\/api\/trending\/(?!pdf$).+$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

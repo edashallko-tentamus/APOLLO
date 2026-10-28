@@ -43,6 +43,9 @@ const JAVA_ROUTES = [/^\/api\/clients(\/[^/]+)?$/, /^\/api\/clients\/[^/]+\/lice
   /^\/api\/verification\/versions\/[^/]+$/, /^\/api\/verification\/[^/]+\/(approve-protocol|evidence\/[^/]+|sign-report|cancel)$/,
   // stability studies; the report PDFs (preview, issue, the issued one) and the hourly due-pulls job stay in Node
   /^\/api\/stability\/(?!studies\/[^/]+\/(report\.pdf|report-preview\.pdf|reports)$|reports\/[^/]+\/pdf$).+$/,
+  // dashboards and finance figures; the performance report (a styled multi-sheet workbook) stays in Node
+  /^\/api\/dashboard\/[^/]+(\/(detail|layout|reset))?$/, /^\/api\/departments$/, /^\/api\/admin\/dashboard-widgets$/,
+  /^\/api\/finance(\/(weeks|plans|plans\/preview|plans\.xlsx))?$/,
   // Report Finalization around the COA; making a COA (preview, finalize) and the public check stay in Node (documents)
   /^\/api\/reports\/(queue|claim|issued|notes)$/, /^\/api\/reports\/(claims\/[^/]+\/release|notes\/[^/]+\/remove|samples\/[^/]+\/coa|coa\/[^/]+\/pdf)$/,
   /^\/api\/orders\/[^/]+\/coas$/, /^\/api\/samples\/[^/]+\/attachments$/, /^\/api\/attachments\/[^/]+\/file$/,

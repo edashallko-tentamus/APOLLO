@@ -74,8 +74,7 @@ SELECT pg_temp.expect_ok('QA sets Reagent to need QA testing at CFL (with a reas
 SELECT set_config('lims.reason', 'Rule test', false);
 SELECT pg_temp.expect_true('The change is in the audit trail, with its reason',
   EXISTS (SELECT 1 FROM audit_log a WHERE a.table_name = 'qa_testing_default' AND a.reason = 'Reagents are tested before use (QA decision)'));
-SELECT pg_temp.expect_error_like('A default keeps its lab and item type',
-  $$UPDATE qa_testing_default SET chemical_type = 'Solvent' WHERE site_id = pg_temp.cfl() AND chemical_type = 'Reagent'$$, 'keeps its lab and item type');
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.qaTesting): a QA testing default keeps its lab and item type
 
 -------------------------------------------------------------------------------
 -- 2. NEW LOTS: THE LAB'S DEFAULT, OR THE CHOICE MADE AT RECEIPT
@@ -107,14 +106,16 @@ SELECT pg_temp.expect_error_like('Whether a lot needs QA testing is not edited d
 SELECT pg_temp.expect_true('A lot waiting for QA testing is not usable for any test, and says what to do',
   lot_qa_problem(pg_temp.q_lot('QA-NACL-1'), pg_temp.q_tid('WD Micro Screen')) LIKE '%waiting for QA testing%Send for QA testing%'
   AND lot_qa_problem(pg_temp.q_lot('QA-ACN-1'), pg_temp.q_tid('WD Micro Screen')) IS NULL);
-SELECT pg_temp.expect_error_like('Nor can it go into an in-house mixture',
-  $$INSERT INTO lot_component (lot_id, component_lot_id, quantity_used) VALUES (pg_temp.q_lot('QA-ACN-1'), pg_temp.q_lot('QA-NACL-1'), 0.01)$$, 'cannot go into a mixture');
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.qaTesting): a lot waiting for QA testing cannot go into an in-house mixture
 
 -- QA waives the testing of one lot (signed, with a reason); nobody else can
-SELECT pg_temp.expect_error_like('An analyst cannot waive QA testing', $$SELECT waive_lot_qa_testing(pg_temp.q_lot('QA-NACL-2'))$$, 'inventory.qa_configure');
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.qaTesting): waiving QA testing (waive_lot_qa_testing dropped; the route requires inventory.qa_configure)
 SELECT pg_temp.as_user('wd.qa');
 SELECT set_config('lims.reason', 'Supplier COA reviewed: identity and assay meet the specification', false);
-SELECT pg_temp.expect_ok('QA waives QA testing for a lot', $$SELECT waive_lot_qa_testing(pg_temp.q_lot('QA-NACL-2'))$$);
+-- what Java's waiver writes (LotQaTesting.assertWaivable passed)
+SELECT pg_temp.expect_ok('QA waives QA testing for a lot', $q$DO $do$ BEGIN PERFORM set_config('lims.group_sync', '1', true); PERFORM set_config('lims.media_internal', '1', true);
+  UPDATE inventory_lot SET qualification_required = false WHERE id = pg_temp.q_lot('QA-NACL-2');
+  PERFORM set_config('lims.media_internal', '', true); PERFORM set_config('lims.group_sync', '', true); END $do$$q$);
 SELECT set_config('lims.reason', 'Rule test', false);
 SELECT pg_temp.expect_true('The waived lot needs no testing; the change is audited with its reason and signature',
   lot_qa_status(pg_temp.q_lot('QA-NACL-2')) IS NULL
@@ -151,8 +152,7 @@ SELECT pg_temp.expect_true('Released for every use: usable for any test and in a
   AND lot_qa_problem(pg_temp.q_lot('QA-ACN-1'), pg_temp.q_tid('WD Micro Screen')) IS NULL
   AND lot_qa_problem(pg_temp.q_lot('QA-ACN-1'), pg_temp.q_tid('WD Bracket Assay')) LIKE '%released only for WD Micro Screen%');
 SELECT pg_temp.as_user('akiddle');
-SELECT pg_temp.expect_error_like('Media released only for a named test (test_020''s WD-TSA-1) cannot go into a mixture',
-  $$INSERT INTO lot_component (lot_id, component_lot_id, quantity_used) VALUES (pg_temp.q_lot('QA-ACN-1'), pg_temp.q_lot('WD-TSA-1'), 1)$$, 'not for every use');
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.qaTesting): media released only for a named test cannot go into a mixture
 
 -------------------------------------------------------------------------------
 -- 4. REJECTED: BLOCKED FOR EVERY USE UNTIL A RETEST PASSES
@@ -161,7 +161,7 @@ SELECT pg_temp.expect_true('A rejected lot is refused for every use, and the mes
   lot_qa_problem(pg_temp.q_lot('QA-MEOH-1'), pg_temp.q_tid('WD Micro Screen')) LIKE '%rejected in QA testing%retest passes%dispose%'
   AND lot_qa_problem(pg_temp.q_lot('QA-MEOH-1'), NULL) LIKE '%rejected%');
 SELECT pg_temp.as_user('wd.qa');
-SELECT pg_temp.expect_error_like('A rejected lot cannot be waived (the result decides)', $$SELECT waive_lot_qa_testing(pg_temp.q_lot('QA-MEOH-1'))$$, 'its result decides');
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.qaTesting): a rejected lot cannot be waived (the result decides)
 SELECT pg_temp.as_user('wd.ana');
 SELECT pg_temp.expect_ok('It is sent for a retest', $$SELECT pg_temp.q_send('QA-MEOH-1', NULL)$$);
 SELECT pg_temp.expect_true('The retest is a new test on the same lot sample, linked to the failed one; the lot stays rejected while it runs',

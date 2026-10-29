@@ -2,7 +2,12 @@ package com.tentamus.lims.pricing.repo;
 
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
+import com.tentamus.lims.pricing.domain.Amount;
+import com.tentamus.lims.pricing.domain.CatalogueEntry;
+import com.tentamus.lims.pricing.domain.PriceAdjustment;
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Repository;
@@ -46,9 +51,37 @@ public class CatalogueRepository {
 
     public Map<String, Object> entry(String testId) { return db.one("SELECT * FROM test_catalog_entry WHERE test_id = ?", testId); }
 
-    public Object listPrice(String testId) {
-        Map<String, Object> r = db.one("SELECT list_price FROM test_catalogue WHERE test_id = ?", testId);
-        return r == null ? 0 : r.get("list_price");
+    /** A test's catalogue entry with its active analyte prices (keyed by analyte id), or null when it has none. */
+    public CatalogueEntry entryOf(Db d, Object testId) {
+        Map<String, Object> e = d.one("SELECT id, pricing_mode::text AS pricing_mode, base_price, prep_fee FROM test_catalog_entry WHERE test_id = ?::uuid", testId);
+        if (e == null) return null;
+        Map<String, BigDecimal> prices = new LinkedHashMap<>();
+        for (Map<String, Object> a : d.rows("SELECT analyte_id, price FROM test_analyte_price WHERE catalog_entry_id = ?::uuid AND status = 'Active'", e.get("id")))
+            prices.put((String) a.get("analyte_id"), Amount.of(a.get("price")));
+        return new CatalogueEntry((String) e.get("pricing_mode"), Amount.of(e.get("base_price")), Amount.of(e.get("prep_fee")), prices);
+    }
+
+    public CatalogueEntry entryOf(Object testId) { return entryOf(db, testId); }
+
+    /**
+     * Moves the prices of active tests by a percentage: each test's base price and preparation fee, and its analyte
+     * prices. Returns how many tests were repriced.
+     *
+     * @param tests  the tests, or null for every active test
+     * @param siteId only that lab's tests, or null for every lab
+     */
+    public int reprice(Db d, List<String> tests, String siteId, PriceAdjustment a) {
+        List<Map<String, Object>> entries = d.rows("""
+            SELECT e.id, e.base_price, e.prep_fee FROM test_catalog_entry e JOIN test t ON t.id = e.test_id
+             WHERE t.status = 'Active' AND (?::uuid IS NULL OR t.site_id = ?::uuid) AND (?::uuid[] IS NULL OR e.test_id = ANY (?::uuid[]))""",
+            siteId, siteId, tests, tests);
+        for (Map<String, Object> e : entries) {
+            d.update("UPDATE test_catalog_entry SET base_price = ?, prep_fee = ? WHERE id = ?::uuid",
+                a.apply(Amount.of(e.get("base_price"))), a.apply(Amount.of(e.get("prep_fee"))), e.get("id"));
+            for (Map<String, Object> ap : d.rows("SELECT id, price FROM test_analyte_price WHERE catalog_entry_id = ?::uuid AND status = 'Active'", e.get("id")))
+                d.update("UPDATE test_analyte_price SET price = ? WHERE id = ?::uuid", a.apply(Amount.of(ap.get("price"))), ap.get("id"));
+        }
+        return entries.size();
     }
 
     public List<Map<String, Object>> analytePrices(Object entryId) {

@@ -69,7 +69,7 @@ SELECT pg_temp.expect_error('Inactive matrix cannot be used on a new sample',
 UPDATE sample SET description = 'Fish oil capsules' WHERE client_sample_id = 'LOT-M2';
 SELECT pg_temp.expect_true('Existing sample keeps an Inactive matrix and can still be edited',
   (SELECT matrix = 'Capsule' AND description = 'Fish oil capsules' FROM sample WHERE client_sample_id = 'LOT-M2'));
-SELECT pg_temp.expect_error('Matrix in use cannot be renamed', $$UPDATE matrix SET matrix_name = 'Capsules' WHERE matrix_name = 'Capsule'$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): Matrix in use cannot be renamed
 SELECT set_config('lims.reason', '', false);
 
 -- TAT override

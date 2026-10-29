@@ -54,14 +54,7 @@ INSERT INTO waste_classification (site_id, waste_name, hazard_classes, epa_codes
   VALUES (pg_temp.wc_site('CFL'), 'CFL acetonitrile waste', '{Ignitable,Toxic}', 'D001, U003', 'Acetonitrile (HPLC)', '{Solvent}');
 SELECT pg_temp.expect_true('A Lab Supervisor (inventory.lists) adds the lab''s own, with its own default for Solvent',
   (SELECT site_id = pg_temp.wc_site('CFL') FROM waste_classification WHERE waste_name = 'CFL acetonitrile waste'));
-SELECT pg_temp.expect_error_like('One default per item type in the lab',
-  $$INSERT INTO waste_classification (site_id, waste_name, hazard_classes, default_for) VALUES (pg_temp.wc_site('CFL'), 'CFL methanol waste', '{Ignitable}', '{Solvent}')$$, 'already the default for Solvent');
-SELECT pg_temp.expect_error_like('Hazard classes come from the controlled list',
-  $$INSERT INTO waste_classification (site_id, waste_name, hazard_classes) VALUES (pg_temp.wc_site('CFL'), 'CFL odd waste', '{Explosive}')$$, 'Unknown hazard class');
-SELECT pg_temp.expect_error_like('Non-hazardous, or hazard classes, not both',
-  $$INSERT INTO waste_classification (site_id, waste_name, hazard_classes) VALUES (pg_temp.wc_site('CFL'), 'CFL mixed', '{Non-hazardous,Toxic}')$$, 'not both');
-SELECT pg_temp.expect_error_like('A classification has hazard classes, or is marked Needs review',
-  $$INSERT INTO waste_classification (site_id, waste_name) VALUES (pg_temp.wc_site('CFL'), 'CFL unknown')$$, 'Needs review');
+-- Moved to the Java backend in migration 062 (JUnit: WasteRulesTest.classificationRules): one default per item type in the lab, hazard classes from the controlled list, Non-hazardous or hazard classes, hazard classes or Needs review
 SELECT pg_temp.expect_error_like('Names are unique in the lab',
   $$INSERT INTO waste_classification (site_id, waste_name, hazard_classes) VALUES (pg_temp.wc_site('CFL'), 'cfl ACETONITRILE waste', '{Toxic}')$$, 'waste_classification_name');
 SELECT pg_temp.as_user('wc.ana');

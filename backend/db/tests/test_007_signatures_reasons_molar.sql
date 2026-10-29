@@ -67,7 +67,7 @@ SELECT pg_temp.user_only('qa.units');
 INSERT INTO reason_code (module, reason_text) VALUES ('Inventory', 'Spill or breakage');
 SELECT pg_temp.expect_true('QA can add a canned reason', EXISTS (SELECT 1 FROM reason_code WHERE reason_text = 'Spill or breakage'));
 SELECT pg_temp.expect_error('The same reason twice in one module is refused', $$INSERT INTO reason_code (module, reason_text) VALUES ('Inventory', 'spill or breakage')$$);
-SELECT pg_temp.expect_error('Reasons belong to a known module', $$INSERT INTO reason_code (module, reason_text) VALUES ('Kitchen', 'x')$$);
+-- Moved to the Java backend in migration 060 (JUnit: ReasonCodeRulesTest): Reasons belong to a known module
 
 -- Molar mass (QA, Lab Supervisors and administrators; signed; with a source)
 SELECT pg_temp.user_only('inv.tech'); SELECT script_signature('Rule test', false);
@@ -76,12 +76,12 @@ SELECT pg_temp.expect_error('An analyst cannot set a molar mass', $$UPDATE analy
 SELECT pg_temp.user_only('inv.sup');
 SELECT pg_temp.expect_error('A molar mass change needs a signature', $$UPDATE analyte SET molar_mass = 207.2, molar_mass_source = 'IUPAC' WHERE analyte_name = 'Lead'$$);
 SELECT script_signature('Rule test', false);
-SELECT pg_temp.expect_error('A molar mass needs its source', $$UPDATE analyte SET molar_mass = 207.2 WHERE analyte_name = 'Lead'$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): A molar mass needs its source
 UPDATE analyte SET molar_mass = 207.2, molar_mass_source = 'IUPAC standard atomic weights 2021' WHERE analyte_name = 'Lead';
 SELECT pg_temp.expect_true('A Lab Supervisor sets a molar mass with its source and a signature', (SELECT molar_mass = 207.2 FROM analyte WHERE analyte_name = 'Lead'));
 UPDATE analyte SET report_name = report_name WHERE analyte_name = 'Lead';
 SELECT pg_temp.user_only('akiddle'); SELECT script_signature('Rule test', false);
-INSERT INTO analyte (analyte_name, analyte_class, cas_number, molar_mass, molar_mass_source) VALUES ('Sodium', 'Chemical', '7440-23-5', 22.99, 'IUPAC standard atomic weights 2021');
+INSERT INTO analyte (analyte_name, report_name, analyte_class, cas_number, molar_mass, molar_mass_source) VALUES ('Sodium', 'Sodium', 'Chemical', '7440-23-5', 22.99, 'IUPAC standard atomic weights 2021');
 SELECT set_config('lims.reason', '', false);
 
 -- Mixtures: components in any convertible unit; molar and "expressed as" concentrations

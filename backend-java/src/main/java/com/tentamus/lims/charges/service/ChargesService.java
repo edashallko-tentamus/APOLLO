@@ -8,24 +8,33 @@ import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.charges.domain.Charge;
+import com.tentamus.lims.charges.domain.OrderCharge;
+import com.tentamus.lims.pricing.domain.Amount;
+import com.tentamus.lims.quotes.domain.QuoteVersion;
+import com.tentamus.lims.quotes.repo.ProjectRepository;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
  * Service lines, the test picker on a lab order (any test of the lab at its list price, the client's quoted tests
- * first), and miscellaneous charges in the catalogue, on quotes and on lab orders. Every rule lives in the database.
+ * first), and miscellaneous charges in the catalogue, on quotes and on lab orders. The charge rules are the domain's
+ * ({@link Charge}, {@link OrderCharge}); ordering at list price stays in the database (Orders and Invoicing rely on it).
  */
 @Service
 public class ChargesService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final ProjectRepository quotes;
 
-    public ChargesService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public ChargesService(Db db, UnitOfWork uow, AccessPolicy access, ProjectRepository quotes) {
         this.db = db;
         this.uow = uow;
         this.access = access;
+        this.quotes = quotes;
     }
 
     private Map<String, Object> orderOf(RequestContext ctx, String id) {
@@ -191,6 +200,7 @@ public class ChargesService {
             for (Map<String, Object> x : rows(body, "rows")) {
                 if (trimmed(x.get("charge_name")).isEmpty()) continue;
                 Double price = Js.num(x.get("price"));
+                Charge.checkItem(trimmed(x.get("charge_name")), price == null ? null : Amount.of(Js.number(price)));
                 Object[] v = { trimmed(x.get("charge_name")), Js.truthy(x.get("kind")) ? x.get("kind") : "Other", Js.orNull(x.get("description")), price == null ? 0 : price,
                     uuidOrNull(x.get("service_line_id")), status(x.get("status")) };
                 if (RequestContext.isUuid(x.get("id"))) d.update("UPDATE charge_item SET charge_name = ?, kind = ?, description = ?, price = ?, service_line_id = ?::uuid, status = ? WHERE id = ?::uuid",
@@ -226,15 +236,22 @@ public class ChargesService {
     public Map<String, Object> addQuoteCharge(RequestContext ctx, String vid, Map<String, Object> body) {
         Map<String, Object> v = versionOf(vid);
         if (!RequestContext.isUuid(body.get("charge_item_id"))) throw new RuleException("Choose the charge");
-        return uow.run(ctx.orReason("Quote edited"), d -> d.one("""
+        return uow.run(ctx.orReason("Quote edited"), d -> {
+            Map<String, Object> item = d.one("SELECT status::text AS status FROM charge_item WHERE id = ?::uuid", body.get("charge_item_id"));
+            Charge.checkAddToQuote(quotes.quoteVersion(d, v.get("id")), item == null ? null : (String) item.get("status"),
+                map("quantity", Js.intOr(body.get("quantity"), 1), "unit_price", Js.num(body.get("unit_price"))));
+            return d.one("""
             INSERT INTO quoted_charge (project_version_id, charge_item_id, quantity, unit_price, note)
             VALUES (?::uuid, ?::uuid, ?, COALESCE(?::numeric, (SELECT price FROM charge_item WHERE id = ?::uuid)), ?) RETURNING id""",
-            v.get("id"), body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1), Js.num(body.get("unit_price")), body.get("charge_item_id"), Js.orNull(body.get("note"))));
+            v.get("id"), body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1), Js.num(body.get("unit_price")), body.get("charge_item_id"), Js.orNull(body.get("note")));
+        });
     }
 
     public Map<String, Object> changeQuoteCharge(RequestContext ctx, String id, Map<String, Object> body) {
         if (!RequestContext.isUuid(id)) throw new RuleException("Charge not found");
         return uow.run(ctx.orReason("Quote edited"), d -> {
+            QuoteVersion v = quotes.quoteVersion(d, d.one("SELECT project_version_id FROM quoted_charge WHERE id = ?::uuid", id) instanceof Map<?, ?> r ? r.get("project_version_id") : null);
+            if (v != null) Charge.checkQuoteChange(v, Js.truthy(body.get("remove")) ? Map.of() : map("unit_price", Js.num(body.get("unit_price"))));
             if (Js.truthy(body.get("remove"))) { d.update("UPDATE quoted_charge SET status = 'Inactive' WHERE id = ?::uuid", id); return ok(); }
             Long q = Js.parseInt(body.get("quantity"));
             d.update("UPDATE quoted_charge SET quantity = COALESCE(?::int, quantity), unit_price = COALESCE(?::numeric, unit_price), note = ? WHERE id = ?::uuid",
@@ -264,10 +281,20 @@ public class ChargesService {
     public Map<String, Object> addOrderCharge(RequestContext ctx, String orderId, Map<String, Object> body) {
         Map<String, Object> o = orderOf(ctx, orderId);
         if (!RequestContext.isUuid(body.get("charge_item_id"))) throw new RuleException("Choose the charge");
-        return uow.run(ctx, d -> d.one("""
+        return uow.run(ctx, d -> {
+            Object sample = uuidOrNull(body.get("sample_id"));
+            Map<String, Object> s = sample == null ? null : d.one("SELECT lab_order_id FROM sample WHERE id = ?::uuid", sample);
+            Map<String, Object> item = d.one("SELECT status::text AS status, site_id, price FROM charge_item WHERE id = ?::uuid", body.get("charge_item_id"));
+            Double typed = Js.num(body.get("unit_price"));
+            OrderCharge.checkQuantity(Js.intOr(body.get("quantity"), 1));
+            OrderCharge.checkNew((String) o.get("id"), (String) o.get("site_id"), sample == null ? null : sample.toString(), s == null ? null : (String) s.get("lab_order_id"),
+                item == null ? null : (String) item.get("status"), item == null ? null : (String) item.get("site_id"), item == null ? BigDecimal.ZERO : Amount.of(item.get("price")),
+                typed == null ? null : Amount.of(Js.number(typed)), !ctx.reason().isBlank());
+            return d.one("""
             INSERT INTO order_charge (lab_order_id, sample_id, charge_item_id, quantity, unit_price, note)
             VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?::numeric, ?) RETURNING id, charge_no""",
-            o.get("id"), uuidOrNull(body.get("sample_id")), body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1), Js.num(body.get("unit_price")), Js.orNull(body.get("note"))));
+            o.get("id"), sample, body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1), typed, Js.orNull(body.get("note")));
+        });
     }
 
     public Map<String, Object> changeOrderCharge(RequestContext ctx, String id, Map<String, Object> body) {
@@ -276,9 +303,17 @@ public class ChargesService {
         if (oc == null) throw new RuleException("Charge not found");
         orderOf(ctx, (String) oc.get("lab_order_id"));
         return uow.run(ctx, d -> {
+            Map<String, Object> c = d.one("""
+                SELECT id, charge_no, lab_order_id, status, quantity, unit_price, charge_invoice_line(id) IS NOT NULL AS invoiced FROM order_charge WHERE id = ?::uuid""", id);
+            OrderCharge charge = new OrderCharge(id, (String) c.get("charge_no"), (String) c.get("lab_order_id"), (String) c.get("status"), Boolean.TRUE.equals(c.get("invoiced")));
+            Long q = Js.parseInt(body.get("quantity"));
+            Double price = Js.num(body.get("unit_price"));
+            boolean changes = Js.truthy(body.get("cancel")) || (q != null && q != 0 && Amount.of(q).compareTo(Amount.of(c.get("quantity"))) != 0)
+                || (price != null && Amount.of(Js.number(price)).abs().compareTo(Amount.of(c.get("unit_price")).abs()) != 0);
+            charge.checkChange(changes, !ctx.reason().isBlank());
+            if (q != null && q != 0) OrderCharge.checkQuantity(q);
             if (Js.truthy(body.get("cancel"))) d.update("UPDATE order_charge SET status = 'Cancelled' WHERE id = ?::uuid", id);
             else {
-                Long q = Js.parseInt(body.get("quantity"));
                 d.update("UPDATE order_charge SET quantity = COALESCE(?::int, quantity), unit_price = COALESCE(?::numeric, unit_price), note = ? WHERE id = ?::uuid",
                     q == null || q == 0 ? null : q, Js.num(body.get("unit_price")), Js.orNull(body.get("note")), id);
             }

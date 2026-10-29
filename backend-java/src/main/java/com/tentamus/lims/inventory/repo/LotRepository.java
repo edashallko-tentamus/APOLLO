@@ -3,7 +3,17 @@ package com.tentamus.lims.inventory.repo;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
 import com.tentamus.lims.core.paging.PagedList;
+import com.tentamus.lims.inventory.domain.Lot;
+import com.tentamus.lims.inventory.domain.LotAnalyteLine;
+import com.tentamus.lims.inventory.domain.LotQaTesting;
+import com.tentamus.lims.inventory.domain.Mixture;
+import com.tentamus.lims.inventory.domain.StockMovement;
+import com.tentamus.lims.inventory.domain.Units;
+import com.tentamus.lims.inventory.domain.Values;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +29,9 @@ public class LotRepository {
     public static final RecordWriter LOTS = new RecordWriter("inventory_lot", LOT_FIELDS);
     /** A purchase request also sets its receipt status (Requested). */
     public static final RecordWriter REQUESTS = new RecordWriter("inventory_lot", concat(LOT_FIELDS, "receipt_status"));
+    /** Every column Java's own lot actions write (receive, transfer, reorder, mixtures). */
+    static final RecordWriter ALL = new RecordWriter("inventory_lot", concat(concat(concat(concat(LOT_FIELDS, "receipt_status"), "site_id"), "transferred_from_lot_id"),
+        "reorder_of_lot_id"));
     static final String LOTS_SQL = """
         SELECT v.*, media_status(v.id) AS media_status, lot_qa_status(v.id) AS qa_status,
             w.waste_name, w.waste_code, w.needs_review AS waste_review, w.hazard_classes AS waste_hazards
@@ -117,14 +130,22 @@ public class LotRepository {
         d.one("SELECT set_config('lims.qa_testing', ?, true)", s);
     }
 
-    /** Keeps or adds each analyte line on an item; lines not in the list are set Inactive (never deleted). */
-    public void syncAnalytes(Db d, Object lotId, List<Map<String, Object>> list) {
+    /** Keeps or adds each analyte line on an item (checked by {@link LotAnalyteLine}); lines not in the list are set Inactive (never deleted). */
+    public void syncAnalytes(Db d, Object lotId, List<Map<String, Object>> list, Units units) {
+        Lot lot = find(d, lotId.toString());
         List<Map<String, Object>> cur = d.rows("SELECT * FROM lot_analyte WHERE lot_id = ?::uuid", lotId);
         List<Map<String, Object>> given = list == null ? List.of() : list;
         for (Map<String, Object> a : given) {
             if (blank(a.get("analyte_id"))) continue;
             Map<String, Object> ex = cur.stream().filter(x -> Objects.equals(x.get("analyte_id"), a.get("analyte_id"))).findFirst().orElse(null);
-            Object[] vals = {a.get("concentration"), or(a.get("concentration_unit")), a.get("target_concentration"), a.get("tolerance_pct"),
+            Map<String, Object> after = new LinkedHashMap<>(ex == null ? Map.of() : ex);
+            after.put("lot_id", lotId.toString());
+            after.put("analyte_id", a.get("analyte_id"));
+            after.put("concentration", a.get("concentration"));
+            after.put("concentration_unit", or(a.get("concentration_unit")));
+            after.put("target_concentration", a.get("target_concentration"));
+            Map<String, Object> ok = LotAnalyteLine.checked(lot, ex, after, analyteActive(d, a.get("analyte_id")), units);
+            Object[] vals = {a.get("concentration"), ok.get("concentration_unit"), a.get("target_concentration"), a.get("tolerance_pct"),
                 or(a.get("expressed_as")), a.get("formula_weight"), a.get("analyte_per_unit")};
             if (ex == null) d.update("""
                 INSERT INTO lot_analyte (lot_id, analyte_id, concentration, concentration_unit, target_concentration, tolerance_pct, expressed_as, formula_weight, analyte_per_unit)
@@ -136,6 +157,111 @@ public class LotRepository {
         for (Map<String, Object> ex : cur)
             if ("Active".equals(ex.get("status")) && given.stream().noneMatch(a -> Objects.equals(a.get("analyte_id"), ex.get("analyte_id"))))
                 d.update("UPDATE lot_analyte SET status = 'Inactive' WHERE id = ?::uuid", ex.get("id"));
+    }
+
+    // ---------------------------------------------------------------- the lot as a domain object
+    public Lot find(Db d, String id) { return Lot.of(d.one("SELECT * FROM inventory_lot WHERE id = ?::uuid", id)); }
+
+    public Lot byCode(Db d, String code) { return Lot.of(d.one("SELECT * FROM inventory_lot WHERE upper(lot_code) = upper(?)", code)); }
+
+    public Lot.Chemical chemical(Db d, Object id) {
+        if (blank(id)) return null;
+        Map<String, Object> c = d.one("SELECT chemical_name, cas_number, status::text = 'Active' AS active FROM chemical WHERE id = ?::uuid", id);
+        return c == null ? null : new Lot.Chemical((String) c.get("chemical_name"), (String) c.get("cas_number"), Boolean.TRUE.equals(c.get("active")));
+    }
+
+    public LocalDate earliestComponentExpiry(Db d, String lotId) {
+        if (lotId == null) return null;
+        return Values.date(d.one("""
+            SELECT min(c.expiration_date) AS d FROM lot_component lc JOIN inventory_lot c ON c.id = lc.component_lot_id WHERE lc.lot_id = ?::uuid""", lotId).get("d"));
+    }
+
+    public int activeAnalytes(Db d, String lotId) {
+        return ((Number) d.one("SELECT count(*)::int AS n FROM lot_analyte WHERE lot_id = ?::uuid AND status = 'Active'", lotId).get("n")).intValue();
+    }
+
+    public boolean analyteActive(Db d, Object analyteId) {
+        Map<String, Object> a = d.one("SELECT status::text AS s FROM analyte WHERE id = ?::uuid", analyteId);
+        return a != null && "Active".equals(a.get("s"));
+    }
+
+    public BigDecimal onHand(Db d, String lotId) {
+        return Values.dec(d.one("SELECT COALESCE(sum(quantity_change), 0) AS q FROM inventory_transaction WHERE lot_id = ?::uuid", lotId).get("q"));
+    }
+
+    /** The item types among these that the lab tests before use (its QA testing defaults). */
+    public List<String> typesTheLabTests(Db d, String site, List<String> types) {
+        return d.rows("SELECT chemical_type::text AS t FROM qa_testing_default WHERE site_id = ?::uuid AND required AND chemical_type::text = ANY(?::text[]) ORDER BY chemical_type",
+            site, types).stream().map(r -> (String) r.get("t")).toList();
+    }
+
+    public LotQaTesting qaTesting(Db d, String lotId) {
+        Map<String, Object> l = d.one("SELECT qualification_required FROM inventory_lot WHERE id = ?::uuid", lotId);
+        List<LotQaTesting.Qualification> q = d.rows("""
+            SELECT q.status::text AS status, q.use_test_id, t.test_name, to_char(q.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') AS at
+              FROM media_qualification q LEFT JOIN test t ON t.id = q.use_test_id WHERE q.lot_id = ?::uuid""", lotId).stream()
+            .map(r -> new LotQaTesting.Qualification((String) r.get("status"), (String) r.get("use_test_id"), (String) r.get("test_name"), (String) r.get("at"))).toList();
+        return new LotQaTesting(l != null && Boolean.TRUE.equals(l.get("qualification_required")), q);
+    }
+
+    /** Component lots for a mixture, with their active analyte lines. */
+    public Map<String, Mixture.Component> components(Db d, List<String> lotIds) {
+        Map<String, Mixture.Component> out = new LinkedHashMap<>();
+        for (Map<String, Object> l : d.rows("SELECT id, lot_code, item_name, unit, physical_form, expiration_date FROM inventory_lot WHERE id = ANY(?::uuid[])", lotIds)) {
+            List<Mixture.AnalyteLine> lines = d.rows("""
+                SELECT la.analyte_id, an.analyte_name, an.molar_mass, la.concentration, la.concentration_unit, uom.dimension::text AS dimension,
+                       la.expressed_as, la.formula_weight, la.analyte_per_unit
+                  FROM lot_analyte la JOIN analyte an ON an.id = la.analyte_id LEFT JOIN unit_of_measure uom ON uom.unit_code = la.concentration_unit
+                 WHERE la.lot_id = ?::uuid AND la.status = 'Active' ORDER BY la.created_at, la.id""", l.get("id")).stream()
+                .map(a -> new Mixture.AnalyteLine((String) a.get("analyte_id"), (String) a.get("analyte_name"), Values.dec(a.get("molar_mass")),
+                    Values.dec(a.get("concentration")), (String) a.get("concentration_unit"), (String) a.get("dimension"), (String) a.get("expressed_as"),
+                    Values.dec(a.get("formula_weight")), Values.dec(a.get("analyte_per_unit")))).toList();
+            out.put((String) l.get("id"), new Mixture.Component((String) l.get("id"), (String) l.get("lot_code"), (String) l.get("unit"), (String) l.get("physical_form"),
+                Values.date(l.get("expiration_date")), lines));
+        }
+        return out;
+    }
+
+    public String insert(Db d, Map<String, Object> vals) { return (String) ALL.insert(d, vals, "id").get("id"); }
+
+    public void update(Db d, String id, Map<String, Object> changes) { if (!changes.isEmpty()) ALL.update(d, id, changes); }
+
+    public Map<String, Object> insertMovement(Db d, StockMovement m, Object at) {
+        return d.one("""
+            INSERT INTO inventory_transaction (lot_id, txn_type, quantity_change, related_lot_id, reference, notes, reason, txn_at)
+              VALUES (?::uuid, ?::inventory_txn_type, ?, ?::uuid, ?, ?, ?, COALESCE(?::timestamptz, clock_timestamp())) RETURNING id""",
+            m.lotId(), m.type(), m.quantity(), m.relatedLotId(), m.reference(), m.notes(), blank(m.reason()) ? null : m.reason(), at);
+    }
+
+    /** A reorder or a transfer carries the item's analytes (a transfer also its targets and calculated values). */
+    public void copyAnalytes(Db d, String from, String to, boolean all) {
+        d.update(all ? """
+            INSERT INTO lot_analyte (lot_id, analyte_id, concentration, concentration_unit, target_concentration, tolerance_pct, calculated, calc_note)
+            SELECT ?::uuid, analyte_id, concentration, concentration_unit, target_concentration, tolerance_pct, calculated, calc_note
+              FROM lot_analyte WHERE lot_id = ?::uuid AND status = 'Active' ON CONFLICT (lot_id, analyte_id) DO NOTHING""" : """
+            INSERT INTO lot_analyte (lot_id, analyte_id, concentration, concentration_unit)
+            SELECT ?::uuid, analyte_id, concentration, concentration_unit FROM lot_analyte WHERE lot_id = ?::uuid AND status = 'Active'
+            ON CONFLICT (lot_id, analyte_id) DO NOTHING""", to, from);
+    }
+
+    /** The Supplier COA travels with transferred material (same document, name and fingerprint). */
+    public void copyCoas(Db d, String from, String to) {
+        d.update("""
+            INSERT INTO supplier_coa (lot_id, document_id, file_name, sha256, extraction_method, values_confirmed, confirmed_by, confirmed_at)
+            SELECT ?::uuid, document_id, file_name, sha256, extraction_method, values_confirmed, confirmed_by, confirmed_at
+              FROM supplier_coa WHERE lot_id = ?::uuid AND status = 'Active'""", to, from);
+    }
+
+    public void addComponent(Db d, String mixture, Mixture.Portion p) {
+        d.update("INSERT INTO lot_component (lot_id, component_lot_id, quantity_used, entered_quantity, entered_unit) VALUES (?::uuid, ?::uuid, ?, ?, ?)",
+            mixture, p.lot().lotId(), p.quantity(), p.enteredQuantity(), p.enteredUnit());
+    }
+
+    public void addCalculatedAnalyte(Db d, String lot, Mixture.Concentration c, Object target, Object tolerance) {
+        d.update("""
+            INSERT INTO lot_analyte (lot_id, analyte_id, concentration, concentration_unit, target_concentration, tolerance_pct, calculated, calc_note)
+              VALUES (?::uuid, ?::uuid, ?, ?, ?, ?, true, ?) ON CONFLICT (lot_id, analyte_id) DO NOTHING""",
+            lot, c.analyteId(), c.concentration(), c.unit(), target, tolerance, c.note());
     }
 
     /** JavaScript's "x || null": empty text, false and 0 become null. */

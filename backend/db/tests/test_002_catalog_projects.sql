@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION pg_temp.expect_true(label text, cond boolean) RETURNS
 BEGIN INSERT INTO results VALUES (label, CASE WHEN cond THEN 'PASS' ELSE 'FAIL' END); END $$;
 
 -- Analytes for a metals panel
-INSERT INTO analyte (analyte_name, analyte_class) VALUES ('Arsenic','Chemical'),('Cadmium','Chemical'),('Mercury','Chemical'),('Chromium','Chemical');
+INSERT INTO analyte (analyte_name, report_name, analyte_class) VALUES ('Arsenic','Arsenic','Chemical'),('Cadmium','Cadmium','Chemical'),('Mercury','Mercury','Chemical'),('Chromium','Chromium','Chemical');
 
 -- Rush schedule
 INSERT INTO rush_fee_schedule (schedule_name) VALUES ('Chemistry Rush');
@@ -40,8 +40,7 @@ INSERT INTO test_analyte_price (catalog_entry_id, analyte_id, price)
 SELECT pg_temp.expect_true('Analyte mode list = 50 + 25 + 5 x 20 = 175', (SELECT list_price FROM test_catalogue WHERE test_name='Heavy Metals (ICP-MS)') = 175);
 SELECT pg_temp.expect_true('Base + prep list = 40', (SELECT list_price FROM test_catalogue WHERE test_name='Moisture') = 40);
 SELECT pg_temp.expect_true('Base only list = 60', (SELECT list_price FROM test_catalogue WHERE test_name='Total Aerobic Plate Count') = 60);
-SELECT pg_temp.expect_error('Base Price Only cannot carry a prep fee',
-  $$SET LOCAL lims.reason='t'; UPDATE test_catalog_entry SET prep_fee = 5 WHERE pricing_mode='Base Price Only'$$);
+-- Moved to the Java backend in migration 061 (JUnit: PricingRulesTest): Base Price Only cannot carry a prep fee
 SELECT pg_temp.expect_true('Schedule default: Same Day requires approval',
   rush_requires_approval((SELECT id FROM test_catalog_entry WHERE pricing_mode='Analyte Selection'), (SELECT id FROM rush_fee_tier WHERE tier_name='Same Day')));
 INSERT INTO test_rush_approval (catalog_entry_id, tier_id, requires_approval)
@@ -66,14 +65,14 @@ SELECT pg_temp.expect_true('Removing 2 analytes: list 135, final keeps 20% = 108
 UPDATE quoted_analyte_selection SET included = true WHERE analyte_id = (SELECT id FROM analyte WHERE analyte_name='Mercury');
 SELECT pg_temp.expect_true('Restoring one analyte: list 155, final 124', (SELECT list_price = 155 AND final_price = 124 FROM quote_line_review WHERE test_name='Heavy Metals (ICP-MS)'));
 UPDATE quote_rush_term SET discount_pct = 100 WHERE tier_name = '5 Day';
-SELECT pg_temp.expect_error('Rush surcharge cannot be edited on a quote', $$UPDATE quote_rush_term SET surcharge_value = 1$$);
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): rush surcharges are not editable on a quote (Java writes only the discount)
 SELECT pg_temp.expect_error('Cannot quote with a missing final price', $$UPDATE project_version SET status='Quoted'$$);
 UPDATE quoted_test_configuration SET final_price = 45 WHERE test_id = (SELECT id FROM test WHERE test_name='Moisture');
 SELECT pg_temp.expect_true('Pricing review flags final above list', EXISTS (SELECT 1 FROM quote_line_review WHERE test_name='Moisture' AND issue='Final price above list price'));
 UPDATE project_version SET status='Quoted', valid_until = current_date + 30;
-SELECT pg_temp.expect_error('Lines locked after quoting', $$UPDATE quoted_test_configuration SET final_price = 1$$);
-SELECT pg_temp.expect_error('Analyte selections locked after quoting', $$UPDATE quoted_analyte_selection SET included = true$$);
-SELECT pg_temp.expect_error('Rush terms locked after quoting', $$UPDATE quote_rush_term SET discount_pct = 50$$);
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): lines locked after quoting
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): analyte selections locked after quoting
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): rush terms locked after quoting
 SELECT pg_temp.expect_error('Acceptance by a non-client contact rejected',
   $$UPDATE project_version SET status='Accepted', accepted_by_contact_id=(SELECT id FROM contact WHERE email='maria@consult.com' AND false)$$);
 UPDATE project_version SET status='Accepted', accepted_by_contact_id=(SELECT id FROM contact WHERE email='sam@acme.com');

@@ -50,7 +50,7 @@ UPDATE test_catalog_entry SET base_price = 50 WHERE test_id = pg_temp.pk_test('P
 UPDATE test_catalog_entry SET base_price = 40 WHERE test_id = pg_temp.pk_test('PK Yeast');
 UPDATE test_catalog_entry SET base_price = 80 WHERE test_id = pg_temp.pk_test('PK Partner assay');
 UPDATE test_catalog_entry SET pricing_mode = 'Analyte Selection', base_price = 10 WHERE test_id = pg_temp.pk_test('PK Metals panel');
-INSERT INTO analyte (analyte_name, analyte_class) SELECT x, 'Chemical' FROM unnest(ARRAY['PK Arsenic', 'PK Cadmium', 'PK Mercury']) x
+INSERT INTO analyte (analyte_name, report_name, analyte_class) SELECT x, x, 'Chemical' FROM unnest(ARRAY['PK Arsenic', 'PK Cadmium', 'PK Mercury']) x
  WHERE NOT EXISTS (SELECT 1 FROM analyte a WHERE a.analyte_name = x);
 INSERT INTO test_analyte_price (catalog_entry_id, analyte_id, price)
 SELECT e.id, a.id, 30 FROM test_catalog_entry e, analyte a WHERE e.test_id = pg_temp.pk_test('PK Metals panel') AND a.analyte_name IN ('PK Arsenic', 'PK Cadmium', 'PK Mercury');
@@ -75,9 +75,9 @@ INSERT INTO test_package_item (package_id, test_id, sort_order) VALUES
  (pg_temp.pk_pkg('PK Supplement release'), pg_temp.pk_test('PK Lead'), 1),
  (pg_temp.pk_pkg('PK Supplement release'), pg_temp.pk_test('PK Moisture'), 2),
  (pg_temp.pk_pkg('PK Supplement release'), pg_temp.pk_test('PK Metals panel'), 3);
-SELECT pg_temp.expect_error_like('A package holds its own lab''s tests only', $$INSERT INTO test_package_item (package_id, test_id) VALUES (pg_temp.pk_pkg('PK Supplement release'), pg_temp.pk_test('PK Partner assay'))$$, 'own lab');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a package holds its own lab's tests only
 SELECT pg_temp.expect_error_like('A test is in a package once', $$INSERT INTO test_package_item (package_id, test_id) VALUES (pg_temp.pk_pkg('PK Supplement release'), pg_temp.pk_test('PK Lead'))$$, 'test_package_item_uq');
-SELECT pg_temp.expect_error_like('Only an analyte-priced test has analytes to reprice', $$INSERT INTO test_package_analyte (item_id, analyte_id, included) SELECT i.id, (SELECT id FROM analyte WHERE analyte_name = 'PK Arsenic'), false FROM test_package_item i WHERE i.test_id = pg_temp.pk_test('PK Lead') AND i.package_id = pg_temp.pk_pkg('PK Supplement release')$$, 'analyte-priced');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): only an analyte-priced test has analytes to leave out
 -- 049: each test is priced in the package (it starts at its catalogue price); the package price is their sum
 SELECT pg_temp.expect_true('A test added without a price starts at its catalogue price: Lead $100, Moisture $50, metals panel $100 (all analytes); no discount yet',
   (SELECT array_agg(share ORDER BY sort_order) = ARRAY[100, 50, 100]::numeric[] FROM test_package_lines(pg_temp.pk_pkg('PK Supplement release')))
@@ -96,13 +96,13 @@ SELECT pg_temp.expect_true('Each test priced: the package is their sum ($90 + $4
   AND (SELECT array_agg(share ORDER BY sort_order) = ARRAY[90, 45, 54]::numeric[] FROM test_package_lines(pg_temp.pk_pkg('PK Supplement release'))));
 SELECT pg_temp.expect_true('The discount is worked out: $220 at catalogue less $189 = $31, 14.1 % off; nothing to fix',
   (SELECT list_value = 220 AND discount = 31 AND discount_pct = 14.1 AND errors = 0 FROM test_package_view WHERE package_name = 'PK Supplement release'));
-SELECT pg_temp.expect_error_like('A test''s price in the package cannot be emptied', $$UPDATE test_package_item SET component_price = NULL WHERE package_id = pg_temp.pk_pkg('PK Supplement release') AND test_id = pg_temp.pk_test('PK Lead')$$, 'Give the price of PK Lead');
-SELECT pg_temp.expect_error_like('A price in the package is not negative', $$UPDATE test_package_item SET component_price = -1 WHERE package_id = pg_temp.pk_pkg('PK Supplement release') AND test_id = pg_temp.pk_test('PK Lead')$$, 'component_price');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a test's price in the package cannot be emptied
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a price in the package is not negative
 INSERT INTO test_package (site_id, package_name) VALUES (pg_temp.pk_site('CFL'), 'PK Basic pair');
 INSERT INTO test_package_item (package_id, test_id, sort_order, component_price) VALUES (pg_temp.pk_pkg('PK Basic pair'), pg_temp.pk_test('PK Lead'), 1, 85.71), (pg_temp.pk_pkg('PK Basic pair'), pg_temp.pk_test('PK Yeast'), 2, 34.29);
 SELECT pg_temp.expect_true('Prices typed when the tests are added: Lead $85.71 + Yeast $34.29 = $120',
   test_package_price(pg_temp.pk_pkg('PK Basic pair')) = 120);
-SELECT pg_temp.expect_error_like('A package stays with its lab', $$UPDATE test_package SET site_id = pg_temp.pk_site('TPS') WHERE package_name = 'PK Basic pair'$$, 'stays with its lab');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a package stays with its lab (site_id is not written after the insert)
 
 -------------------------------------------------------------------------------
 -- 2. ON A QUOTE
@@ -117,10 +117,10 @@ SELECT pg_temp.expect_true('On the quote: one package at $189, list $220 per sam
   (SELECT package_price = 189 AND list_price = 220 AND quantity = 2 FROM quoted_package WHERE project_version_id = pg_temp.pk_v('PK quote'))
   AND (SELECT array_agg(final_price ORDER BY final_price DESC) = ARRAY[90, 54, 45]::numeric[] AND bool_and(quantity = 2) FROM quoted_test_configuration WHERE quoted_package_id IS NOT NULL AND project_version_id = pg_temp.pk_v('PK quote'))
   AND (SELECT count(*) = 2 FROM quoted_analyte_selection s JOIN quoted_test_configuration q ON q.id = s.line_id WHERE q.quoted_package_id IS NOT NULL AND q.project_version_id = pg_temp.pk_v('PK quote') AND s.included));
-SELECT pg_temp.expect_error_like('A package''s test is not priced on its own', $$UPDATE quoted_test_configuration SET final_price = 10 WHERE quoted_package_id IS NOT NULL AND project_version_id = pg_temp.pk_v('PK quote') AND test_id = pg_temp.pk_test('PK Lead')$$, 'part of package');
-SELECT pg_temp.expect_error_like('nor its analytes changed on the quote', $$UPDATE quoted_analyte_selection SET included = true WHERE line_id IN (SELECT id FROM quoted_test_configuration WHERE quoted_package_id IS NOT NULL AND project_version_id = pg_temp.pk_v('PK quote'))$$, 'set in the package');
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): a package's test is not priced on its own
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): nor its analytes changed on the quote
 SELECT pg_temp.expect_error_like('A package is on a quote once', $$SELECT add_package_to_quote(pg_temp.pk_v('PK quote'), pg_temp.pk_pkg('PK Supplement release'), 1)$$, 'already on this quote');
-SELECT pg_temp.expect_error_like('A quoted package is changed through its own steps', $$UPDATE quoted_package SET package_price = 1 WHERE project_version_id = pg_temp.pk_v('PK quote')$$, 'through the quote page');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a quoted package is changed through the quote page only
 SELECT set_quoted_package((SELECT id FROM quoted_package WHERE project_version_id = pg_temp.pk_v('PK quote')), 180, NULL);
 SELECT pg_temp.expect_true('A negotiated package price ($180) is shared out again in the same proportions ($85.71, $51.43, $42.86)',
   (SELECT array_agg(final_price ORDER BY final_price DESC) = ARRAY[85.71, 51.43, 42.86]::numeric[] AND sum(final_price) = 180 FROM quoted_test_configuration WHERE quoted_package_id IS NOT NULL AND project_version_id = pg_temp.pk_v('PK quote')));
@@ -140,7 +140,7 @@ SELECT pg_temp.expect_true('Removing a package removes its tests',
   NOT EXISTS (SELECT 1 FROM quoted_test_configuration q JOIN quoted_package qp ON qp.id = q.quoted_package_id WHERE qp.project_version_id = pg_temp.pk_v('PK quote') AND qp.status = 'Removed' AND q.status = 'Active'));
 UPDATE project_version SET status = 'Quoted', valid_until = current_date + 30 WHERE id = pg_temp.pk_v('PK quote');
 UPDATE project_version SET status = 'Accepted', accepted_by_contact_id = (SELECT id FROM contact WHERE email = 'pat@pk-client.example') WHERE id = pg_temp.pk_v('PK quote');
-SELECT pg_temp.expect_error_like('Once quoted, packages are locked', $$SELECT set_quoted_package((SELECT id FROM quoted_package WHERE project_version_id = pg_temp.pk_v('PK quote') AND status = 'Active'), 170, NULL)$$, 'locked');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): once quoted, packages are locked
 SELECT pg_temp.expect_true('The client can order the package, and Lead on its own; the package''s tests are not orderable one by one',
   (SELECT count(*) = 1 FROM orderable_packages((SELECT id FROM client WHERE legal_name = 'PK Packaging Client LLC')))
   AND (SELECT array_agg(final_price) = ARRAY[95]::numeric[] FROM orderable_lines((SELECT id FROM client WHERE legal_name = 'PK Packaging Client LLC'))));
@@ -194,13 +194,13 @@ SELECT pg_temp.expect_true('A new version copies the package at $180 with the sa
 -------------------------------------------------------------------------------
 -- 4. DATED PRICE CHANGES
 -------------------------------------------------------------------------------
-SELECT pg_temp.expect_error_like('A price change starts today or later', $$INSERT INTO catalog_price_change (site_id, pct, effective_on, reason) VALUES (pg_temp.pk_site('CFL'), 5, site_today(pg_temp.pk_site('CFL')) - 1, 'x')$$, 'today or later');
-SELECT pg_temp.expect_error_like('A price change covers its own lab''s tests', $$INSERT INTO catalog_price_change (site_id, tests, pct, effective_on, reason) VALUES (pg_temp.pk_site('CFL'), ARRAY[pg_temp.pk_test('PK Partner assay')], 5, site_today(pg_temp.pk_site('CFL')), 'x')$$, 'own lab');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a price change starts today or later
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a price change covers its own lab's tests
 INSERT INTO catalog_price_change (site_id, tests, pct, effective_on, reason) VALUES (pg_temp.pk_site('CFL'), ARRAY[pg_temp.pk_test('PK Yeast')], 5, site_today(pg_temp.pk_site('CFL')) + 30, 'Next year (rule test)');
 SELECT pg_temp.expect_error_like('A change is not applied before its date', $$SELECT apply_catalog_price_change((SELECT id FROM catalog_price_change WHERE reason = 'Next year (rule test)'))$$, 'starts on');
-SELECT pg_temp.expect_error_like('A scheduled change is not edited', $$UPDATE catalog_price_change SET pct = 6 WHERE reason = 'Next year (rule test)'$$, 'not edited');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a scheduled change is not edited (Java writes only its status)
 UPDATE catalog_price_change SET status = 'Cancelled' WHERE reason = 'Next year (rule test)';
-SELECT pg_temp.expect_true('A scheduled change can be cancelled (who and when)', (SELECT status = 'Cancelled' AND cancelled_by IS NOT NULL FROM catalog_price_change WHERE reason = 'Next year (rule test)'));
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): a scheduled change can be cancelled, Java records who and when
 INSERT INTO catalog_price_change (site_id, tests, pct, rounding, effective_on, reason)
 VALUES (pg_temp.pk_site('CFL'), ARRAY[pg_temp.pk_test('PK Lead'), pg_temp.pk_test('PK Yeast'), pg_temp.pk_test('PK Metals panel')], 10, 'Dollar', site_today(pg_temp.pk_site('CFL')), 'Annual increase (rule test)');
 SELECT pg_temp.expect_true('Due today: listed for the hourly job', EXISTS (SELECT 1 FROM catalog_price_change_due d JOIN catalog_price_change c ON c.id = d.id WHERE c.reason = 'Annual increase (rule test)'));
@@ -216,7 +216,7 @@ SELECT pg_temp.expect_true('The tests in the change move in their packages too (
   AND (SELECT array_agg(share ORDER BY sort_order) = ARRAY[99, 45, 59]::numeric[] FROM test_package_lines(pg_temp.pk_pkg('PK Supplement release')))
   AND (SELECT applied_packages = 2 FROM catalog_price_change WHERE reason = 'Annual increase (rule test)')
   AND (SELECT package_price = 180 FROM quoted_package WHERE project_version_id = pg_temp.pk_v('PK quote') AND status = 'Active'));
-SELECT pg_temp.expect_error_like('An applied change does not change', $$UPDATE catalog_price_change SET status = 'Cancelled' WHERE reason = 'Annual increase (rule test)'$$, 'does not change');
+-- Moved to the Java backend in migration 061 (JUnit: PackageRulesTest): an applied change does not change
 SELECT pg_temp.expect_true('The price changes are in the audit trail with their reason',
   EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'test_catalog_entry' AND reason LIKE 'Price change PC-%: Annual increase (rule test)'));
 

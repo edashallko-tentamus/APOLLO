@@ -10,7 +10,19 @@ import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.signature.SignatureService.Meaning;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.core.time.LabClock;
+import com.tentamus.lims.inventory.domain.ChemicalTypes;
+import com.tentamus.lims.inventory.domain.Lot;
+import com.tentamus.lims.inventory.domain.LotAnalyteLine;
+import com.tentamus.lims.inventory.domain.Mixture;
+import com.tentamus.lims.inventory.domain.StockMovement;
+import com.tentamus.lims.inventory.domain.SupplierCoa;
+import com.tentamus.lims.inventory.domain.Units;
+import com.tentamus.lims.inventory.domain.Values;
 import com.tentamus.lims.inventory.repo.LotRepository;
+import com.tentamus.lims.inventory.repo.UnitRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,8 +34,9 @@ import org.springframework.stereotype.Service;
 /**
  * Inventory lots: items and requests, the purchase steps, receiving, transfer, disposal, stock movements, in-house
  * mixtures, QA testing before use and Supplier COAs. Every create and change is signed (user ID and password) with the
- * meaning of the action; routine usage is not. The rules themselves (eligibility, stock, conditions, expiry) are the
- * database's.
+ * meaning of the action; routine usage is not. The rules live in the domain objects ({@link Lot}, {@link StockMovement},
+ * {@link Mixture}, LotQaTesting, {@link SupplierCoa}); this class loads them, asks them, and saves through {@link LotWriter}.
+ * Not here: QA testing samples (send_lot_for_qa_testing stays in the database: it orders tests on the internal order).
  */
 @Service
 public class LotService {
@@ -35,8 +48,12 @@ public class LotService {
     private final LotRepository lots;
     private final CoaReader ai;
     private final ObjectMapper json;
+    private final LotWriter writer;
+    private final UnitRepository units;
+    private final LabClock clock;
 
-    public LotService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, LotRepository lots, CoaReader ai, ObjectMapper json) {
+    public LotService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, LotRepository lots, CoaReader ai, ObjectMapper json,
+                      LotWriter writer, UnitRepository units, LabClock clock) {
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -44,6 +61,9 @@ public class LotService {
         this.lots = lots;
         this.ai = ai;
         this.json = json;
+        this.writer = writer;
+        this.units = units;
+        this.clock = clock;
     }
 
     // ---------------------------------------------------------------- reading
@@ -72,23 +92,34 @@ public class LotService {
     }
 
     // ---------------------------------------------------------------- items and requests
+    private LotWriter.Save save(RequestContext ctx, String site, Object qaChoice) {
+        return new LotWriter.Save(units.load(), clock.today(site), qaChoice, ctx, false);
+    }
+
     /** Receive many (paste grid): each row may name one analyte with its concentration. */
     public List<Map<String, Object>> receiveMany(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
         String site = access.currentSite(ctx);
+        Units u = units.load();
+        LocalDate today = clock.today(site);
         return signed(ctx, body, "Received by", "Receive many: " + rows.size() + " item(s)", d -> {
             List<Map<String, Object>> out = new ArrayList<>();
             for (Map<String, Object> row : rows) {
                 Map<String, Object> rest = new LinkedHashMap<>(row);
                 Object aid = rest.remove("analyte_id"), ac = rest.remove("analyte_concentration"), au = rest.remove("analyte_unit"), qa = rest.remove("qa_testing");
-                lots.qaChoice(d, row.get("id") != null ? null : qa);
-                List<Map<String, Object>> res = LotRepository.LOTS.upsert(d, List.of(rest), Map.of("site_id", site));
-                Object lotId = !res.isEmpty() && res.get(0) != null ? res.get(0).get("id") : row.get("id");
+                Map<String, Object> res = writer.save(d, LotRepository.LOTS, rest, Map.of("site_id", site), new LotWriter.Save(u, today, row.get("id") != null ? null : qa, ctx, false));
+                Object lotId = res != null && res.get("id") != null ? res.get("id") : row.get("id");
                 if (aid != null && !"".equals(aid)) {
-                    Object unit = au == null || "".equals(au) ? null : au;
-                    Map<String, Object> ex = d.one("SELECT id FROM lot_analyte WHERE lot_id = ?::uuid AND analyte_id = ?::uuid", lotId, aid);
+                    Map<String, Object> ex = d.one("SELECT * FROM lot_analyte WHERE lot_id = ?::uuid AND analyte_id = ?::uuid", lotId, aid);
+                    Map<String, Object> after = new LinkedHashMap<>(ex == null ? Map.of() : ex);
+                    after.put("lot_id", lotId.toString());
+                    after.put("analyte_id", aid);
+                    after.put("concentration", ac);
+                    after.put("concentration_unit", au == null || "".equals(au) ? null : au);
+                    Object unit = LotAnalyteLine.checked(lots.find(d, lotId.toString()), ex, after, lots.analyteActive(d, aid), u).get("concentration_unit");
                     if (ex != null) d.update("UPDATE lot_analyte SET concentration = ?, concentration_unit = ?, status = 'Active' WHERE id = ?::uuid", ac, unit, ex.get("id"));
                     else d.update("INSERT INTO lot_analyte (lot_id, analyte_id, concentration, concentration_unit) VALUES (?::uuid, ?::uuid, ?, ?)", lotId, aid, ac, unit);
                 }
+                writer.assertAnalyteNamed(d, lotId.toString());
                 Map<String, Object> id = new LinkedHashMap<>();
                 id.put("id", lotId);
                 out.add(id);
@@ -103,45 +134,56 @@ public class LotService {
         String site = access.currentSite(ctx);
         boolean request = truthy(body.get("request"));
         Map<String, Object> row = new LinkedHashMap<>(map(body.get("row")));
+        row.remove("id");
         if (request) row.put("receipt_status", "Requested");
         Map<String, Object> coa = map(body.get("coa"));
         boolean withCoa = coa.get("content_base64") != null && !"".equals(coa.get("content_base64"));
         if (withCoa && !COA_TYPES.matcher(str(coa.get("mime_type"))).matches()) throw new RuleException("Upload the COA as a PDF or an image (PNG or JPEG)");
         String action = "New inventory item: " + str(row.get("item_name")) + (withCoa ? " (with its Supplier COA)" : "");
+        LotWriter.Save s = save(ctx, site, body.get("qa_testing"));
         return signed(ctx, body, request ? "Requested by" : "Created by", action, d -> {
-            lots.qaChoice(d, body.get("qa_testing"));
-            Map<String, Object> lot = (request ? LotRepository.REQUESTS : LotRepository.LOTS).upsert(d, List.of(row), Map.of("site_id", site)).get(0);
-            lots.syncAnalytes(d, lot.get("id"), (List<Map<String, Object>>) list(body.get("analytes")));
+            Map<String, Object> lot = writer.save(d, request ? LotRepository.REQUESTS : LotRepository.LOTS, row, Map.of("site_id", site), s);
+            lots.syncAnalytes(d, lot.get("id"), (List<Map<String, Object>>) list(body.get("analytes")), s.units());
+            writer.assertAnalyteNamed(d, lot.get("id").toString());
             if (withCoa) saveCoa(d, lot.get("id"), coa, coa.get("proposal"), coa.get("confirmed"));
-            return lot;
+            return new LinkedHashMap<>(lot);
         });
     }
 
     /** Edit an item and its analytes (one signature and Reason for Change). */
     @SuppressWarnings("unchecked")
     public Map<String, Object> updateItem(RequestContext ctx, String id, Map<String, Object> body) {
-        lotSite(ctx, id);
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
         signed(ctx, body, "Changed by", lots.words(id, "Changed"), d -> {
-            LotRepository.LOTS.upsert(d, List.of(withId(map(body.get("row")), id)), Map.of());
-            if (body.get("analytes") != null) lots.syncAnalytes(d, id, (List<Map<String, Object>>) list(body.get("analytes")));
+            writer.save(d, LotRepository.LOTS, withId(map(body.get("row")), id), Map.of(), s);
+            if (body.get("analytes") != null) lots.syncAnalytes(d, id, (List<Map<String, Object>>) list(body.get("analytes")), s.units());
+            writer.assertAnalyteNamed(d, id);
             return null;
         });
         return Map.of("ok", true);
     }
 
     public List<Map<String, Object>> updateLot(RequestContext ctx, String id, Map<String, Object> body) {
-        lotSite(ctx, id);
-        return signed(ctx, body, "Changed by", lots.words(id, "Changed"), d -> LotRepository.LOTS.upsert(d, List.of(withId(map(body.get("row")), id)), Map.of()));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, body, "Changed by", lots.words(id, "Changed"), d -> {
+            Map<String, Object> r = writer.save(d, LotRepository.LOTS, withId(map(body.get("row")), id), Map.of(), s);
+            List<Map<String, Object>> out = new ArrayList<>();
+            if (r == null || !r.isEmpty()) out.add(r);
+            return out;
+        });
     }
 
     /** A new purchase request (not a reorder of a lot). */
     public Map<String, Object> request(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
         Map<String, Object> row = new LinkedHashMap<>(map(body.get("row")));
+        row.remove("id");
         row.put("receipt_status", "Requested");
-        List<Map<String, Object>> r = signed(ctx, body, "Requested by", "Purchase request: " + str(row.get("item_name")),
-            d -> LotRepository.REQUESTS.upsert(d, List.of(row), Map.of("site_id", site)));
-        return r.isEmpty() ? null : r.get(0);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, body, "Requested by", "Purchase request: " + str(row.get("item_name")),
+            d -> new LinkedHashMap<>(writer.save(d, LotRepository.REQUESTS, row, Map.of("site_id", site), s)));
     }
 
     // ---------------------------------------------------------------- purchase steps, receiving, transfer, disposal
@@ -162,51 +204,90 @@ public class LotService {
     }
 
     public Map<String, Object> cancel(RequestContext ctx, String id, Map<String, Object> body) {
-        lotSite(ctx, id);
-        return signed(ctx, body, "Cancelled by", lots.words(id, "Purchase request cancelled"), d -> d.raw("UPDATE inventory_lot SET status = 'Cancelled' WHERE id = ?::uuid", id));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, body, "Cancelled by", lots.words(id, "Purchase request cancelled"), d -> {
+            writer.write(d, lots.find(d, id), Map.of("status", "Cancelled"), s);
+            return noRows();
+        });
     }
 
     public Map<String, Object> reorder(RequestContext ctx, String id, Map<String, Object> body) {
-        lotSite(ctx, id);
-        return signed(ctx, body, "Requested by", lots.words(id, "Reorder of"),
-            d -> d.one("SELECT reorder_lot(?::uuid, ?, ?) AS id", id, or(body.get("quantity")), or(body.get("notes"))));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, body, "Requested by", lots.words(id, "Reorder of"), d -> {
+            Lot lot = lots.find(d, id);
+            String made = writer.write(d, null, lot.reorder(Values.dec(or(body.get("quantity"))), (String) or(body.get("notes"))), s);
+            lots.copyAnalytes(d, id, made, false);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", made);
+            return out;
+        });
     }
 
     public Map<String, Object> receive(RequestContext ctx, String id, Map<String, Object> b) {
-        lotSite(ctx, id);
-        return signatures.signed(reasonOr(ctx, "Received into inventory"), b, new Meaning("Received by", lots.words(id, "Received"), "Inventory"),
-            d -> d.raw("SELECT receive_lot(?::uuid, ?, ?, ?, ?, ?, ?, ?)", id, or(b.get("quantity")), or(b.get("unit")), or(b.get("manufacturer_lot")),
-                or(b.get("expiration_date")), or(b.get("retest_date")), or(b.get("storage_location_id")), or(b.get("received_date"))));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signatures.signed(reasonOr(ctx, "Received into inventory"), b, new Meaning("Received by", lots.words(id, "Received"), "Inventory"), d -> {
+            Lot lot = lots.find(d, id);
+            writer.write(d, lot, lot.receive(Values.dec(or(b.get("quantity"))), (String) or(b.get("unit")), (String) or(b.get("manufacturer_lot")),
+                (String) or(b.get("expiration_date")), (String) or(b.get("retest_date")), (String) or(b.get("storage_location_id")), (String) or(b.get("received_date")), s.today()), s);
+            return d.raw("SELECT ''::text AS receive_lot");
+        });
     }
 
     public Map<String, Object> transfer(RequestContext ctx, String id, Map<String, Object> b) {
-        lotSite(ctx, id);
-        return signed(ctx, b, "Transferred by", lots.words(id, "Transferred"),
-            d -> d.one("SELECT transfer_lot(?::uuid, ?::uuid, ?, ?) AS id", id, b.get("to_site_id"), b.get("quantity"), or(b.get("notes"))));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, b, "Transferred by", lots.words(id, "Transferred"), d -> {
+            Lot lot = lots.find(d, id);
+            String toSite = b.get("to_site_id") == null ? null : b.get("to_site_id").toString();
+            BigDecimal qty = Values.dec(b.get("quantity"));
+            Map<String, Object> values = lot.transferTo(toSite, qty, (String) or(b.get("notes")));
+            String made = writer.write(d, null, values, new LotWriter.Save(s.units(), clock.today(toSite), null, ctx, false));
+            lots.copyAnalytes(d, id, made, true);
+            Map<String, Object> to = d.one("SELECT site_code FROM lab_site WHERE id = ?::uuid", toSite);
+            StockMovement out = StockMovement.record(lot, "Transfer Out", qty, "Transfer to " + (to == null ? null : to.get("site_code")), (String) or(b.get("notes")), ctx.reason(), s.today());
+            lots.insertMovement(d, new StockMovement(out.lotId(), out.type(), out.quantity(), made, out.reference(), out.notes(), out.reason()), null);
+            lots.copyCoas(d, id, made);
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("id", made);
+            return r;
+        });
     }
 
     public Map<String, Object> dispose(RequestContext ctx, String id, Map<String, Object> b) {
-        lotSite(ctx, id);
-        return signed(ctx, b, "Disposed by", lots.words(id, "Disposed"), d -> d.raw("SELECT dispose_lot(?::uuid)", id));
+        String site = lotSite(ctx, id);
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, b, "Disposed by", lots.words(id, "Disposed"), d -> {
+            Lot lot = lots.find(d, id);
+            StockMovement off = lot.dispose(lots.onHand(d, id), ctx.reason());
+            if (off != null) lots.insertMovement(d, off, null);
+            // the database's lot trigger (kept for other writers) still asks that a disposal comes through Dispose
+            d.one("SELECT set_config('lims.disposing', '1', true)");
+            writer.write(d, lot, Map.of("status", "Disposed"), new LotWriter.Save(s.units(), s.today(), null, ctx, true));
+            d.one("SELECT set_config('lims.disposing', '', true)");
+            return d.raw("SELECT ''::text AS dispose_lot");
+        });
     }
 
     // ---------------------------------------------------------------- stock movements
     /** Usage and adjustments for one or many lots of this lab; usage needs no signature, adjustments do. */
     public List<Map<String, Object>> movements(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
         String site = access.currentSite(ctx);
+        LocalDate today = clock.today(site);
         boolean routine = rows.stream().allMatch(m -> "Usage".equals(m.get("txn_type") == null || "".equals(m.get("txn_type")) ? "Usage" : m.get("txn_type")));
         Function<Db, List<Map<String, Object>>> work = d -> {
             List<Map<String, Object>> out = new ArrayList<>();
             for (Map<String, Object> m : rows) {
                 boolean byId = m.get("lot_id") != null && !"".equals(m.get("lot_id"));
-                Map<String, Object> lot = byId ? d.one("SELECT id, site_id FROM inventory_lot WHERE id = ?::uuid", m.get("lot_id"))
-                    : d.one("SELECT id, site_id FROM inventory_lot WHERE upper(lot_code) = upper(?)", str(m.get("lot_code")).trim());
+                Lot lot = byId ? lots.find(d, m.get("lot_id").toString()) : lots.byCode(d, str(m.get("lot_code")).trim());
                 if (lot == null) throw new RuleException("Lot \"" + str(m.get("lot_code")) + "\" not found");
-                if (!site.equals(lot.get("site_id"))) throw new RuleException("Lot " + str(m.get("lot_code")) + " belongs to another lab");
-                out.add(d.one("""
-                    INSERT INTO inventory_transaction (lot_id, txn_type, quantity_change, reference, notes, txn_at)
-                      VALUES (?::uuid, ?, ?, ?, ?, COALESCE(?::timestamptz, clock_timestamp())) RETURNING id""",
-                    lot.get("id"), or(m.get("txn_type")) == null ? "Usage" : m.get("txn_type"), m.get("quantity"), or(m.get("reference")), or(m.get("notes")), or(m.get("txn_at"))));
+                if (!site.equals(lot.siteId())) throw new RuleException("Lot " + str(m.get("lot_code")) + " belongs to another lab");
+                String type = or(m.get("txn_type")) == null ? "Usage" : m.get("txn_type").toString();
+                StockMovement mv = StockMovement.record(lot, type, Values.dec(m.get("quantity")), (String) or(m.get("reference")), (String) or(m.get("notes")),
+                    ctx.reason(), today);
+                out.add(lots.insertMovement(d, mv, or(m.get("txn_at"))));
             }
             return out;
         };
@@ -214,29 +295,90 @@ public class LotService {
     }
 
     // ---------------------------------------------------------------- in-house mixtures
+    /** The components as entered, each lot checked: this lab's, released by QA testing for every use. */
+    private Mixture mixtureOf(Db d, String site, Object components, Units u) {
+        List<Map<String, Object>> entered = new ArrayList<>();
+        for (Object x : list(components)) if (x instanceof Map<?, ?> m) entered.add(map(m));
+        List<String> ids = entered.stream().map(e -> str(e.get("lot_id"))).filter(RequestContext::isUuid).toList();
+        Mixture mix = Mixture.of(entered, lots.components(d, ids), u);
+        for (Mixture.Portion p : mix.portions()) {
+            Lot c = lots.find(d, p.lot().lotId());
+            if (!site.equals(c.siteId())) throw RuleException.database("Component lot " + c.code() + " is in another lab");
+            lots.qaTesting(d, c.id()).assertMixtureComponent(c.code(), c.name());
+        }
+        return mix;
+    }
+
+    /** The mixture lot, its components (each draws a Usage, written by the database) and its calculated analytes. */
+    private String makeMixture(Db d, Mixture mix, Map<String, Object> values, LotWriter.Save s, Map<String, String> outUnits, List<?> targets) {
+        String id = writer.write(d, null, values, s);
+        for (Mixture.Portion p : mix.portions()) {
+            if (p.lot().lotId().equals(id)) throw RuleException.database("A mixture cannot be a component of itself");
+            lots.addComponent(d, id, p);
+        }
+        Lot made = lots.find(d, id);
+        for (Mixture.Concentration c : mix.concentrations(made.quantityReceived(), made.unit(), made.physicalForm() == null ? "Liquid" : made.physicalForm(), outUnits)) {
+            Map<String, Object> t = targets.stream().filter(x -> x instanceof Map<?, ?> m && c.analyteId().equals(str(m.get("analyte_id")))).map(x -> map(x)).findFirst().orElse(Map.of());
+            lots.addCalculatedAnalyte(d, id, c, Values.dec(t.get("target")), Values.dec(t.get("tolerance_pct")));
+        }
+        return id;
+    }
+
     public Map<String, Object> mixture(RequestContext ctx, Map<String, Object> b) {
         String site = access.currentSite(ctx);
-        return signed(ctx, b, "Prepared by", "In-house mixture: " + str(b.get("item_description")), d -> d.one(
-            "SELECT make_mixture(?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?::uuid, ?::jsonb, ?) AS id",
-            site, or(b.get("chemical_id")), or(b.get("item_description")), b.get("quantity"), b.get("unit"), or(b.get("concentration")), or(b.get("concentration_unit")),
-            or(b.get("expiration_date")), or(b.get("storage_condition")), or(b.get("storage_location_id")), toJson(list(b.get("components"))), or(b.get("notes"))));
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, b, "Prepared by", "In-house mixture: " + str(b.get("item_description")), d -> {
+            Mixture mix = mixtureOf(d, site, b.get("components"), s.units());
+            mix.assertHasComponents();
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("site_id", site);
+            v.put("chemical_id", or(b.get("chemical_id")));
+            v.put("item_description", or(b.get("item_description")));
+            v.put("chemical_types", List.of(ChemicalTypes.MIXTURE));
+            v.put("quantity_received", b.get("quantity"));
+            v.put("unit", b.get("unit"));
+            v.put("concentration", or(b.get("concentration")));
+            v.put("concentration_unit", or(b.get("concentration_unit")));
+            LocalDate exp = mix.expiry(Values.date(or(b.get("expiration_date"))));
+            v.put("expiration_date", exp == null ? null : exp.toString());
+            v.put("storage_condition", or(b.get("storage_condition")));
+            v.put("storage_location_id", or(b.get("storage_location_id")));
+            v.put("notes", or(b.get("notes")));
+            v.put("received_date", s.today().toString());
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", makeMixture(d, mix, v, s, Map.of(), List.of()));
+            return out;
+        });
     }
 
     /** The mixture page: the default quantity made and the calculated concentration of each analyte, before saving. */
     public Map<String, Object> mixturePreview(RequestContext ctx, Map<String, Object> b) {
         access.currentSite(ctx);
-        List<Object> comps = new ArrayList<>();
+        Units u = units.load();
+        List<Map<String, Object>> comps = new ArrayList<>();
         for (Object x : list(b.get("components")))
-            if (x instanceof Map<?, ?> m && truthy(m.get("lot_id")) && Js.toNumber(m.get("quantity")) > 0) comps.add(x);
-        String compsJson = toJson(comps);
+            if (x instanceof Map<?, ?> m && truthy(m.get("lot_id")) && Js.toNumber(m.get("quantity")) > 0) comps.add(map(m));
+        Mixture mix = Mixture.of(comps, lots.components(db, comps.stream().map(c -> str(c.get("lot_id"))).filter(RequestContext::isUuid).toList()), u);
         Object unit = b.get("unit");
-        Object def = truthy(unit) ? db.one("SELECT mixture_default_quantity(?::jsonb, ?) AS q", compsJson, unit).get("q") : null;
+        BigDecimal def = truthy(unit) ? mix.defaultQuantity(unit.toString()) : null;
         double asked = Js.toNumber(b.get("quantity"));
         Object qty = asked > 0 ? (Object) asked : def;
-        List<Map<String, Object>> analytes = truthy(qty) && truthy(unit) ? db.rows("""
-            SELECT m.*, a.cas_number FROM mixture_concentrations(?::jsonb, ?::numeric, ?, ?, ?::jsonb) m
-              JOIN analyte a ON a.id = m.analyte_id ORDER BY m.analyte_name""",
-            compsJson, qty, unit, truthy(b.get("form")) ? b.get("form") : "Liquid", toJson(b.get("out_units") == null ? Map.of() : b.get("out_units"))) : List.of();
+        List<Map<String, Object>> analytes = new ArrayList<>();
+        if (truthy(qty) && truthy(unit)) {
+            Map<String, String> outUnits = new LinkedHashMap<>();
+            map(b.get("out_units")).forEach((k, v) -> outUnits.put(k, v == null ? null : v.toString()));
+            Map<String, Object> cas = new LinkedHashMap<>();
+            for (Mixture.Concentration c : mix.concentrations(Values.dec(qty), unit.toString(), truthy(b.get("form")) ? b.get("form").toString() : "Liquid", outUnits)) {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("analyte_id", c.analyteId());
+                r.put("analyte_name", c.analyteName());
+                r.put("concentration", c.concentration());
+                r.put("concentration_unit", c.unit());
+                r.put("calc_note", c.note());
+                r.put("cas_number", cas.computeIfAbsent(c.analyteId(), k -> db.one("SELECT cas_number FROM analyte WHERE id = ?::uuid", k).get("cas_number")));
+                analytes.add(r);
+            }
+        }
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("default_quantity", def);
         out.put("quantity", qty);
@@ -246,11 +388,33 @@ public class LotService {
 
     public Map<String, Object> prepareMixture(RequestContext ctx, Map<String, Object> b) {
         String site = access.currentSite(ctx);
-        return signed(ctx, b, "Prepared by", "In-house mixture: " + str(b.get("item_name")), d -> d.one(
-            "SELECT prepare_mixture(?::uuid, ?, ?::chemical_type[], ?, ?, ?, ?, ?, ?::uuid, ?::jsonb, ?::jsonb, ?, ?) AS id",
-            site, b.get("item_name"), list(b.get("chemical_types")), b.get("physical_form"), b.get("quantity"), b.get("unit"), or(b.get("expiration_date")),
-            or(b.get("storage_condition")), or(b.get("storage_location_id")), toJson(list(b.get("components"))), toJson(list(b.get("targets"))), or(b.get("notes")),
-            or(b.get("retest_date"))));
+        LotWriter.Save s = save(ctx, site, null);
+        return signed(ctx, b, "Prepared by", "In-house mixture: " + str(b.get("item_name")), d -> {
+            Mixture mix = mixtureOf(d, site, b.get("components"), s.units());
+            BigDecimal qty = Values.dec(b.get("quantity"));
+            String form = (String) or(b.get("physical_form"));
+            mix.assertCanPrepare(form, qty);
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("site_id", site);
+            v.put("item_name", b.get("item_name"));
+            v.put("chemical_types", ChemicalTypes.of(b.get("chemical_types")).asMixture().types());
+            v.put("physical_form", form);
+            v.put("quantity_received", qty);
+            v.put("unit", b.get("unit"));
+            LocalDate exp = mix.expiry(Values.date(or(b.get("expiration_date"))));
+            v.put("expiration_date", exp == null ? null : exp.toString());
+            v.put("retest_date", or(b.get("retest_date")));
+            v.put("storage_condition", or(b.get("storage_condition")));
+            v.put("storage_location_id", or(b.get("storage_location_id")));
+            v.put("notes", or(b.get("notes")));
+            v.put("received_date", s.today().toString());
+            Map<String, String> outUnits = new LinkedHashMap<>();
+            for (Object t : list(b.get("targets")))
+                if (t instanceof Map<?, ?> m && m.get("unit") != null) outUnits.put(str(m.get("analyte_id")), m.get("unit").toString());
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", makeMixture(d, mix, v, s, outUnits, list(b.get("targets"))));
+            return out;
+        });
     }
 
     // ---------------------------------------------------------------- QA testing before use
@@ -290,7 +454,16 @@ public class LotService {
     public Map<String, Object> waiveQa(RequestContext ctx, String id, Map<String, Object> body) {
         lotSite(ctx, id);
         if (ctx.reason().trim().isEmpty()) throw new RuleException("Give the reason for waiving QA testing");
-        signatures.signed(ctx, body, new Meaning("Approved by", lots.words(id, "QA testing waived"), "Inventory"), d -> d.one("SELECT waive_lot_qa_testing(?::uuid)", id));
+        access.require(ctx, "inventory.qa_configure", "waive QA testing");
+        signatures.signed(ctx, body, new Meaning("Approved by", lots.words(id, "QA testing waived"), "Inventory"), d -> {
+            Lot lot = lots.find(d, id);
+            lots.qaTesting(d, id).assertWaivable(lot.code(), ctx.reason());
+            // the lot trigger (kept for other writers) lets only the system change whether a lot needs QA testing
+            d.one("SELECT set_config('lims.group_sync', '1', true), set_config('lims.media_internal', '1', true)");
+            d.update("UPDATE inventory_lot SET qualification_required = false WHERE id = ?::uuid", id);
+            d.one("SELECT set_config('lims.media_internal', '', true), set_config('lims.group_sync', '', true)");
+            return null;
+        });
         return Map.of("ok", true);
     }
 
@@ -331,11 +504,14 @@ public class LotService {
         Object doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, 0, '', decode(?, 'base64')) RETURNING id",
             truthy(f.get("file_name")) ? f.get("file_name") : "coa", f.get("mime_type"), f.get("content_base64")).get("id");
         boolean proposed = proposal != null && !(proposal instanceof JsonNode n && n.isNull());
+        boolean stamp = SupplierCoa.confirmationNeedsStamp(null, confirmed);
+        // the COA record carries the stored file's name and fingerprint
         return d.one("""
-            INSERT INTO supplier_coa (lot_id, document_id, file_name, sha256, extraction_method, ai_model, ai_proposed, values_confirmed)
-              VALUES (?::uuid, ?::uuid, '', '', ?, ?, ?::jsonb, ?::jsonb) RETURNING id, sha256""",
-            lotId, doc, proposed ? "AI proposed, person confirmed" : "Manual", proposed ? ai.model() : null, proposed ? toJson(proposal) : null,
-            confirmed == null ? null : toJson(confirmed));
+            INSERT INTO supplier_coa (lot_id, document_id, file_name, sha256, extraction_method, ai_model, ai_proposed, values_confirmed, confirmed_by, confirmed_at)
+            SELECT ?::uuid, f.id, f.file_name, f.sha256, ?, ?, ?::jsonb, ?::jsonb, CASE WHEN ? THEN current_app_user() END, CASE WHEN ? THEN clock_timestamp() END
+              FROM document_file f WHERE f.id = ?::uuid RETURNING id, sha256""",
+            lotId, proposed ? "AI proposed, person confirmed" : "Manual", proposed ? ai.model() : null, proposed ? toJson(proposal) : null,
+            confirmed == null ? null : toJson(confirmed), stamp, stamp, doc);
     }
 
     /** A COA file; opened in a new tab, the lab comes in the link (?s=). */
@@ -353,15 +529,20 @@ public class LotService {
         Map<String, Object> s = db.one("SELECT lot_id FROM supplier_coa WHERE id = ?::uuid", id);
         if (s == null) throw new RuleException("COA not found");
         String lotId = (String) s.get("lot_id");
-        lotSite(ctx, lotId);
+        String site = lotSite(ctx, lotId);
         List<String> allowed = List.of("manufacturer_lot", "expiration_date", "retest_date", "purity_pct", "concentration", "concentration_unit", "catalog_number");
         Map<String, Object> values = new LinkedHashMap<>();
         for (Map.Entry<String, Object> e : map(body.get("values")).entrySet())
             if (allowed.contains(e.getKey()) && e.getValue() != null && !"".equals(e.getValue())) values.put(e.getKey(), e.getValue());
+        LotWriter.Save sv = save(ctx, site, null);
         signatures.signed(reasonOr(ctx, "Values confirmed from the Supplier COA"), body,
             new Meaning("Verified by", lots.words(lotId, "Supplier COA values confirmed"), "Inventory"), d -> {
-                if (!values.isEmpty()) new com.tentamus.lims.core.db.RecordWriter("inventory_lot", allowed).upsert(d, List.of(withId(values, lotId)), Map.of());
-                d.update("UPDATE supplier_coa SET values_confirmed = ?::jsonb WHERE id = ?::uuid", toJson(values), id);
+                if (!values.isEmpty()) writer.save(d, new com.tentamus.lims.core.db.RecordWriter("inventory_lot", allowed), withId(values, lotId), Map.of(), sv);
+                Object before = d.one("SELECT values_confirmed FROM supplier_coa WHERE id = ?::uuid", id).get("values_confirmed");
+                boolean stamp = SupplierCoa.confirmationNeedsStamp(before, json.valueToTree(values));
+                d.update("""
+                    UPDATE supplier_coa SET values_confirmed = ?::jsonb, confirmed_by = CASE WHEN ? THEN current_app_user() ELSE confirmed_by END,
+                      confirmed_at = CASE WHEN ? THEN clock_timestamp() ELSE confirmed_at END WHERE id = ?::uuid""", toJson(values), stamp, stamp, id);
                 return null;
             });
         return Map.of("ok", true);
@@ -389,6 +570,14 @@ public class LotService {
 
     static boolean truthy(Object v) {
         return v != null && !Boolean.FALSE.equals(v) && !"".equals(v) && !(v instanceof Number n && (n.doubleValue() == 0 || Double.isNaN(n.doubleValue())));
+    }
+
+    /** What Node answers for a write without RETURNING: no fields, no rows. */
+    static Map<String, Object> noRows() {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("fields", List.of());
+        r.put("rows", List.of());
+        return r;
     }
 
     private static Map<String, Object> withId(Map<String, Object> row, String id) {

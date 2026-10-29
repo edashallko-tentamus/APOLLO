@@ -2,6 +2,7 @@ package com.tentamus.lims.admin.service;
 
 import static com.tentamus.lims.core.web.Answers.*;
 
+import com.tentamus.lims.admin.domain.ReasonCode;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
@@ -11,6 +12,11 @@ import com.tentamus.lims.core.files.DocumentStore;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.masterdata.domain.ControlledList;
+import com.tentamus.lims.masterdata.service.ControlledListService;
+import com.tentamus.lims.quotes.domain.QuoteLine;
+import com.tentamus.lims.quotes.domain.QuoteVersion;
+import com.tentamus.lims.quotes.repo.ProjectRepository;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,18 +33,23 @@ import org.springframework.stereotype.Service;
 public class AdminService {
     private static final List<String> ENUMS = List.of("account_status", "report_delivery", "analyte_class", "master_status", "record_status", "tat_unit", "surcharge_type",
         "pricing_mode", "project_version_status", "line_status", "submission_channel", "oos_procedure");
-    private static final RecordWriter REASONS = new RecordWriter("reason_code", List.of("module", "reason_text", "sort_order", "status"));
+    private static final ControlledList REASONS = ControlledList.of("reason_code", "SELECT * FROM reason_code ORDER BY module, sort_order, reason_text",
+        List.of("module", "reason_text", "sort_order", "status")).checkedBy(ReasonCode::new);
     private static final RecordWriter QUOTE_LINE = new RecordWriter("quoted_test_configuration", List.of("test_id", "quantity", "special_instructions"));
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
     private final SignatureService signatures;
+    private final ControlledListService lists;
+    private final ProjectRepository quotes;
 
-    public AdminService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures) {
+    public AdminService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ControlledListService lists, ProjectRepository quotes) {
         this.db = db;
         this.uow = uow;
         this.access = access;
         this.signatures = signatures;
+        this.lists = lists;
+        this.quotes = quotes;
     }
 
     private void requireAdmin(RequestContext ctx) { access.require(ctx, "admin.users", "open this page"); }
@@ -90,10 +101,11 @@ public class AdminService {
              ORDER BY (module = 'General'), sort_order, reason_text""", module);
     }
 
-    public List<Map<String, Object>> allReasons() { return db.rows("SELECT * FROM reason_code ORDER BY module, sort_order, reason_text"); }
+    public List<Map<String, Object>> allReasons() { return lists.read(REASONS); }
 
+    /** Each row passes {@link ReasonCode}'s rules before it is written. */
     public List<Map<String, Object>> saveReasons(RequestContext ctx, Map<String, Object> body) {
-        return uow.run(ctx, d -> REASONS.upsert(d, rows(body, "rows"), Map.of()));
+        return lists.save(ctx, REASONS, body, Map.of());
     }
 
     /** A new test of this lab (the designer's first step). */
@@ -167,7 +179,10 @@ public class AdminService {
         double q = Js.toNumber(body.get("quantity"));
         Object quantity = !body.containsKey("quantity") || Double.isNaN(q) || q == 0 ? (Object) 1 : q;
         return uow.run(ctx.orReason("Quote edited"), d -> {
-            Map<String, Object> row = QUOTE_LINE.upsert(d, List.of(map("test_id", test, "quantity", quantity, "special_instructions", "Per-serving calculation")),
+            Map<String, Object> line = map("test_id", test, "quantity", quantity, "special_instructions", "Per-serving calculation");
+            QuoteVersion version = quotes.quoteVersion(d, vid);
+            if (version != null) QuoteLine.checkNew(version, quotes.quotable(d, test), line);   // the database no longer locks quoted lines (migration 061)
+            Map<String, Object> row = QUOTE_LINE.upsert(d, List.of(line),
                 Map.of("project_version_id", vid)).get(0);
             d.update("UPDATE quoted_test_configuration SET final_price = list_price WHERE id = ?::uuid AND final_price IS NULL", row.get("id"));
             return row;

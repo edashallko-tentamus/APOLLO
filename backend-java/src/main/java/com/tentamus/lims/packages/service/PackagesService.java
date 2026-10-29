@@ -7,7 +7,20 @@ import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.RequestContext;
+import com.tentamus.lims.core.time.LabClock;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.packages.domain.PriceChange;
+import com.tentamus.lims.packages.domain.QuotedPackage;
+import com.tentamus.lims.packages.domain.TestPackage;
+import com.tentamus.lims.packages.repo.PackageRepository;
+import com.tentamus.lims.pricing.domain.Amount;
+import com.tentamus.lims.pricing.domain.CatalogueEntry;
+import com.tentamus.lims.pricing.domain.PriceAdjustment;
+import com.tentamus.lims.pricing.repo.CatalogueRepository;
+import com.tentamus.lims.quotes.domain.QuoteVersion;
+import com.tentamus.lims.quotes.repo.ProjectRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,19 +30,29 @@ import org.springframework.stereotype.Service;
 
 /**
  * Test packages in the catalogue, on quotes and on orders (cancelling one of its tests takes off only that test's
- * share), and price changes from an effective date. The hourly job that applies scheduled changes stays in the Node
- * backend for now.
+ * share), and price changes from an effective date. The rules are the domain's ({@link TestPackage},
+ * {@link QuotedPackage}, {@link PriceChange}). The hourly job that applies scheduled changes stays in the Node backend
+ * (with the database's apply_catalog_price_change); a change starting today is applied here by Java.
  */
 @Service
 public class PackagesService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final PackageRepository packages;
+    private final CatalogueRepository catalogue;
+    private final ProjectRepository quotes;
+    private final LabClock clock;
 
-    public PackagesService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public PackagesService(Db db, UnitOfWork uow, AccessPolicy access, PackageRepository packages, CatalogueRepository catalogue, ProjectRepository quotes,
+                           LabClock clock) {
         this.db = db;
         this.uow = uow;
         this.access = access;
+        this.packages = packages;
+        this.catalogue = catalogue;
+        this.quotes = quotes;
+        this.clock = clock;
     }
 
     // ---------------------------------------------------------------- the catalogue
@@ -74,7 +97,7 @@ public class PackagesService {
     }
 
     private static Object[] header(Map<String, Object> b) {
-        return new Object[] { Js.string(b.get("package_name")).trim(), Js.orNull(b.get("description")), Js.truthy(b.get("show_in_public_catalogue")) };
+        return new Object[] { TestPackage.name(Js.string(b.get("package_name"))), Js.orNull(b.get("description")), Js.truthy(b.get("show_in_public_catalogue")) };
     }
 
     public Map<String, Object> create(RequestContext ctx, Map<String, Object> body) {
@@ -84,7 +107,8 @@ public class PackagesService {
             Map<String, Object> p = d.one("INSERT INTO test_package (site_id, package_name, description, show_in_public_catalogue) VALUES (?::uuid, ?, ?, ?) RETURNING id, package_code",
                 site, h[0], h[1], h[2]);
             int n = 0;
-            for (Object id : uuids(body.get("tests"))) d.update("INSERT INTO test_package_item (package_id, test_id, sort_order) VALUES (?::uuid, ?::uuid, ?)", p.get("id"), id, ++n);
+            for (Object id : uuids(body.get("tests"))) d.update("INSERT INTO test_package_item (package_id, test_id, sort_order, component_price) VALUES (?::uuid, ?::uuid, ?, ?::numeric)",
+                p.get("id"), id, ++n, newItemPrice(d, site, id, null));
             return p;
         });
     }
@@ -101,6 +125,14 @@ public class PackagesService {
             }
             for (Map<String, Object> it : rows(body, "items")) {
                 if (RequestContext.isUuid(it.get("id"))) {
+                    Map<String, Object> item = packages.item(d, it.get("id"), pid);
+                    if (item != null) {
+                        Map<String, Object> t = packages.test(d, item.get("test_id"));
+                        TestPackage.checkPrice(it.get("component_price"), (String) t.get("test_name"), true);
+                        Object status = Js.orNull(it.get("status"));
+                        if ("Active".equals(status != null ? status : item.get("status")))
+                            TestPackage.checkTest((String) item.get("site_id"), (String) t.get("site_id"), (String) t.get("test_name"), Boolean.TRUE.equals(t.get("priced")));
+                    }
                     d.update("""
                         UPDATE test_package_item SET sort_order = COALESCE(?::int, sort_order), component_price = ?::numeric, status = COALESCE(?::record_status, status)
                          WHERE id = ?::uuid AND package_id = ?::uuid""", Js.num(it.get("sort_order")), Js.num(it.get("component_price")), Js.orNull(it.get("status")), it.get("id"), pid);
@@ -108,17 +140,32 @@ public class PackagesService {
                     Object next = d.one("SELECT COALESCE(max(sort_order), 0) + 1 AS n FROM test_package_item WHERE package_id = ?::uuid", pid).get("n");
                     Double sort = Js.num(it.get("sort_order"));
                     d.update("INSERT INTO test_package_item (package_id, test_id, sort_order, component_price) VALUES (?::uuid, ?::uuid, ?::int, ?::numeric)",
-                        pid, it.get("test_id"), sort != null ? sort : next, Js.num(it.get("component_price")));
+                        pid, it.get("test_id"), sort != null ? sort : next, newItemPrice(d, (String) p.get("site_id"), it.get("test_id"), it.get("component_price")));
                 }
             }
             for (Map<String, Object> a : rows(body, "analytes")) {
                 if (!RequestContext.isUuid(a.get("item_id")) || !RequestContext.isUuid(a.get("analyte_id"))) continue;
+                Map<String, Object> item = packages.item(d, a.get("item_id"), pid);
+                if (item != null) TestPackage.checkAnalyte((String) packages.test(d, item.get("test_id")).get("pricing_mode"),
+                    packages.analytePricedOnTest(d, item.get("test_id"), a.get("analyte_id")));
                 d.update("""
                     INSERT INTO test_package_analyte (item_id, analyte_id, included) VALUES (?::uuid, ?::uuid, ?)
                       ON CONFLICT (item_id, analyte_id) DO UPDATE SET included = EXCLUDED.included""", a.get("item_id"), a.get("analyte_id"), !Boolean.FALSE.equals(a.get("included")));
             }
             return ok();
         });
+    }
+
+    /** A new package line's price: as typed, else the test's catalogue price; the test must be the lab's, active and priced. */
+    private Object newItemPrice(Db d, String packageSite, Object testId, Object typed) {
+        Map<String, Object> t = packages.test(d, testId);
+        if (t == null) throw new RuleException("Test not found");
+        TestPackage.checkTest(packageSite, (String) t.get("site_id"), (String) t.get("test_name"), Boolean.TRUE.equals(t.get("priced")));
+        Double price = Js.num(typed);
+        TestPackage.checkPrice(price, (String) t.get("test_name"), false);
+        if (price != null) return price;
+        CatalogueEntry e = catalogue.entryOf(d, testId);
+        return e == null ? null : e.listPrice();
     }
 
     public Map<String, Object> retire(RequestContext ctx, String id) {
@@ -165,20 +212,41 @@ public class PackagesService {
         if (!RequestContext.isUuid(body.get("package_id"))) throw new RuleException("Choose a package");
         double q = Js.toNumber(body.get("quantity"));
         double quantity = Math.max(1, !body.containsKey("quantity") || Double.isNaN(q) || q == 0 ? 1 : q);
-        return uow.run(ctx.orReason("Quote edited"), d -> d.one("SELECT add_package_to_quote(?::uuid, ?::uuid, ?) AS id", v.get("id"), body.get("package_id"), quantity));
+        return uow.run(ctx.orReason("Quote edited"), d -> {
+            QuoteVersion version = quotes.quoteVersion(d, v.get("id"));
+            Map<String, Object> pkg = packages.packageRow(d, body.get("package_id"));
+            QuotedPackage.checkAdd(version, pkg == null ? null : (String) pkg.get("package_code"), pkg == null ? null : (String) pkg.get("status"),
+                pkg == null ? null : (String) pkg.get("site_id"), pkg == null ? null : (String) pkg.get("site_code"), packages.siteCode(d, version.siteId()),
+                pkg == null ? List.of() : packages.errors(d, pkg.get("id")), pkg != null && packages.onVersion(d, version.id(), pkg.get("id")));
+            return map("id", packages.addToVersion(d, version.id(), pkg, QuotedPackage.quantity(quantity), packages.lines(d, pkg.get("id"))));
+        });
     }
 
     public Map<String, Object> setQuoted(RequestContext ctx, String id, Map<String, Object> body) {
         if (!RequestContext.isUuid(id)) throw new RuleException("Package not found");
         return uow.run(ctx.orReason("Quote edited"), d -> {
-            d.one("SELECT set_quoted_package(?::uuid, ?, ?)", id, Js.num(body.get("package_price")), Js.num(body.get("quantity")));
+            Map<String, Object> qp = packages.quoted(d, id);
+            if (qp == null || !"Active".equals(qp.get("status"))) throw RuleException.database("Package not found on the quote");
+            Double p = Js.num(body.get("package_price")), q = Js.num(body.get("quantity"));
+            BigDecimal price = p == null ? null : Amount.of(Js.number(p));
+            Long quantity = q == null ? null : (long) Math.round(q);
+            QuotedPackage.checkChange(quotes.quoteVersion(d, qp.get("project_version_id")), price, quantity);
+            List<BigDecimal> shares = price != null && price.compareTo(Amount.of(qp.get("package_price"))) != 0
+                ? QuotedPackage.allocate(price, PackageRepository.prices(packages.quotedLines(d, id))) : null;
+            packages.setQuoted(d, id, price, quantity, shares);
             return ok();
         });
     }
 
     public Map<String, Object> removeQuoted(RequestContext ctx, String id) {
         if (!RequestContext.isUuid(id)) throw new RuleException("Package not found");
-        return uow.run(ctx.orReason("Quote edited"), d -> { d.one("SELECT remove_quoted_package(?::uuid)", id); return ok(); });
+        return uow.run(ctx.orReason("Quote edited"), d -> {
+            Map<String, Object> qp = packages.quoted(d, id);
+            if (qp == null || !"Active".equals(qp.get("status"))) throw RuleException.database("Package not found on the quote");
+            quotes.quoteVersion(d, qp.get("project_version_id")).requireEditable(QuotedPackage.LOCKED);
+            packages.removeQuoted(d, id);
+            return ok();
+        });
     }
 
     // ---------------------------------------------------------------- orders
@@ -234,14 +302,26 @@ public class PackagesService {
         if (!on.matches("^\\d{4}-\\d{2}-\\d{2}$")) throw new RuleException("Give the date the new prices start");
         String reason = Js.string(body.get("reason")).trim();
         if (reason.isEmpty()) throw new RuleException("A Reason for Change is required for a price change");
+        LocalDate today = clock.today(site);
         return uow.run(ctx.withSite(site), d -> {
+            PriceChange.checkNew(LocalDate.parse(on), today, tests, packages.allOwnLab(d, tests, site), new BigDecimal(Js.number(pct)), reason);
             Map<String, Object> pc = d.one("""
                 INSERT INTO catalog_price_change (site_id, tests, pct, rounding, include_packages, effective_on, reason)
-                VALUES (?::uuid, ?::uuid[], ?, ?, ?, ?::date, ?) RETURNING id, change_code, effective_on <= site_today(site_id) AS due""",
+                VALUES (?::uuid, ?::uuid[], ?, ?, ?, ?::date, ?) RETURNING id, change_code""",
                 site, tests, pct, "Dollar".equals(body.get("rounding")) ? "Dollar" : "Cent", !Boolean.FALSE.equals(body.get("include_packages")), on, reason);
-            Object applied = Js.truthy(pc.get("due")) ? d.one("SELECT apply_catalog_price_change(?::uuid) AS n", pc.get("id")).get("n") : null;
+            Object applied = LocalDate.parse(on).isAfter(today) ? null : apply(d, packages.priceChange(d, pc.get("id")), today);
             return map("id", pc.get("id"), "change_code", pc.get("change_code"), "applied", applied);
         });
+    }
+
+    /** Java's own apply_catalog_price_change: the lab's tests, their analyte prices and their prices in packages. */
+    private int apply(Db d, PriceChange c, LocalDate today) {
+        PriceAdjustment a = c.toApply(today);
+        d.one("SELECT set_config('lims.reason', ?, true) AS r", c.auditReason());
+        int n = catalogue.reprice(d, c.tests(), c.siteId(), a);
+        int m = c.includePackages() ? packages.repricePackages(d, c, a) : 0;
+        packages.markApplied(d, c, n, m);
+        return n;
     }
 
     public Map<String, Object> cancelChange(RequestContext ctx, String id) {
@@ -249,6 +329,11 @@ public class PackagesService {
         Map<String, Object> pc = db.one("SELECT site_id FROM catalog_price_change WHERE id = ?::uuid", id);
         if (pc == null) throw new RuleException("Price change not found");
         access.checkSite(ctx, (String) pc.get("site_id"));
-        return uow.run(ctx.withSite((String) pc.get("site_id")), d -> { d.update("UPDATE catalog_price_change SET status = 'Cancelled' WHERE id = ?::uuid", id); return ok(); });
+        return uow.run(ctx.withSite((String) pc.get("site_id")), d -> {
+            PriceChange c = packages.priceChange(d, id);
+            c.checkCancel();
+            if (!c.isCancelled()) packages.markCancelled(d, c);
+            return ok();
+        });
     }
 }

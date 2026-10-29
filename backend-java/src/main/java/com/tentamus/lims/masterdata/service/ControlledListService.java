@@ -5,25 +5,32 @@ import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.masterdata.domain.ControlledList;
+import com.tentamus.lims.masterdata.domain.MasterFacts;
+import com.tentamus.lims.masterdata.repo.MasterDataRepository;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
-/** Reading and saving any controlled list: one grid save is one transaction, signed when the list says so. */
+/**
+ * Reading and saving any controlled list: one grid save is one transaction, signed when the list says so, and every
+ * row passes its list's domain rules before it is written.
+ */
 @Service
 public class ControlledListService {
-    private final Db db;
+    private final MasterDataRepository repo;
     private final UnitOfWork uow;
     private final SignatureService signatures;
 
-    public ControlledListService(Db db, UnitOfWork uow, SignatureService signatures) {
-        this.db = db;
+    public ControlledListService(MasterDataRepository repo, UnitOfWork uow, SignatureService signatures) {
+        this.repo = repo;
         this.uow = uow;
         this.signatures = signatures;
     }
 
     public List<Map<String, Object>> read(ControlledList list, Object... params) {
-        return db.rows(list.select(), params);
+        return repo.read(list, params);
     }
 
     public List<Map<String, Object>> save(RequestContext ctx, ControlledList list, Map<String, Object> body, Map<String, Object> fixed) {
@@ -34,9 +41,34 @@ public class ControlledListService {
     public List<Map<String, Object>> save(RequestContext ctx, ControlledList list, ControlledList.Signing signing, Map<String, Object> body,
                                           Map<String, Object> fixed) {
         List<Map<String, Object>> rows = rows(body);
-        if (signing == null) return uow.run(ctx, d -> list.writer().upsert(d, rows, fixed));
+        if (signing == null) return uow.run(ctx, d -> write(d, list, rows, fixed));
         return signatures.signed(ctx, body, new SignatureService.Meaning(signing.meaning(), signing.action(), signing.module()),
-            d -> list.writer().upsert(d, rows, fixed));
+            d -> write(d, list, rows, fixed));
+    }
+
+    /**
+     * The grid save of the Node backend's upsertRows: a row with an id updates the listed columns it carries, a row
+     * without one is inserted; one {id} per row written (null when an updated row was not found).
+     */
+    private List<Map<String, Object>> write(Db d, ControlledList list, List<Map<String, Object>> rows, Map<String, Object> fixed) {
+        MasterFacts facts = repo.facts(d);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> vals = list.writer().pick(row);
+            if (row.get("id") != null) {
+                if (vals.isEmpty()) continue;
+                String id = row.get("id").toString();
+                Map<String, Object> stored = list.rules() == null ? null : repo.find(d, list, id);
+                if (stored != null) vals = list.rules().open(stored, vals).check(facts);
+                out.add(list.writer().update(d, id, vals));
+            } else {
+                Map<String, Object> all = new LinkedHashMap<>(vals);
+                all.putAll(fixed);
+                if (list.rules() != null) all = list.rules().open(null, all).check(facts);
+                out.add(list.writer().insert(d, all, "id"));
+            }
+        }
+        return out;
     }
 
     @SuppressWarnings("unchecked")

@@ -57,18 +57,15 @@ INSERT INTO supplier (supplier_name) VALUES ('Test Supplier Co.');
 
 -- Storage locations
 INSERT INTO storage_location (site_id, location_code, location_name, location_type, supported_conditions)
-VALUES (pg_temp.site('CFL'), 'lab-1', 'Lab 1', 'Room', '{}'), (pg_temp.site('TPS'), 'TPS-1', 'TPS lab', 'Room', '{}');
+VALUES (pg_temp.site('CFL'), 'LAB-1', 'Lab 1', 'Room', '{}'), (pg_temp.site('TPS'), 'TPS-1', 'TPS lab', 'Room', '{}');
 INSERT INTO storage_location (site_id, location_code, location_name, location_type, parent_location_id, supported_conditions, holds_samples)
 SELECT pg_temp.site('CFL'), x.c, x.n, x.t::location_type, (SELECT id FROM storage_location WHERE location_code = 'LAB-1'), x.s::storage_condition[], x.h
   FROM (VALUES ('FR-1', 'Fridge 1', 'Refrigerator', '{"Refrigerated (2-8 °C)"}', false), ('FLAM-1', 'Flammables', 'Cabinet', '{"Flammables cabinet"}', false),
                ('RET-1', 'Retain shelf', 'Shelf', '{"Ambient (15-25 °C)"}', true)) AS x(c, n, t, s, h);
-SELECT pg_temp.expect_true('Location codes are stored in capitals', EXISTS (SELECT 1 FROM storage_location WHERE location_code = 'LAB-1'));
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.storageLocations): location codes are stored in capitals
 SELECT pg_temp.expect_true('Location path reads building > shelf', location_path((SELECT id FROM storage_location WHERE location_code = 'FR-1')) = 'Lab 1 > Fridge 1');
 SELECT set_config('lims.reason', 'Testing', false);
-SELECT pg_temp.expect_error('A location cannot be inside itself',
-  $$UPDATE storage_location SET parent_location_id = (SELECT id FROM storage_location WHERE location_code = 'FR-1') WHERE location_code = 'LAB-1'$$);
-SELECT pg_temp.expect_error('A location must be inside one in the same lab',
-  $$UPDATE storage_location SET parent_location_id = (SELECT id FROM storage_location WHERE location_code = 'TPS-1') WHERE location_code = 'FR-1'$$);
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.storageLocations): a location cannot be inside itself, and must be inside one in the same lab
 SELECT set_config('lims.reason', '', false);
 SELECT pg_temp.as_user('inv.tech');
 SELECT pg_temp.expect_error('Analyst cannot add a storage location',
@@ -122,7 +119,7 @@ SELECT pg_temp.expect_error('Stock movements cannot be deleted', $$DELETE FROM i
 SELECT pg_temp.as_user('akiddle');
 INSERT INTO threshold_rule (rule_name, subject, rule_type, value) VALUES ('Low stock 20%', 'Lot Quantity', 'Percentage of Base', 20), ('Expiry 30 days', 'Lot Expiry', 'Days Until/Since', 30),
   ('Retain 25%', 'Sample Retain', 'Percentage of Base', 25);
-SELECT pg_temp.expect_error('A threshold type must fit what it watches', $$INSERT INTO threshold_rule (rule_name, subject, rule_type, value) VALUES ('Bad', 'Lot Expiry', 'Percentage of Base', 10)$$);
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.warningRules): a threshold type must fit what it watches
 SELECT pg_temp.expect_true('Low stock warning below 20% of the amount received', (SELECT low_stock FROM inventory_lot_view WHERE id = pg_temp.lot('meoh')));
 SELECT pg_temp.expect_true('Expiring soon within 30 days; expired is not usable',
   (SELECT expiry_status = 'Expiring soon' AND use_eligible FROM inventory_lot_view WHERE id = pg_temp.lot('cd'))
@@ -183,13 +180,13 @@ SELECT set_config('lims.reason', '', false);
 -- Supplier COA (document kept unchanged, fingerprinted; AI proposal kept with the person's confirmation)
 INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES ('coa-pb.pdf', 'application/pdf', 0, '', convert_to('%PDF-1.4 test', 'UTF8'));
 INSERT INTO supplier_coa (lot_id, document_id, file_name, sha256, extraction_method, ai_model, ai_proposed)
-SELECT pg_temp.lot('pb'), id, '', '', 'AI proposed, person confirmed', 'test-model', '{"manufacturer_lot": "PB-1", "expiration_date": "2027-04-30"}' FROM document_file WHERE file_name = 'coa-pb.pdf';
+SELECT pg_temp.lot('pb'), id, file_name, sha256, 'AI proposed, person confirmed', 'test-model', '{"manufacturer_lot": "PB-1", "expiration_date": "2027-04-30"}' FROM document_file WHERE file_name = 'coa-pb.pdf';
 SELECT pg_temp.expect_true('COA record carries the file fingerprint (SHA-256)',
   (SELECT c.sha256 = encode(sha256(convert_to('%PDF-1.4 test', 'UTF8')), 'hex') FROM supplier_coa c WHERE c.lot_id = pg_temp.lot('pb')));
 SELECT pg_temp.expect_error('An uploaded document cannot be changed', $$UPDATE document_file SET file_name = 'x.pdf' WHERE file_name = 'coa-pb.pdf'$$);
-SELECT pg_temp.expect_error('The AI proposal cannot be changed after the fact', $$UPDATE supplier_coa SET ai_proposed = '{}' WHERE lot_id = pg_temp.lot('pb')$$);
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.supplierCoa): the AI proposal cannot be changed after the fact
 UPDATE supplier_coa SET values_confirmed = '{"manufacturer_lot": "PB-1"}' WHERE lot_id = pg_temp.lot('pb');
-SELECT pg_temp.expect_true('Confirmation records who confirmed', (SELECT confirmed_by = (SELECT id FROM app_user WHERE username = 'inv.tech') AND confirmed_at IS NOT NULL FROM supplier_coa WHERE lot_id = pg_temp.lot('pb')));
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.supplierCoa): confirmation records who confirmed
 SELECT pg_temp.expect_true('COA on file shows on the lot', (SELECT coa_on_file FROM inventory_lot_view WHERE id = pg_temp.lot('pb')));
 
 -- Transfer between labs
@@ -211,10 +208,15 @@ SELECT pg_temp.expect_error('A lot cannot simply be moved to another lab', $$UPD
 
 -- Dispose
 SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error('Disposing needs a reason', $$SELECT dispose_lot(pg_temp.lot('old'))$$);
+-- Moved to the Java backend in migration 062 (JUnit: InventoryRulesTest.dispose): disposing needs a reason (dispose_lot dropped)
 SELECT set_config('lims.reason', 'Expired', false);
 SELECT pg_temp.expect_error('Status cannot be set to Disposed directly', $$UPDATE inventory_lot SET status = 'Disposed' WHERE notes = 'old'$$);
-SELECT dispose_lot(pg_temp.lot('old'));
+-- what Java's Lot.dispose writes: the remainder off, then the lot closed through Dispose
+DO $do$ DECLARE v numeric := lot_on_hand(pg_temp.lot('old')); BEGIN
+  IF v <> 0 THEN INSERT INTO inventory_transaction (lot_id, txn_type, quantity_change, reference)
+    VALUES (pg_temp.lot('old'), CASE WHEN v > 0 THEN 'Disposal' ELSE 'Adjustment' END::inventory_txn_type, -v, 'Written off at disposal'); END IF;
+  PERFORM set_config('lims.disposing', '1', true); UPDATE inventory_lot SET status = 'Disposed' WHERE id = pg_temp.lot('old'); PERFORM set_config('lims.disposing', '', true);
+END $do$;
 SELECT pg_temp.expect_true('Dispose writes off the remainder and closes the lot', (SELECT status = 'Disposed' AND on_hand = 0 FROM inventory_lot_view WHERE notes = 'old'));
 SELECT pg_temp.expect_error('A disposed lot cannot be reopened', $$UPDATE inventory_lot SET status = 'Available' WHERE notes = 'old'$$);
 SELECT pg_temp.expect_error('Lots cannot be deleted', $$DELETE FROM inventory_lot WHERE notes = 'old'$$);

@@ -22,7 +22,7 @@ INSERT INTO lab_site (site_code, site_name, time_zone, default_oos_procedure) VA
  ('CFL', 'CFL', 'America/Los_Angeles', 'Check and Acknowledge'),
  ('TPS', 'Tentamus Pharmaceutical Services', 'America/New_York', 'Full Phase I (21 CFR 211)');
 INSERT INTO site_holiday (site_id, holiday_date, description) SELECT id, '2026-11-26', 'Thanksgiving' FROM lab_site WHERE site_code = 'CFL';
-SELECT pg_temp.expect_error('Unknown time zone rejected', $$INSERT INTO lab_site (site_code, site_name, time_zone) VALUES ('XX', 'Bad', 'Mars/Olympus')$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): Unknown time zone rejected
 
 -- TAT clock (3-business-day test, 2 pm cutoff), the worked examples agreed with Alex
 CREATE OR REPLACE FUNCTION pg_temp.due(site text, ts timestamptz, cutoff time, n int, u tat_unit) RETURNS text LANGUAGE sql AS $$

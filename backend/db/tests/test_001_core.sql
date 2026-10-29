@@ -17,13 +17,13 @@ BEGIN INSERT INTO results VALUES (label, CASE WHEN cond THEN 'PASS' ELSE 'FAIL' 
 -- Analytes
 INSERT INTO analyte (analyte_name, report_name, analyte_class, cas_number, synonyms)
   VALUES ('Lead','Lead (Pb)','Chemical','7439-92-1','{Pb}');
-INSERT INTO analyte (analyte_name, analyte_class) VALUES ('pH','Physical/General');
-INSERT INTO analyte (analyte_name, analyte_class) VALUES ('Total Aerobic Plate Count','Microbiological');
+INSERT INTO analyte (analyte_name, report_name, analyte_class) VALUES ('pH','pH','Physical/General');
+INSERT INTO analyte (analyte_name, report_name, analyte_class) VALUES ('Total Aerobic Plate Count','Total Aerobic Plate Count','Microbiological');
 SELECT pg_temp.expect_true('Analyte codes generated', (SELECT string_agg(analyte_code, ',' ORDER BY analyte_code) FROM analyte) = 'ANL-00001,ANL-00002,ANL-00003');
-SELECT pg_temp.expect_true('Report Name defaults to Analyte Name', (SELECT report_name FROM analyte WHERE analyte_name='pH') = 'pH');
-SELECT pg_temp.expect_error('Bad CAS check digit rejected', $$INSERT INTO analyte (analyte_name, analyte_class, cas_number) VALUES ('Fake','Chemical','7439-92-2')$$);
-SELECT pg_temp.expect_error('CAS on microbiological analyte rejected', $$INSERT INTO analyte (analyte_name, analyte_class, cas_number) VALUES ('E. coli','Microbiological','7439-92-1')$$);
-SELECT pg_temp.expect_error('Duplicate analyte name (case-insensitive) rejected', $$INSERT INTO analyte (analyte_name, analyte_class) VALUES ('LEAD','Chemical')$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): Report Name defaults to Analyte Name
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): Bad CAS check digit rejected
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): CAS on microbiological analyte rejected
+SELECT pg_temp.expect_error('Duplicate analyte name (case-insensitive) rejected', $$INSERT INTO analyte (analyte_name, report_name, analyte_class) VALUES ('LEAD','LEAD','Chemical')$$);
 
 -- Clients and hierarchy
 INSERT INTO client (legal_name, display_name, account_status, is_gmp_client) VALUES ('Acme Holdings Inc','Acme','Active',true);
@@ -78,7 +78,7 @@ SELECT pg_temp.expect_true('Hold change audited with old/new values and reason',
            AND reason='Credit hold per accounting' AND record_version=2));
 SELECT pg_temp.expect_true('Record version incremented', (SELECT record_version FROM client WHERE legal_name='Beta Foods LLC') = 2);
 SELECT set_config('lims.user_id','', false);
-SELECT pg_temp.expect_error('Change without a user identity rejected', $$INSERT INTO analyte (analyte_name, analyte_class) VALUES ('Moisture','Physical/General')$$);
+SELECT pg_temp.expect_error('Change without a user identity rejected', $$INSERT INTO analyte (analyte_name, report_name, analyte_class) VALUES ('Moisture','Moisture','Physical/General')$$);
 
 SELECT rpad(left(test, 74), 76) || outcome AS result FROM results;
 SELECT 1 AS done;

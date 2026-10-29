@@ -12,11 +12,14 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.tentamus.lims.inventory.domain.ChemicalTypes;
+import com.tentamus.lims.waste.domain.WasteClassification;
+import com.tentamus.lims.waste.repo.WasteRepository;
 import org.springframework.stereotype.Service;
 
 /**
  * Waste classifications: the controlled list (shared ones kept by system administrators, each lab's own by
- * inventory.lists) and the choices for an inventory item.
+ * inventory.lists) and the choices for an inventory item. The rules are {@link WasteClassification}'s.
  */
 @Service
 public class WasteService {
@@ -24,8 +27,10 @@ public class WasteService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final WasteRepository waste;
 
-    public WasteService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public WasteService(Db db, UnitOfWork uow, AccessPolicy access, WasteRepository waste) {
+        this.waste = waste;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -91,6 +96,13 @@ public class WasteService {
                 if (Js.truthy(r.get("id"))) {
                     if (!RequestContext.isUuid(r.get("id"))) throw new RuleException("Waste classification not found");
                     if (f.isEmpty()) continue;
+                    Map<String, Object> stored = waste.row(d, r.get("id"));
+                    if (stored != null) {
+                        Map<String, Object> after = new LinkedHashMap<>(stored);
+                        after.putAll(f);
+                        WasteClassification before = waste.find(d, r.get("id"));
+                        f = WasteClassification.checked(before, after, f, waste.sameList(d, before.siteId()), ChemicalTypes.ORDER);
+                    }
                     List<String> sets = new ArrayList<>();
                     List<Object> vals = new ArrayList<>();
                     for (Map.Entry<String, Object> e : f.entrySet()) {
@@ -105,6 +117,11 @@ public class WasteService {
                 } else {
                     if (!Js.truthy(f.get("waste_name"))) throw new RuleException("Give the waste classification a name");
                     boolean every = (r.containsKey("site_id") && r.get("site_id") == null) || "Every lab".equals(r.get("lab")) || Boolean.TRUE.equals(r.get("every_lab"));
+                    Map<String, Object> after = new LinkedHashMap<>(f);
+                    after.put("site_id", every ? null : site);
+                    after.putIfAbsent("hazard_classes", List.of());
+                    after.putIfAbsent("default_for", List.of());
+                    f = WasteClassification.checked(null, after, f, waste.sameList(d, every ? null : site), ChemicalTypes.ORDER);
                     @SuppressWarnings("unchecked") List<String> hz = (List<String>) f.get("hazard_classes");
                     @SuppressWarnings("unchecked") List<String> df = (List<String>) f.get("default_for");
                     double sort = Js.toNumber(f.get("sort_order"));

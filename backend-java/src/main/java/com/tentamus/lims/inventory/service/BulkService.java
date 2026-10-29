@@ -11,7 +11,10 @@ import com.tentamus.lims.inventory.bulk.BulkKind;
 import com.tentamus.lims.inventory.bulk.BulkKinds;
 import com.tentamus.lims.inventory.bulk.BulkSheet;
 import com.tentamus.lims.inventory.domain.InventoryMessages;
+import com.tentamus.lims.core.time.LabClock;
+import com.tentamus.lims.inventory.domain.Units;
 import com.tentamus.lims.inventory.repo.LotRepository;
+import com.tentamus.lims.inventory.repo.UnitRepository;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Base64;
@@ -31,12 +34,21 @@ public class BulkService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final LotRepository lots;
+    private final LotWriter lotWriter;
+    private final ListRowRules rules;
+    private final UnitRepository unitRepo;
+    private final LabClock clock;
 
-    public BulkService(Db db, AccessPolicy access, SignatureService signatures, LotRepository lots) {
+    public BulkService(Db db, AccessPolicy access, SignatureService signatures, LotRepository lots, LotWriter lotWriter, ListRowRules rules,
+                       UnitRepository unitRepo, LabClock clock) {
         this.db = db;
         this.access = access;
         this.signatures = signatures;
         this.lots = lots;
+        this.lotWriter = lotWriter;
+        this.rules = rules;
+        this.unitRepo = unitRepo;
+        this.clock = clock;
     }
 
     public static BulkKind kind(String name) {
@@ -89,6 +101,8 @@ public class BulkService {
             + bad.get(0).row() + ": " + bad.get(0).errors().get(0) + ")");
         List<BulkSheet.Row> todo = p.rows().stream().filter(x -> x.action().equals("Create") || x.action().equals("Update")).toList();
         if (todo.isEmpty()) return counts(0, 0);
+        Units units = unitRepo.load();
+        LotWriter.Save save = new LotWriter.Save(units, clock.today(site), null, ctx, false);
         return signatures.signed(ctx, body, new Meaning("Uploaded by", "Excel upload to " + k.title() + ": " + todo.size() + " row(s)", k.module()), d -> {
             int created = 0, updated = 0;
             for (BulkSheet.Row x : todo) {
@@ -100,10 +114,17 @@ public class BulkService {
                     Map<String, Object> fixed = k.siteScoped() && id == null ? Map.of("site_id", site) : Map.of();
                     Object rowId = id;
                     if (payload.keySet().stream().anyMatch(f -> !f.equals("id")) || id == null) {
-                        List<Map<String, Object>> res = k.writer().upsert(d, List.of(payload), fixed);
-                        if (!res.isEmpty() && res.get(0) != null && res.get(0).get("id") != null) rowId = res.get(0).get("id");
+                        Map<String, Object> res;
+                        if (name.equals("lots")) res = lotWriter.save(d, k.writer(), payload, fixed, save);
+                        else {
+                            Map<String, Object> checked = ListRowRules.CHECKED.contains(name) ? rules.forKind(name, d, payload, k.writer().pick(payload), site) : payload;
+                            List<Map<String, Object>> r = k.writer().upsert(d, List.of(checked), fixed);
+                            res = r.isEmpty() ? null : r.get(0);
+                        }
+                        if (res != null && res.get("id") != null) rowId = res.get("id");
                     }
-                    if (analytes != null) lots.syncAnalytes(d, rowId, (List<Map<String, Object>>) analytes);
+                    if (analytes != null) lots.syncAnalytes(d, rowId, (List<Map<String, Object>>) analytes, units);
+                    if (name.equals("lots") && rowId != null) lotWriter.assertAnalyteNamed(d, rowId.toString());
                     if (owners != null && k.afterRow() != null) k.afterRow().apply(d, rowId, owners);
                     if (id != null) updated++; else created++;
                 } catch (RuntimeException e) {

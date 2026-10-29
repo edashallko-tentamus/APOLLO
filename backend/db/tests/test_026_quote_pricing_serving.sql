@@ -60,8 +60,8 @@ INSERT INTO quoted_test_configuration (project_version_id, test_id, quantity) VA
 SELECT pg_temp.expect_true('A new line uses the lab''s new rates: $650 less 20 %, plus 50 % = $780',
   (SELECT list_price = 780 AND sc_markup_pct = 50 FROM pg_temp.sc_line(pg_temp.sc_v(), 'SC Partner test 2')));
 UPDATE lab_site SET subcontract_markup_pct = 30 WHERE site_code = 'CFL';
-SELECT pg_temp.expect_error_like('A quote stays with its lab', $$UPDATE project SET site_id = pg_temp.sc_site('TPS') WHERE project_name = 'SC quote'$$, 'stays with the lab');
-SELECT pg_temp.expect_error_like('The rates are percentages a lab can use (a discount under 100 %)', $$UPDATE lab_site SET subcontract_discount_pct = 100 WHERE site_code = 'CFL'$$, 'subcontract_discount_pct');
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): a quote stays with its lab (site_id is not written after the insert)
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): The rates are percentages a lab can use (a discount under 100 %)
 SELECT pg_temp.expect_error_like('A lab''s test never moves to another lab', $$UPDATE test SET site_id = pg_temp.sc_site('TPS') WHERE test_name = 'SC In-house test'$$, 'cannot move');
 
 -------------------------------------------------------------------------------

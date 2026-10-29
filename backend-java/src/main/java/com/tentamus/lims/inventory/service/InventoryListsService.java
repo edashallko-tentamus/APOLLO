@@ -23,8 +23,7 @@ public class InventoryListsService {
     private static final RecordWriter CHEMICALS = new RecordWriter("chemical", List.of("chemical_name", "cas_number", "analyte_id", "synonyms", "hazard_notes", "status"));
     private static final RecordWriter SUPPLIERS = new RecordWriter("supplier", List.of("supplier_name", "supplier_type", "website", "email", "phone", "notes", "status",
         "account_number", "contact_name", "address"));
-    private static final RecordWriter LOCATIONS = new RecordWriter("storage_location", List.of("location_code", "location_name", "location_type", "parent_location_id",
-        "supported_conditions", "holds_samples", "status"));
+    private static final RecordWriter LOCATIONS = com.tentamus.lims.inventory.repo.StorageLocationRepository.WRITER;
     private static final RecordWriter THRESHOLDS = new RecordWriter("threshold_rule", List.of("rule_name", "subject", "rule_type", "value", "site_id", "chemical_id", "status"));
     private static final RecordWriter SAMPLE_STORAGE = new RecordWriter("sample", List.of("storage_location_id", "storage_condition", "retained_quantity", "retained_unit"));
     private final Db db;
@@ -32,8 +31,10 @@ public class InventoryListsService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final CoaReader ai;
+    private final ListRowRules rules;
 
-    public InventoryListsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, CoaReader ai) {
+    public InventoryListsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, CoaReader ai, ListRowRules rules) {
+        this.rules = rules;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -107,7 +108,8 @@ public class InventoryListsService {
 
     public List<Map<String, Object>> saveLocations(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
         String site = access.currentSite(ctx);
-        return signatures.signed(ctx, body, new Meaning("Changed by", "Storage locations", "Inventory"), d -> LOCATIONS.upsert(d, rows, Map.of("site_id", site)));
+        return signatures.signed(ctx, body, new Meaning("Changed by", "Storage locations", "Inventory"), 
+            d -> LOCATIONS.upsert(d, rows.stream().map(r -> rules.location(d, r, LOCATIONS.pick(r), site)).toList(), Map.of("site_id", site)));
     }
 
     /** One storage location: where it is, what is inside it, and every lot and sample kept there. */
@@ -135,7 +137,8 @@ public class InventoryListsService {
     }
 
     public List<Map<String, Object>> saveThresholds(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
-        return signatures.signed(ctx, body, new Meaning("Changed by", "Warning rules", "Inventory"), d -> THRESHOLDS.upsert(d, rows, Map.of()));
+        return signatures.signed(ctx, body, new Meaning("Changed by", "Warning rules", "Inventory"), 
+            d -> THRESHOLDS.upsert(d, rows.stream().map(r -> rules.threshold(d, r, THRESHOLDS.pick(r))).toList(), Map.of()));
     }
 
     public List<Map<String, Object>> sites() { return db.rows("SELECT id, site_code, site_name FROM lab_site WHERE status = 'Active' ORDER BY site_code"); }
@@ -163,7 +166,11 @@ public class InventoryListsService {
         uow.run(ctx, d -> {
             for (Map<String, Object> row : rows) {
                 if (!RequestContext.isUuid(row.get("id"))) continue;
-                Object note = row.get("note") == null || "".equals(row.get("note")) ? null : row.get("note");
+                Map<String, Object> stored = d.one("SELECT site_id, chemical_type::text AS chemical_type FROM qa_testing_default WHERE id = ?::uuid", row.get("id"));
+                if (stored == null) continue;
+                Map<String, Object> ch = new LinkedHashMap<>();
+                for (String k : List.of("site_id", "chemical_type", "note")) if (row.containsKey(k)) ch.put(k, row.get(k));
+                Object note = com.tentamus.lims.inventory.domain.QaTestingDefault.checked(stored, ch).get("note");
                 d.update("""
                     UPDATE qa_testing_default SET required = ?::boolean, note = ? WHERE id = ?::uuid AND site_id = ?::uuid
                        AND (required, COALESCE(note, '')) IS DISTINCT FROM (?::boolean, COALESCE(?::text, ''))""",
@@ -187,7 +194,8 @@ public class InventoryListsService {
                 Map<String, Object> s = d.one("SELECT o.site_id FROM sample s JOIN lab_order o ON o.id = s.lab_order_id WHERE s.id = ?::uuid", row.get("id"));
                 if (s == null || !site.equals(s.get("site_id"))) throw new RuleException("A sample in the list belongs to another lab");
             }
-            return SAMPLE_STORAGE.upsert(d, rows.stream().filter(r -> r.get("id") != null && !"".equals(r.get("id"))).toList(), Map.of());
+            return SAMPLE_STORAGE.upsert(d, rows.stream().filter(r -> r.get("id") != null && !"".equals(r.get("id")))
+                .map(r -> rules.sampleStorage(d, r, SAMPLE_STORAGE.pick(r), site)).toList(), Map.of());
         });
     }
 

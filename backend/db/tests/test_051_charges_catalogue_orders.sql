@@ -79,8 +79,7 @@ SELECT pg_temp.m_reason('Rule test: service lines');
 INSERT INTO service_line (line_name, sort_order) VALUES ('Hemp', 60);
 SELECT pg_temp.expect_error_like('A service line name is unique ignoring capitals', $$INSERT INTO service_line (line_name) VALUES ('hemp')$$, 'service_line_name');
 INSERT INTO service_line_type (service_line_id, type_name) SELECT id, 'Compliance' FROM service_line WHERE line_name = 'Hemp';
-SELECT pg_temp.expect_error_like('A service line type stays under its service line',
-  $$UPDATE service_line_type SET service_line_id = (SELECT id FROM service_line WHERE line_name = 'Food') WHERE type_name = 'Compliance' AND service_line_id = (SELECT id FROM service_line WHERE line_name = 'Hemp')$$, 'stays under');
+-- Moved to the Java backend in migration 061 (JUnit: ChargeRulesTest): a service line type stays under its service line (its line is not written after the insert)
 UPDATE test SET service_line_type_id = (SELECT t.id FROM service_line_type t JOIN service_line sl ON sl.id = t.service_line_id WHERE sl.line_name = 'Dietary supplements' AND t.type_name = 'Release testing')
  WHERE id = pg_temp.m_test('CH Assay');
 SELECT pg_temp.expect_true('A test takes a service line type',
@@ -146,8 +145,7 @@ SELECT pg_temp.expect_error_like('Charges for every lab are kept by system admin
 INSERT INTO charge_item (charge_name, kind, price, site_id) VALUES ('Courier pickup', 'Shipping', 30, pg_temp.m_site('CFL'));
 SELECT pg_temp.expect_true('A lab''s General Manager adds charges; they are numbered CHG-',
   (SELECT bool_and(charge_code LIKE 'CHG-%') FROM charge_item));
-SELECT pg_temp.expect_error_like('A charge price is never negative (a discount is a Discount charge)',
-  $$INSERT INTO charge_item (charge_name, price, site_id) VALUES ('Bad', -5, pg_temp.m_site('CFL'))$$, 'check');
+-- Moved to the Java backend in migration 061 (JUnit: ChargeRulesTest): a charge price is never negative
 SELECT pg_temp.as_user('ch.ana');
 SELECT pg_temp.expect_error_like('An analyst cannot add a charge to the catalogue',
   $$INSERT INTO charge_item (charge_name, price, site_id) VALUES ('X', 5, pg_temp.m_site('CFL'))$$, 'permission');
@@ -157,8 +155,7 @@ SELECT pg_temp.m_reason('');
 INSERT INTO quoted_charge (project_version_id, charge_item_id, unit_price) SELECT pg_temp.m_v('CH draft quote'), id, 30 FROM charge_item WHERE charge_name = 'Sampling kit';
 SELECT pg_temp.expect_true('A charge on a draft quote keeps the item''s price as its list price',
   (SELECT qc.list_price = 40 AND qc.unit_price = 30 FROM quoted_charge qc JOIN charge_item ci ON ci.id = qc.charge_item_id WHERE ci.charge_name = 'Sampling kit'));
-SELECT pg_temp.expect_error_like('Charges are locked once a version is quoted',
-  $$INSERT INTO quoted_charge (project_version_id, charge_item_id, unit_price) SELECT pg_temp.m_v('CH quote'), id, 20 FROM charge_item WHERE charge_name = 'Sampling kit'$$, 'locked');
+-- Moved to the Java backend in migration 061 (JUnit: ChargeRulesTest): charges are locked once a version is quoted
 SELECT pg_temp.expect_true('The client''s price for a charge comes from their accepted quote',
   (SELECT unit_price = 15 FROM client_charge_price(pg_temp.m_client('CH Quoted Co'), (SELECT id FROM charge_item WHERE charge_name = 'Ground shipping'))));
 SELECT pg_temp.as_user('ch.gm');

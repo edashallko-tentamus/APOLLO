@@ -6,6 +6,12 @@ import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.paging.PagedList;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.pricing.domain.Amount;
+import com.tentamus.lims.quotes.domain.Project;
+import com.tentamus.lims.quotes.domain.QuoteVersion;
+import com.tentamus.lims.quotes.domain.SubcontractPrice;
+import com.tentamus.lims.quotes.repo.ProjectRepository;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,11 +29,15 @@ public class QuoteService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final ProjectRepository projects;
+    private final ProjectService versions;
 
-    public QuoteService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public QuoteService(Db db, UnitOfWork uow, AccessPolicy access, ProjectRepository projects, ProjectService versions) {
         this.db = db;
         this.uow = uow;
         this.access = access;
+        this.projects = projects;
+        this.versions = versions;
     }
 
     /** Every quote's and project's latest version; one page at a time narrowed by tab, type, lab and who prepared it. */
@@ -67,6 +77,8 @@ public class QuoteService {
         if (!RequestContext.isUuid(b.get("client_id"))) throw new RuleException("Choose the client");
         Object reason = b.get("reason");
         return uow.run(ctx, blank(reason) ? "New quote" : reason.toString(), d -> {
+            Object contact = RequestContext.isUuid(b.get("quote_contact_id")) ? b.get("quote_contact_id") : null;
+            if (contact != null) Project.checkQuoteContact(contact.toString(), projects.activeContactOf(d, b.get("client_id"), contact));
             Map<String, Object> cl = d.one("SELECT COALESCE(display_name, legal_name) AS name FROM client WHERE id = ?::uuid", b.get("client_id"));
             String name = b.get("project_name") == null ? "" : b.get("project_name").toString().trim();
             Map<String, Object> p = d.one("INSERT INTO project (client_id, project_name, purpose, kind, quote_contact_id) VALUES (?::uuid, ?, ?, 'Quote', ?::uuid) RETURNING id, project_code",
@@ -84,12 +96,17 @@ public class QuoteService {
     /** The quote's name, contact and owner (handing it to another sales person). */
     public Map<String, Object> update(RequestContext ctx, String id, Map<String, Object> b) {
         Object reason = b.get("reason");
-        uow.run(ctx, blank(reason) ? "Quote details changed" : reason.toString(), d -> d.update("""
+        uow.run(ctx, blank(reason) ? "Quote details changed" : reason.toString(), d -> {
+            Map<String, Object> p = projects.projectRow(d, id);
+            if (p != null && RequestContext.isUuid(b.get("quote_contact_id")))
+                Project.checkQuoteContact(b.get("quote_contact_id").toString(), projects.activeContactOf(d, p.get("client_id"), b.get("quote_contact_id")));
+            return d.update("""
             UPDATE project SET project_name = COALESCE(NULLIF(btrim(?), ''), project_name), quote_contact_id = ?::uuid, owner_id = COALESCE(?::uuid, owner_id)
              WHERE id = ?::uuid AND kind = 'Quote'""",
             b.get("project_name") == null || Boolean.FALSE.equals(b.get("project_name")) ? "" : b.get("project_name"),
             RequestContext.isUuid(b.get("quote_contact_id")) ? b.get("quote_contact_id") : null,
-            RequestContext.isUuid(b.get("owner_id")) ? b.get("owner_id") : null, id));
+            RequestContext.isUuid(b.get("owner_id")) ? b.get("owner_id") : null, id);
+        });
         return Map.of("ok", true);
     }
 
@@ -107,32 +124,42 @@ public class QuoteService {
             SELECT p.site_id, s.subcontract_discount_pct AS d, s.subcontract_markup_pct AS m FROM project_version pv JOIN project p ON p.id = pv.project_id
               LEFT JOIN lab_site s ON s.id = p.site_id WHERE pv.id = ?::uuid""", versionId) : null;
         Object site = q == null ? null : q.get("site_id");
-        Object disc = q == null ? 20 : q.get("d"), markup = q == null ? 30 : q.get("m");
-        return db.rows("""
+        BigDecimal disc = q == null ? BigDecimal.valueOf(20) : Amount.of(q.get("d")), markup = q == null ? BigDecimal.valueOf(30) : Amount.of(q.get("m"));
+        List<Map<String, Object>> rows = db.rows("""
             SELECT tc.test_id, tc.test_code, tc.test_name, tc.pricing_mode, tc.list_price AS catalogue_price, tc.standard_tat, tc.tat_unit,
                 tc.rush_schedule, t.site_id, s.site_code, s.site_name,
                 (?::uuid IS NOT NULL AND t.site_id IS NOT NULL AND t.site_id <> ?::uuid) AS subcontracted,
-                CASE WHEN ?::uuid IS NOT NULL AND t.site_id IS NOT NULL AND t.site_id <> ?::uuid THEN (subcontract_price(tc.list_price, ?::numeric, ?::numeric)).price ELSE tc.list_price END AS list_price,
+                tc.list_price,
                 EXISTS (SELECT 1 FROM test_version tv WHERE tv.test_id = t.id AND tv.status = 'Effective') AS orderable
               FROM test_catalogue tc JOIN test t ON t.id = tc.test_id LEFT JOIN lab_site s ON s.id = t.site_id
-             WHERE tc.test_status = 'Active' ORDER BY tc.test_name""", site, site, site, site, disc, markup);
+             WHERE tc.test_status = 'Active' ORDER BY tc.test_name""", site, site);
+        for (Map<String, Object> r : rows)
+            if (Boolean.TRUE.equals(r.get("subcontracted"))) r.put("list_price", SubcontractPrice.of(Amount.of(r.get("list_price")), disc, markup).price());
+        return rows;
     }
 
     /** The lab records the client's answer: Accepted (with the contact) or Rejected (with why). */
     public Map<String, Object> decide(RequestContext ctx, String vid, Map<String, Object> b) {
-        if (!RequestContext.isUuid(vid) || db.one("SELECT 1 AS x FROM project_version WHERE id = ?::uuid", vid) == null) throw new RuleException("Quote not found");
+        QuoteVersion v = projects.quoteVersion(db, vid);
+        if (v == null) throw new RuleException("Quote not found");
         Object decision = b.get("decision");
         String note = b.get("note") == null ? "" : b.get("note").toString();
         if ("Accepted".equals(decision)) {
             Object reason = b.get("reason");
-            uow.run(ctx, blank(reason) ? "Client accepted the quote" : reason.toString(), d -> d.update("""
+            uow.run(ctx, blank(reason) ? "Client accepted the quote" : reason.toString(), d -> {
+                versions.moveTo(d, v, QuoteVersion.ACCEPTED, Map.of("accepted_by_contact_id", RequestContext.isUuid(b.get("contact_id")) ? b.get("contact_id") : ""));
+                return d.update("""
                 UPDATE project_version SET status = 'Accepted', accepted_by_contact_id = ?::uuid, client_response_note = NULLIF(btrim(?), '') WHERE id = ?::uuid""",
-                RequestContext.isUuid(b.get("contact_id")) ? b.get("contact_id") : null, note, vid));
+                RequestContext.isUuid(b.get("contact_id")) ? b.get("contact_id") : null, note, vid);
+            });
             return EMPTY_RESULT;
         }
         if ("Rejected".equals(decision)) {
             if (note.trim().isEmpty()) throw new RuleException("Say why the quote was rejected (price, turnaround, went elsewhere...)");
-            uow.run(ctx, "Client rejected the quote", d -> d.update("UPDATE project_version SET status = 'Rejected', rejected_reason = btrim(?) WHERE id = ?::uuid", note, vid));
+            uow.run(ctx, "Client rejected the quote", d -> {
+                versions.moveTo(d, v, "Rejected", Map.of());
+                return d.update("UPDATE project_version SET status = 'Rejected', rejected_reason = btrim(?) WHERE id = ?::uuid", note, vid);
+            });
             return EMPTY_RESULT;
         }
         throw new RuleException("Accept or reject the quote");

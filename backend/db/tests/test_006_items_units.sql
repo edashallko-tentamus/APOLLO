@@ -40,15 +40,13 @@ SELECT pg_temp.as_user('qa.units');
 INSERT INTO unit_of_measure (unit_code, unit_name, dimension) VALUES ('dram', 'dram (mass)', 'Mass');
 SELECT pg_temp.expect_true('QA can add a unit', EXISTS (SELECT 1 FROM unit_of_measure WHERE unit_code = 'dram'));
 SELECT pg_temp.expect_error('Duplicate unit code (any capitals) refused', $$INSERT INTO unit_of_measure (unit_code, unit_name, dimension) VALUES ('ML', 'x', 'Volume')$$);
-SELECT pg_temp.expect_error('A mass unit cannot be converted to a volume unit',
-  $$INSERT INTO unit_conversion (from_unit_id, to_unit_id, factor) SELECT f.id, t.id, 1 FROM unit_of_measure f, unit_of_measure t WHERE f.unit_code = 'dram' AND t.unit_code = 'mL'$$);
-SELECT pg_temp.expect_error('A ppm conversion must say liquid or solid',
-  $$INSERT INTO unit_conversion (from_unit_id, to_unit_id, factor) SELECT f.id, t.id, 1 FROM unit_of_measure f, unit_of_measure t WHERE f.unit_code = 'ppm' AND t.unit_code = 'µg/g'$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): A mass unit cannot be converted to a volume unit
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): A ppm conversion must say liquid or solid
 INSERT INTO unit_conversion (from_unit_id, to_unit_id, factor) SELECT f.id, t.id, 1.7718451953125 FROM unit_of_measure f, unit_of_measure t WHERE f.unit_code = 'dram' AND t.unit_code = 'g';
 SELECT pg_temp.expect_true('A new conversion is used straight away (dram to mg)', round(unit_factor('dram', 'mg'), 4) = 1771.8452);
 SELECT pg_temp.expect_error('Changing a unit needs a reason', $$UPDATE unit_of_measure SET unit_name = 'drachm' WHERE unit_code = 'dram'$$);
 SELECT set_config('lims.reason', 'Testing unit rename', false);
-SELECT pg_temp.expect_error('A unit used on inventory cannot be renamed', $$UPDATE unit_of_measure SET unit_code = 'litre' WHERE unit_code = 'L'$$);
+-- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): A unit used on inventory cannot be renamed
 SELECT set_config('lims.reason', '', false);
 SELECT pg_temp.as_user('akiddle');
 

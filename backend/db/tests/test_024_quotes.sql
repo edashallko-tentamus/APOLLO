@@ -44,8 +44,8 @@ SELECT pg_temp.expect_true('A quote gets a Q- code, a project keeps its PRJ- cod
   (SELECT bool_and(CASE WHEN kind = 'Quote' THEN project_code ~ '^Q-\d{5}$' ELSE project_code ~ '^PRJ-\d{5}$' END) FROM project WHERE project_name LIKE 'Rule test %'));
 SELECT pg_temp.expect_true('The person creating it owns it (prepared by)',
   (SELECT owner_id = (SELECT id FROM app_user WHERE username = 'akiddle') FROM project WHERE project_name = 'Rule test quote A'));
-SELECT pg_temp.expect_error_like('A quote never becomes a project', $$UPDATE project SET kind = 'Project' WHERE project_name = 'Rule test quote A'$$, 'cannot become');
-SELECT pg_temp.expect_error_like('The quote is for a contact of the client', $$UPDATE project SET quote_contact_id = (SELECT id FROM contact WHERE first_name = 'Olga') WHERE project_name = 'Rule test quote A'$$, 'active contact of the client');
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): a quote never becomes a project (kind is not written after the insert)
+-- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): the quote is for an active contact of the client
 
 CREATE TEMP TABLE qt AS SELECT p.project_code, new_project_version(p.id) AS vid FROM project p WHERE p.project_name IN ('Rule test quote A', 'Rule test quote B');
 INSERT INTO quoted_test_configuration (project_version_id, test_id, quantity)

@@ -3,6 +3,7 @@ package com.tentamus.lims.orders.repo;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
 import com.tentamus.lims.core.paging.PagedList;
+import com.tentamus.lims.orders.domain.LabOrder;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Repository;
@@ -52,6 +53,38 @@ public class OrderRepository {
     public Object licenseOf(Object orderId) { return db.one("SELECT client_license_id FROM lab_order WHERE id = ?::uuid", orderId).get("client_license_id"); }
 
     public Map<String, Object> orderLab(String id) { return db.one("SELECT id, site_id FROM lab_order WHERE id = ?::uuid", id); }
+
+    /** The stored order the rules read, or null. */
+    public LabOrder.State state(Object id) {
+        Map<String, Object> r = db.one("""
+            SELECT o.id, o.client_id, o.status::text AS status, o.ordering_contact_id, o.client_license_id,
+                   EXISTS (SELECT 1 FROM sample s WHERE s.lab_order_id = o.id) AS has_samples FROM lab_order o WHERE o.id = ?::uuid""", id);
+        return r == null ? null : new LabOrder.State((String) r.get("id"), (String) r.get("client_id"), (String) r.get("status"),
+            (String) r.get("ordering_contact_id"), (String) r.get("client_license_id"), Boolean.TRUE.equals(r.get("has_samples")));
+    }
+
+    /** May the client order, and is the contact one of its active ordering contacts. */
+    public LabOrder.Party party(Object client, Object contact) {
+        Map<String, Object> r = db.one("""
+            SELECT (SELECT account_status::text FROM client WHERE id = ?::uuid) AS account_status,
+                   EXISTS (SELECT 1 FROM client_contact cc JOIN contact ct ON ct.id = cc.contact_id
+                            WHERE cc.contact_id = ?::uuid AND cc.client_id = ?::uuid AND cc.status = 'Active' AND ct.status = 'Active'
+                              AND 'ORDERING' = ANY(cc.roles)) AS contact_orders""", client, contact, client);
+        return new LabOrder.Party((String) r.get("account_status"), Boolean.TRUE.equals(r.get("contact_orders")));
+    }
+
+    /** Submitting stamps the time once (the database stamps it too, for the orders its own functions submit). */
+    public void stampSubmitted(Object id) {
+        Map<String, Object> r = db.one("SELECT status::text AS status, submitted_at FROM lab_order WHERE id = ?::uuid", id);
+        if (r != null && LabOrder.stampsSubmitted((String) r.get("status"), r.get("submitted_at")))
+            db.update("UPDATE lab_order SET submitted_at = clock_timestamp() WHERE id = ?::uuid", id);
+    }
+
+    public LabOrder.License license(Object id) {
+        if (id == null) return null;
+        Map<String, Object> r = db.one("SELECT license_code, client_id, status::text AS status FROM client_license WHERE id = ?::uuid", id);
+        return r == null ? null : new LabOrder.License((String) r.get("license_code"), (String) r.get("client_id"), (String) r.get("status"));
+    }
 
     public List<Map<String, Object>> samplesOf(String orderId) {
         return db.rows("SELECT sv.*, (SELECT count(*) FROM sample_photo ph WHERE ph.sample_id = sv.id AND ph.status = 'Active')::int AS photo_count, " + SERVING_COLUMNS

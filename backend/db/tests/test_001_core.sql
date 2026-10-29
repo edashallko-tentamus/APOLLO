@@ -49,14 +49,10 @@ SELECT pg_temp.expect_true('Multiple Secondary contacts allowed', (SELECT count(
 SELECT pg_temp.expect_error('Duplicate contact email rejected', $$INSERT INTO contact (first_name,last_name,email) VALUES ('M','L','MARIA@consult.com')$$);
 
 -- Ordering rules
-SELECT pg_temp.expect_true('Ordering contact on Active client can order',
-  contact_can_order((SELECT id FROM contact WHERE email='maria@consult.com'), (SELECT id FROM client WHERE legal_name='Beta Foods LLC')));
-SELECT pg_temp.expect_true('Billing-only contact cannot order',
-  NOT contact_can_order((SELECT id FROM contact WHERE email='sam@acme.com'), (SELECT id FROM client WHERE legal_name='Acme Irvine Site')));
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Ordering contact on Active client can order; Billing-only contact cannot order
 SELECT set_config('lims.reason','Credit hold per accounting', false);
 UPDATE client SET account_status='On Hold' WHERE legal_name='Beta Foods LLC';
-SELECT pg_temp.expect_true('On Hold client can still order and test',
-  contact_can_order((SELECT id FROM contact WHERE email='maria@consult.com'), (SELECT id FROM client WHERE legal_name='Beta Foods LLC')));
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): On Hold client can still order and test
 SELECT pg_temp.expect_true('On Hold client cannot have reports released',
   NOT client_can_release_report((SELECT id FROM client WHERE legal_name='Beta Foods LLC')));
 UPDATE client SET account_status='On Hold' WHERE legal_name='Acme Holdings Inc';

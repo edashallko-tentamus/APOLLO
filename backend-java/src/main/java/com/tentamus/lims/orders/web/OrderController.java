@@ -3,6 +3,8 @@ package com.tentamus.lims.orders.web;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.orders.service.IntakeService;
 import com.tentamus.lims.orders.service.OrderService;
+import com.tentamus.lims.orders.service.SampleService;
+import com.tentamus.lims.orders.service.TestOrderingService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
@@ -14,10 +16,14 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
     private final OrderService orders;
     private final IntakeService intake;
+    private final SampleService samples;
+    private final TestOrderingService tests;
 
-    public OrderController(OrderService orders, IntakeService intake) {
+    public OrderController(OrderService orders, IntakeService intake, SampleService samples, TestOrderingService tests) {
         this.orders = orders;
         this.intake = intake;
+        this.samples = samples;
+        this.tests = tests;
     }
 
     @GetMapping("/orders")
@@ -42,41 +48,41 @@ public class OrderController {
 
     @PostMapping("/orders/{id}/samples")
     public List<Map<String, Object>> samples(HttpServletRequest req, @PathVariable String id, @RequestBody Map<String, Object> b) {
-        return orders.saveSamples(ctx(req, b), id, rows(b));
+        return samples.saveSamples(ctx(req, b), id, rows(b));
     }
 
     @PostMapping("/samples/{id}/serving-request")
     public Map<String, Object> servingRequest(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) {
         Map<String, Object> body = b == null ? Map.of() : b;
-        return orders.requestServingTest(ctx(req, body), id, body);
+        return samples.requestServingTest(ctx(req, body), id, body);
     }
 
     @PostMapping("/orders/{id}/apply-project")
-    public Map<String, Object> applyProject(HttpServletRequest req, @RequestBody Map<String, Object> b) { return orders.applyProject(ctx(req, b), b); }
+    public Map<String, Object> applyProject(HttpServletRequest req, @RequestBody Map<String, Object> b) { return tests.applyProject(ctx(req, b), b); }
 
     @PostMapping("/orders/{id}/add-test")
-    public Map<String, Object> addTest(HttpServletRequest req, @RequestBody Map<String, Object> b) { return orders.addTest(ctx(req, b), b); }
+    public Map<String, Object> addTest(HttpServletRequest req, @RequestBody Map<String, Object> b) { return tests.addTest(ctx(req, b), b); }
 
     @PostMapping("/orders/{id}/tests")
-    public List<Map<String, Object>> tests(HttpServletRequest req, @RequestBody Map<String, Object> b) { return orders.saveTests(ctx(req, b), rows(b)); }
+    public List<Map<String, Object>> tests(HttpServletRequest req, @RequestBody Map<String, Object> b) { return tests.saveTests(ctx(req, b), rows(b)); }
 
     @PostMapping("/orders/{id}/rush")
-    public Map<String, Object> rush(HttpServletRequest req, @PathVariable String id, @RequestBody Map<String, Object> b) { return orders.rush(ctx(req, b), id, b); }
+    public Map<String, Object> rush(HttpServletRequest req, @PathVariable String id, @RequestBody Map<String, Object> b) { return tests.rush(ctx(req, b), id, b); }
 
     @PostMapping("/orders/{id}/log")
-    public Map<String, Object> log(HttpServletRequest req, @RequestBody Map<String, Object> b) { return orders.log(ctx(req, b), b); }
+    public Map<String, Object> log(HttpServletRequest req, @RequestBody Map<String, Object> b) { return samples.log(ctx(req, b), b); }
 
     @PostMapping("/orders/{id}/cancel")
     public Map<String, Object> cancel(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) {
         Map<String, Object> body = b == null ? Map.of() : b;
-        return orders.cancel(ctx(req, body), id, body);
+        return samples.cancel(ctx(req, body), id, body);
     }
 
     @GetMapping("/requested-tests/{id}/analytes")
-    public List<Map<String, Object>> analytes(HttpServletRequest req, @PathVariable String id) { return orders.analytes(ctx(req, null), id); }
+    public List<Map<String, Object>> analytes(HttpServletRequest req, @PathVariable String id) { return tests.analytes(ctx(req, null), id); }
 
     @PostMapping("/requested-tests/{id}/analytes")
-    public List<Map<String, Object>> saveAnalytes(HttpServletRequest req, @RequestBody Map<String, Object> b) { return orders.saveAnalytes(ctx(req, b), rows(b)); }
+    public List<Map<String, Object>> saveAnalytes(HttpServletRequest req, @RequestBody Map<String, Object> b) { return tests.saveAnalytes(ctx(req, b), rows(b)); }
 
     @GetMapping("/intake")
     public Map<String, Object> intake(HttpServletRequest req) { return intake.dashboard(ctx(req, null)); }

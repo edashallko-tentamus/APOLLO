@@ -6,6 +6,14 @@ import com.tentamus.lims.core.db.RecordWriter;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.paging.PagedList;
 import com.tentamus.lims.core.web.RequestContext;
+import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.orders.domain.EmailTemplate;
+import com.tentamus.lims.orders.domain.RushDecision;
+import com.tentamus.lims.orders.repo.OutboxRepository;
+import com.tentamus.lims.orders.repo.RequestedTestRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,13 +21,12 @@ import org.springframework.stereotype.Service;
 
 /**
  * Intake: the dashboard (rush waiting for approval, incoming rush work, expected samples, samples logged in the last day),
- * intake's rush decisions, and the Outbox with its email templates (nothing is sent in the Sandbox).
+ * intake's rush decisions ({@link RushDecision}), and the Outbox with its email templates (nothing is sent in the Sandbox).
  */
 @Service
 public class IntakeService {
     private static final RecordWriter RUSH_DECISION = new RecordWriter("rush_decision",
         List.of("requested_test_id", "decision", "requested_tier_id", "replacement_tier_id", "reason"));
-    private static final RecordWriter TEMPLATES = new RecordWriter("email_template", List.of("template_name", "subject", "body", "is_active"));
     private static final String OUTBOX_SQL = """
         SELECT e.*, o.order_code, u.full_name AS triggered_by, p.project_code AS quote_code, p.id AS quote_project_id
           FROM email_outbox e LEFT JOIN lab_order o ON o.id = e.lab_order_id JOIN app_user u ON u.id = e.created_by
@@ -28,11 +35,15 @@ public class IntakeService {
     private final Db db;
     private final AccessPolicy access;
     private final UnitOfWork uow;
+    private final RequestedTestRepository tests;
+    private final OutboxRepository outbox;
 
-    public IntakeService(Db db, AccessPolicy access, UnitOfWork uow) {
+    public IntakeService(Db db, AccessPolicy access, UnitOfWork uow, RequestedTestRepository tests, OutboxRepository outbox) {
         this.db = db;
         this.access = access;
         this.uow = uow;
+        this.tests = tests;
+        this.outbox = outbox;
     }
 
     public Map<String, Object> dashboard(RequestContext ctx) {
@@ -59,13 +70,40 @@ public class IntakeService {
         return out;
     }
 
-    /** Intake approves a rush, or does not accept it (the database then queues the fixed email naming the staff member). */
+    /** Intake approves a rush, or does not accept it: then the fixed email naming the staff member goes to the ordering contact. */
     public List<Map<String, Object>> rushDecision(RequestContext ctx, Map<String, Object> b) {
         Object reason = b.get("reason");
         String r = reason != null && !"".equals(reason) && !Boolean.FALSE.equals(reason) ? reason.toString()
             : "Approved".equals(b.get("decision")) ? "Rush approved by intake" : "";
-        return uow.run(ctx, r, d -> RUSH_DECISION.upsert(d, List.of(b), Map.of()));
+        return uow.run(ctx, r, d -> {
+            Map<String, Object> vals = RUSH_DECISION.pick(b);
+            Object testId = vals.get("requested_test_id");
+            RushDecision decision = new RushDecision(str(vals.get("decision")), tests.tier(vals.get("requested_tier_id")), tests.tier(vals.get("replacement_tier_id")),
+                str(vals.get("reason")));
+            Map<String, Object> saved = tests.insertDecision(vals);
+            Map<String, Object> before = tests.rushFacts(testId);
+            if (before == null) throw RuleException.database("There is no open rush request for that tier on this test");
+            decision.check(new RushDecision.Rush((String) before.get("rush_tier_id"), (String) before.get("rush_status")));
+            if (decision.approves()) tests.setRush(testId, null, decision.newStatus(), false);
+            else {
+                tests.setRush(testId, decision.replacement() == null ? null : decision.replacement().id(), decision.newStatus(), true);
+                Map<String, Object> after = tests.rushFacts(testId);
+                Map<String, Object> v = decision.emailValues((String) after.get("first_name"), (String) after.get("test_name"), (String) after.get("sample_code"),
+                    (String) after.get("client_sample_id"), (String) after.get("order_code"), dec(before.get("rush_fee")), dec(after.get("rush_fee")),
+                    after.get("due_date") == null ? null : LocalDate.parse(after.get("due_date").toString()), str(tests.staffName(ctx.userId())), (String) after.get("site_name"));
+                EmailTemplate.Email e = EmailTemplate.required(outbox.template("Rush Not Accepted"), "Rush Not Accepted")
+                    .email((String) after.get("email"), after.get("first_name") + " " + after.get("last_name"), v);
+                if (e != null) outbox.queue(e, after.get("order_id"));
+            }
+            List<Map<String, Object>> out = new ArrayList<>();
+            out.add(saved);
+            return out;
+        });
     }
+
+    private static String str(Object v) { return v == null ? null : v.toString(); }
+
+    private static BigDecimal dec(Object v) { return v == null ? null : new BigDecimal(v.toString()); }
 
     public Object outbox(RequestContext ctx, Map<String, String> query) {
         String site = access.currentSite(ctx);
@@ -81,9 +119,12 @@ public class IntakeService {
         return out;
     }
 
-    /** Templates are only changed, never added here (rows without an id are ignored). */
+    /** Templates are only changed, never added here (rows without an id are ignored), and their code never changes. */
     public List<Map<String, Object>> saveTemplates(RequestContext ctx, List<Map<String, Object>> rows) {
         List<Map<String, Object>> existing = rows.stream().filter(r -> r.get("id") != null && !"".equals(r.get("id"))).toList();
-        return uow.run(ctx, d -> TEMPLATES.upsert(d, existing, Map.of()));
+        return uow.run(ctx, d -> {
+            for (Map<String, Object> r : existing) EmailTemplate.checkChange(outbox.codeOf(r.get("id")), r);
+            return OutboxRepository.TEMPLATES.upsert(d, existing, Map.of());
+        });
     }
 }

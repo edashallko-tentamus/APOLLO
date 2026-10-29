@@ -97,15 +97,12 @@ CREATE TEMP TABLE sc_s AS
    ORDER BY rt.created_at LIMIT 1;
 CREATE OR REPLACE FUNCTION pg_temp.sc_smp() RETURNS uuid LANGUAGE sql AS $$ SELECT id FROM sc_s $$;
 SELECT pg_temp.expect_true('(a sample with a test reporting in mg/kg or ppm, for the serving checks)', pg_temp.sc_smp() IS NOT NULL);
-SELECT pg_temp.expect_error_like('The serving is counted in a serving unit of the Units list', $$UPDATE sample SET serving_count = 2, serving_count_unit = 'scbox' WHERE id = pg_temp.sc_smp()$$, 'serving units');
-SELECT pg_temp.expect_error_like('A serving count has its unit', $$UPDATE sample SET serving_count = 2 WHERE id = pg_temp.sc_smp()$$, 'counted in');
-SELECT pg_temp.expect_error_like('The serving''s weight or volume is a mass or a volume (not a count)', $$UPDATE sample SET serving_size = 2, serving_unit = 'each' WHERE id = pg_temp.sc_smp()$$, 'Serving weight or volume unit');
-SELECT pg_temp.expect_error_like('The quantity received is in a unit of the Units list', $$UPDATE sample SET quantity_unit = 'blobs' WHERE id = pg_temp.sc_smp()$$, 'Quantity unit');
-UPDATE sample SET serving_count = 2, serving_count_unit = 'SCCAPSULE', serving_size = 1.2, serving_unit = 'g', servings_per_package = 30 WHERE id = pg_temp.sc_smp();
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): the serving counted in a serving unit of the Units list, a serving count has its unit, the serving's weight or volume is a mass or a volume, the quantity received is in a unit of the Units list, stored with the list's spelling
+UPDATE sample SET serving_count = 2, serving_count_unit = 'sccapsule', serving_size = 1.2, serving_unit = 'g', servings_per_package = 30 WHERE id = pg_temp.sc_smp();
 SELECT pg_temp.expect_true('2 capsules weighing 1.2 g, 30 servings per package: stored with the list''s spelling',
   (SELECT serving_count = 2 AND serving_count_unit = 'sccapsule' AND serving_size = 1.2 AND serving_unit = 'g' AND servings_per_package = 30 FROM sample WHERE id = pg_temp.sc_smp()));
 SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('Changing a logged sample''s serving needs a reason', $$UPDATE sample SET servings_per_package = 60 WHERE id = pg_temp.sc_smp() AND logged_at IS NOT NULL$$, 'Reason for Change');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Changing a logged sample's serving needs a reason
 SELECT set_config('lims.reason', 'Rule test', false);
 
 -------------------------------------------------------------------------------

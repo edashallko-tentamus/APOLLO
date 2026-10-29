@@ -146,10 +146,9 @@ SELECT pg_temp.expect_true('A client who takes no partial reports: the test is f
   AND NOT EXISTS (SELECT 1 FROM coa WHERE sample_id = pg_temp.smp('LOT-M2')));
 SELECT pg_temp.as_user('akiddle');
 UPDATE client SET allow_partial_reports = true WHERE id = (SELECT o.client_id FROM lab_order o JOIN sample s ON s.lab_order_id = o.id WHERE s.id = pg_temp.smp('LOT-M2'));
-SELECT pg_temp.expect_error_like('A compliance category must be on the list', $$UPDATE sample SET compliance_category = 'Rocket fuel' WHERE id = pg_temp.smp('LOT-M2')$$, 'not on the list');
-UPDATE sample SET compliance_category = 'cgmp' WHERE id = pg_temp.smp('LOT-M2');
-SELECT pg_temp.expect_true('A category is stored with the list''s spelling, and cGMP makes the sample GMP work',
-  (SELECT compliance_category = 'cGMP' FROM sample WHERE id = pg_temp.smp('LOT-M2')) AND sample_is_gmp(pg_temp.smp('LOT-M2')));
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): a compliance category must be on the list, stored with the list's spelling
+UPDATE sample SET compliance_category = 'cGMP' WHERE id = pg_temp.smp('LOT-M2');
+SELECT pg_temp.expect_true('cGMP makes the sample GMP work', sample_is_gmp(pg_temp.smp('LOT-M2')));
 SELECT pg_temp.as_user('wd.pm');
 SELECT pg_temp.expect_error_like('GMP work is finalized by the quality team, not a Project Manager',
   $$SELECT pg_temp.fin('LOT-M2', ARRAY[pg_temp.rt('LOT-M2', 'WD Growth Promotion')])$$, 'quality team');
@@ -176,8 +175,7 @@ SELECT pg_temp.expect_error_like('A canned note comes from the COA comments list
   $$INSERT INTO coa_note (sample_id, kind, note_text, reason_code_id) VALUES (pg_temp.smp('LOT-A2'), 'COA', 'x', (SELECT id FROM reason_code WHERE module <> 'COA comments' LIMIT 1))$$, 'COA comments');
 SELECT pg_temp.expect_error_like('Email templates are kept by QA and administrators (outbox.templates)', $$UPDATE email_template SET subject = 'x' WHERE template_code = 'COA Issued'$$, 'outbox.templates');
 SELECT pg_temp.as_user('akiddle');
-SELECT pg_temp.expect_error_like('The system''s templates are added by migrations only', $$INSERT INTO email_template (template_code, template_name, subject, body) VALUES ('X', 'X', 'X', 'X')$$, 'added by migrations');
-SELECT pg_temp.expect_error_like('A template''s code (what it is sent for) cannot change', $$UPDATE email_template SET template_code = 'Other' WHERE template_code = 'COA Issued'$$, 'cannot change');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): The system's templates are added by migrations only; a template's code cannot change
 SELECT pg_temp.expect_true('Templates fill in their {{names}}', fill_template('Dear {{first_name}}, {{x}}', '{"first_name": "Sam"}') = 'Dear Sam, {{x}}');
 
 SELECT set_config('lims.reason', '', false);

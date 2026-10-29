@@ -3,19 +3,35 @@ package com.tentamus.lims.equipment.service;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.access.UserAccess;
 import com.tentamus.lims.core.db.Db;
+import com.tentamus.lims.core.db.RecordWriter;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.paging.PagedList;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.signature.SignatureService.Meaning;
+import com.tentamus.lims.core.time.LabClock;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.equipment.domain.AutoTag;
+import com.tentamus.lims.equipment.domain.Equipment;
 import com.tentamus.lims.equipment.domain.EquipmentMessages;
+import com.tentamus.lims.equipment.domain.EquipmentTag;
+import com.tentamus.lims.equipment.domain.Fields;
+import com.tentamus.lims.equipment.domain.LabListEntry;
+import com.tentamus.lims.equipment.domain.MaintenanceSchedule;
+import com.tentamus.lims.equipment.domain.Owners;
+import com.tentamus.lims.equipment.domain.Transfer;
+import com.tentamus.lims.equipment.domain.WorkRecord;
 import com.tentamus.lims.equipment.repo.EquipmentOwners;
 import com.tentamus.lims.equipment.repo.EquipmentRepository;
+import com.tentamus.lims.equipment.repo.EquipmentStore;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -23,8 +39,9 @@ import org.springframework.stereotype.Service;
 /**
  * Equipment: the register and the due list, the lab's types and departments, new equipment (one or many), owners,
  * tag-out and the work under a tag, tag-in and release, calibrations and qualifications (QA corrections), documents,
- * maintenance schedules and transfers. Every change is signed; the rules (owners, release by someone else, automatic
- * tag-outs, schedules, transfers) are the database's.
+ * maintenance schedules and transfers. Every change is signed. The rules are the domain objects' (Equipment, Owners,
+ * EquipmentTag, WorkRecord, MaintenanceSchedule, Transfer, AutoTag, LabListEntry); who may do what stays the
+ * database's permission triggers until the permissions wave.
  */
 @Service
 public class EquipmentService {
@@ -35,13 +52,18 @@ public class EquipmentService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final EquipmentRepository repo;
+    private final EquipmentStore store;
+    private final LabClock clock;
 
-    public EquipmentService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, EquipmentRepository repo) {
+    public EquipmentService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, EquipmentRepository repo,
+                            EquipmentStore store, LabClock clock) {
         this.db = db;
         this.uow = uow;
         this.access = access;
         this.signatures = signatures;
         this.repo = repo;
+        this.store = store;
+        this.clock = clock;
     }
 
     private <T> T sign(RequestContext ctx, Map<String, Object> body, String meaning, String action, Function<Db, T> work) {
@@ -58,10 +80,30 @@ public class EquipmentService {
 
     private static String label(Map<String, Object> e) { return e.get("equipment_code") + " " + e.get("equipment_name"); }
 
-    /** Automatic tag-outs (calibration expired, maintenance due), made by System before the lists are read. */
-    public void autoTag(String site) {
+    /** Automatic tag-outs (calibration expired, maintenance due), made by System before the lists are read. Returns how many. */
+    public int autoTag(String site) {
         Object system = db.one("SELECT id FROM app_user WHERE username = 'system'").get("id");
-        uow.run(new RequestContext((String) system, null, "", "Automatic tag-out", "127.0.0.1"), d -> d.one("SELECT equipment_auto_tag(?::uuid) AS n", site));
+        return uow.run(new RequestContext((String) system, null, "", "Automatic tag-out", "127.0.0.1"), d -> {
+            LocalDate today = clock.today(site);
+            List<AutoTag> tags = new ArrayList<>();
+            for (Equipment e : store.needingCalibration(d, site)) {
+                AutoTag t = AutoTag.forCalibration(e, store.currentCalibration(d, e.id()), today, store.calibrationTagOpen(d, e.id()));
+                if (t != null) tags.add(t);
+            }
+            for (Map.Entry<Equipment, MaintenanceSchedule> x : store.tagOutSchedules(d, site)) {
+                AutoTag t = AutoTag.forSchedule(x.getKey(), x.getValue(), today, store.scheduleTagOpen(d, x.getValue().id()));
+                if (t != null) tags.add(t);
+            }
+            store.insertAutoTags(d, tags);
+            return tags.size();
+        });
+    }
+
+    /** Equipment loaded inside the transaction (the person's lab already checked). */
+    private Equipment load(Db d, Object id) {
+        Equipment e = store.equipment(d, id);
+        if (e == null) throw new RuleException("Equipment not found");
+        return e;
     }
 
     // ---------------------------------------------------------------- reading
@@ -98,12 +140,31 @@ public class EquipmentService {
     // ---------------------------------------------------------------- the lab's lists
     public List<Map<String, Object>> saveTypes(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
         String site = access.currentSite(ctx);
-        return sign(ctx, body, "Changed by", "Equipment types list: " + rows.size() + " change(s)", d -> EquipmentRepository.TYPES.upsert(d, rows, Map.of("site_id", site)));
+        return sign(ctx, body, "Changed by", "Equipment types list: " + rows.size() + " change(s)",
+            d -> EquipmentRepository.TYPES.upsert(d, checkedRows(d, rows, "equipment_type", EquipmentRepository.TYPES, LabListEntry::type), Map.of("site_id", site)));
     }
 
     public List<Map<String, Object>> saveDepartments(RequestContext ctx, Map<String, Object> body, List<Map<String, Object>> rows) {
         String site = access.currentSite(ctx);
-        return sign(ctx, body, "Changed by", "Departments list: " + rows.size() + " change(s)", d -> EquipmentRepository.DEPARTMENTS.upsert(d, rows, Map.of("site_id", site)));
+        return sign(ctx, body, "Changed by", "Departments list: " + rows.size() + " change(s)",
+            d -> EquipmentRepository.DEPARTMENTS.upsert(d, checkedRows(d, rows, "department", EquipmentRepository.DEPARTMENTS, LabListEntry::department), Map.of("site_id", site)));
+    }
+
+    /**
+     * Grid rows as they will be written, each checked by its domain rule (stored row, changes) -> values to write. An
+     * update of a missing row is passed on unchanged (the writer then answers null for it, as before).
+     */
+    private List<Map<String, Object>> checkedRows(Db d, List<Map<String, Object>> rows, String table, RecordWriter writer,
+                                                  BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> rule) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> stored = store.stored(d, table, row.get("id"));
+            if (row.get("id") != null && stored == null) { out.add(row); continue; }
+            Map<String, Object> vals = writer.pick(row);
+            if (row.get("id") != null && vals.isEmpty()) continue;
+            out.add(withOptionalId(rule.apply(stored, vals), row.get("id")));
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------- equipment
@@ -114,8 +175,8 @@ public class EquipmentService {
         row.remove("id");
         String action = "New equipment: " + str(row.get("equipment_name")) + (truthy(row.get("serial_number")) ? " (S/N " + str(row.get("serial_number")) + ")" : "");
         return sign(ctx, body, "Created by", action, d -> {
-            Object id = EquipmentRepository.EQUIPMENT.upsert(d, List.of(row), Map.of("site_id", site)).get(0).get("id");
-            EquipmentOwners.sync(d, id, body.get("owners") instanceof List<?> l ? (List<Map<String, Object>>) l : List.of());
+            Object id = insertEquipment(d, row, site);
+            saveOwners(d, id, body.get("owners") instanceof List<?> l ? (List<Map<String, Object>>) l : List.of());
             return d.one("SELECT id, equipment_code FROM equipment WHERE id = ?::uuid", id);
         });
     }
@@ -132,8 +193,8 @@ public class EquipmentService {
                 try {
                     if (!truthy(row.get("owner_group_id"))) throw new RuleException("pick the group responsible for it");
                     row.remove("id");
-                    Object id = EquipmentRepository.EQUIPMENT.upsert(d, List.of(row), Map.of("site_id", site)).get(0).get("id");
-                    EquipmentOwners.sync(d, id, List.of(Map.of("group_id", row.get("owner_group_id"))));
+                    Object id = insertEquipment(d, row, site);
+                    saveOwners(d, id, List.of(Map.of("group_id", row.get("owner_group_id"))));
                     created++;
                 } catch (RuntimeException e) {
                     throw EquipmentMessages.MESSAGES.withPrefix(e, "Row " + (i + 1) + " (" + str(row.get("equipment_name")) + "): ");
@@ -147,26 +208,60 @@ public class EquipmentService {
     public Map<String, Object> update(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> e = equipment(ctx, id);
         return sign(ctx, body, "Changed by", "Changed " + label(e), d -> {
-            Map<String, Object> row = new LinkedHashMap<>(map(body.get("row")));
-            row.put("id", e.get("id"));
-            EquipmentRepository.EQUIPMENT.upsert(d, List.of(row), Map.of());
-            if (body.get("owners") instanceof List<?> owners) EquipmentOwners.sync(d, e.get("id"), (List<Map<String, Object>>) owners);
+            Map<String, Object> vals = EquipmentRepository.EQUIPMENT.pick(map(body.get("row")));
+            if (!vals.isEmpty()) EquipmentRepository.EQUIPMENT.update(d, (String) e.get("id"), checkedEquipment(d, store.stored(d, "equipment", e.get("id")), vals));
+            if (body.get("owners") instanceof List<?> owners) saveOwners(d, e.get("id"), (List<Map<String, Object>>) owners);
             return Map.of("id", e.get("id"));
         });
+    }
+
+    /** New equipment, checked, in the person's lab. Returns its id. */
+    private Object insertEquipment(Db d, Map<String, Object> row, String site) {
+        Map<String, Object> vals = new LinkedHashMap<>(EquipmentRepository.EQUIPMENT.pick(row));
+        vals.put("site_id", site);
+        return EquipmentRepository.EQUIPMENT.insert(d, checkedEquipment(d, null, vals), "id").get("id");
+    }
+
+    private Map<String, Object> checkedEquipment(Db d, Map<String, Object> stored, Map<String, Object> vals) {
+        Map<String, Object> after = Fields.after(stored, vals);
+        return Equipment.checked(Equipment.of(stored), after, vals, store.type(d, after.get("equipment_type_id")),
+            store.department(d, after.get("department_id")), store.locationSite(d, after.get("location_id")));
+    }
+
+    /** The complete set of owners, checked against the equipment's lab, then written. */
+    private void saveOwners(Db d, Object equipmentId, List<Map<String, Object>> owners) {
+        Equipment e = load(d, equipmentId);
+        List<Equipment.LabEntry> groups = new ArrayList<>();
+        List<Owners.Person> people = new ArrayList<>();
+        for (Map<String, Object> o : owners) {
+            if (truthy(o.get("group_id"))) groups.add(store.group(d, o.get("group_id")));
+            else if (truthy(o.get("user_id"))) people.add(store.person(d, o.get("user_id"), e.siteId()));
+        }
+        groups.removeIf(Objects::isNull);
+        new Owners(e, groups, people).check();
+        EquipmentOwners.sync(d, equipmentId, owners);
     }
 
     public Map<String, Object> status(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> e = equipment(ctx, id);
         Object to = body.get("admin_status");
         if (to == null || !List.of("In Service", "Out of Service", "Retired").contains(to)) throw new RuleException("Pick In Service, Out of Service or Retired");
-        return sign(ctx, body, "Changed by", label(e) + ": " + to, d -> d.raw("UPDATE equipment SET admin_status = ? WHERE id = ?::uuid", to, e.get("id")));
+        return sign(ctx, body, "Changed by", label(e) + ": " + to, d -> {
+            Map<String, Object> vals = new LinkedHashMap<>();
+            vals.put("admin_status", to);
+            checkedEquipment(d, store.stored(d, "equipment", e.get("id")), vals);
+            return d.raw("UPDATE equipment SET admin_status = ? WHERE id = ?::uuid", to, e.get("id"));
+        });
     }
 
     // ---------------------------------------------------------------- tags and the work under them
     public Map<String, Object> tagOut(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> e = equipment(ctx, id);
-        return sign(ctx, body, "Tagged out by", "Tag out " + label(e) + " for " + str(body.get("reason_code")).toLowerCase(), d -> d.one(
-            "INSERT INTO equipment_tag (equipment_id, reason, description) VALUES (?::uuid, ?, ?) RETURNING id, tag_code", e.get("id"), body.get("reason_code"), or(body.get("description"))));
+        return sign(ctx, body, "Tagged out by", "Tag out " + label(e) + " for " + str(body.get("reason_code")).toLowerCase(), d -> {
+            Equipment eq = load(d, e.get("id"));
+            EquipmentTag.checkTagOut(eq, str(body.get("reason_code")), null, null, store.openTag(d, eq.id(), body.get("reason_code"), null));
+            return store.insertTag(d, eq.id(), body.get("reason_code"), "Manual", null, or(body.get("description")));
+        });
     }
 
     private Map<String, Object> tag(RequestContext ctx, Object tagId) {
@@ -176,13 +271,35 @@ public class EquipmentService {
         return tg;
     }
 
-    private static Map<String, Object> event(Db d, Object equipmentId, Map<String, Object> v, Object tagId) {
-        boolean vendor = truthy(v.get("performed_by_vendor"));
-        return d.one("""
+    /** A maintenance log entry, checked; scheduled work moves the schedule's next due date on from the day it was done. */
+    private Map<String, Object> event(Db d, RequestContext ctx, Object equipmentId, Map<String, Object> v, Object tagId) {
+        Equipment e = load(d, equipmentId);
+        Map<String, Object> vals = performer(v);
+        vals.put("schedule_id", or(v.get("schedule_id")));
+        vals.put("summary", v.get("summary"));
+        MaintenanceSchedule s = vals.get("schedule_id") == null ? null : store.schedule(d, vals.get("schedule_id"));
+        vals = WorkRecord.checkedNew(WorkRecord.Kind.EVENT, e, vals, tagId == null ? null : store.tag(d, tagId), s == null ? null : s.equipmentId(),
+            clock.today(e.siteId()), ctx.userId());
+        Map<String, Object> ev = d.one("""
             INSERT INTO equipment_event (equipment_id, tag_id, schedule_id, event_type, performed_date, performed_by_user_id, performed_by_vendor, summary)
-              VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?::uuid, ?, ?) RETURNING id, event_code""",
-            equipmentId, tagId, or(v.get("schedule_id")), truthy(v.get("event_type")) ? v.get("event_type") : "Maintenance", or(v.get("performed_date")),
-            vendor ? null : or(v.get("performed_by_user_id")), or(v.get("performed_by_vendor")), v.get("summary"));
+              VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?::uuid, ?, ?) RETURNING id, event_code, performed_date""",
+            equipmentId, tagId, vals.get("schedule_id"), truthy(v.get("event_type")) ? v.get("event_type") : "Maintenance", vals.get("performed_date"),
+            vals.get("performed_by_user_id"), vals.get("performed_by_vendor"), vals.get("summary"));
+        if (s != null) store.moveScheduleOn(d, s, s.nextDueAfter(Fields.date(ev.get("performed_date"))));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", ev.get("id"));
+        out.put("event_code", ev.get("event_code"));
+        return out;
+    }
+
+    /** When and by whom, as the form sent it (a service company named means no person). */
+    private static Map<String, Object> performer(Map<String, Object> v) {
+        boolean vendor = truthy(v.get("performed_by_vendor"));
+        Map<String, Object> vals = new LinkedHashMap<>();
+        vals.put("performed_date", or(v.get("performed_date")));
+        vals.put("performed_by_user_id", vendor ? null : or(v.get("performed_by_user_id")));
+        vals.put("performed_by_vendor", or(v.get("performed_by_vendor")));
+        return vals;
     }
 
     /** A maintenance log entry, with or without a tag; for scheduled work the schedule's next due date moves on. */
@@ -191,7 +308,7 @@ public class EquipmentService {
         Map<String, Object> v = map(body.get("row"));
         if (truthy(v.get("tag_id")) && !tag(ctx, v.get("tag_id")).get("equipment_id").equals(e.get("id"))) throw new RuleException("That tag belongs to other equipment");
         String type = truthy(v.get("event_type")) ? str(v.get("event_type")) : "Maintenance";
-        return sign(ctx, body, "Performed by", type + " recorded for " + label(e), d -> event(d, e.get("id"), v, or(v.get("tag_id"))));
+        return sign(ctx, body, "Performed by", type + " recorded for " + label(e), d -> event(d, ctx, e.get("id"), v, or(v.get("tag_id"))));
     }
 
     /** Back in service: released (by someone who did not tag it out or do the work) or, after maintenance, tagged back in. */
@@ -203,9 +320,13 @@ public class EquipmentService {
             if (!release && truthy(body.get("summary"))) {
                 Map<String, Object> v = new LinkedHashMap<>();
                 v.put("event_type", "Maintenance"); v.put("summary", body.get("summary")); v.put("schedule_id", tg.get("schedule_id")); v.put("performed_date", body.get("performed_date"));
-                event(d, tg.get("equipment_id"), v, tg.get("id"));
+                event(d, ctx, tg.get("equipment_id"), v, tg.get("id"));
             }
-            d.update("UPDATE equipment_tag SET tagged_in_at = clock_timestamp() WHERE id = ?::uuid", tg.get("id"));
+            Equipment e = load(d, tg.get("equipment_id"));
+            EquipmentTag tag = store.tag(d, tg.get("id"));
+            String meaning = tag.tagIn(e, e.calibrationStatus(store.currentCalibration(d, e.id()), clock.today(e.siteId())), ctx.userId(),
+                access.load(ctx.userId()).can("equipment.release", e.siteId()));
+            store.tagIn(d, tag.id(), meaning);
             return Map.of("id", tg.get("id"));
         });
     }
@@ -227,12 +348,12 @@ public class EquipmentService {
         Map<String, Object> e = equipment(ctx, id);
         Map<String, Object> v = map(body.get("row"));
         return sign(ctx, body, "Recorded by", "Calibration of " + label(e) + " on " + str(v.get("performed_date")) + ": " + str(v.get("result")), d -> {
-            boolean vendor = truthy(v.get("performed_by_vendor"));
+            Map<String, Object> w = work(d, ctx, WorkRecord.Kind.CALIBRATION, e.get("id"), v);
             Map<String, Object> k = d.one("""
                 INSERT INTO calibration (equipment_id, tag_id, performed_date, expiration_date, result, performed_by_user_id, performed_by_vendor, certificate_number, notes)
                   VALUES (?::uuid, ?::uuid, ?, ?, ?, ?::uuid, ?, ?, ?) RETURNING id, calibration_code, expiration_date""",
-                e.get("id"), or(v.get("tag_id")), or(v.get("performed_date")), or(v.get("expiration_date")), or(v.get("result")),
-                vendor ? null : or(v.get("performed_by_user_id")), or(v.get("performed_by_vendor")), or(v.get("certificate_number")), or(v.get("notes")));
+                e.get("id"), or(v.get("tag_id")), w.get("performed_date"), w.get("expiration_date"), or(v.get("result")),
+                w.get("performed_by_user_id"), w.get("performed_by_vendor"), or(v.get("certificate_number")), or(v.get("notes")));
             Map<String, Object> f = map(body.get("file"));
             if (!f.isEmpty()) {
                 Map<String, Object> doc = new LinkedHashMap<>(f);
@@ -250,7 +371,7 @@ public class EquipmentService {
         if (k == null) throw new RuleException("Calibration not found");
         Map<String, Object> e = equipment(ctx, (String) k.get("equipment_id"));
         return sign(ctx, body, "Changed by", "Calibration " + k.get("calibration_code") + " of " + label(e) + " changed",
-            d -> EquipmentRepository.CALIBRATIONS.upsert(d, List.of(withId(map(body.get("row")), cid)), Map.of()));
+            d -> correct(d, ctx, WorkRecord.Kind.CALIBRATION, EquipmentRepository.CALIBRATIONS, cid, (String) e.get("site_id"), map(body.get("row"))));
     }
 
     public Map<String, Object> addQualification(RequestContext ctx, String id, Map<String, Object> body) {
@@ -258,12 +379,12 @@ public class EquipmentService {
         Map<String, Object> v = map(body.get("row"));
         String type = truthy(v.get("qualification_type")) ? str(v.get("qualification_type")) : "Qualification";
         return sign(ctx, body, "Recorded by", type + " of " + label(e) + " on " + str(v.get("performed_date")) + ": " + str(v.get("result")), d -> {
-            boolean vendor = truthy(v.get("performed_by_vendor"));
+            Map<String, Object> w = work(d, ctx, WorkRecord.Kind.QUALIFICATION, e.get("id"), v);
             Map<String, Object> q = d.one("""
                 INSERT INTO qualification (equipment_id, tag_id, qualification_type, performed_date, result, performed_by_user_id, performed_by_vendor, protocol_reference, notes)
                   VALUES (?::uuid, ?::uuid, ?, ?, ?, ?::uuid, ?, ?, ?) RETURNING id, qualification_code""",
-                e.get("id"), or(v.get("tag_id")), or(v.get("qualification_type")), or(v.get("performed_date")), or(v.get("result")),
-                vendor ? null : or(v.get("performed_by_user_id")), or(v.get("performed_by_vendor")), or(v.get("protocol_reference")), or(v.get("notes")));
+                e.get("id"), or(v.get("tag_id")), or(v.get("qualification_type")), w.get("performed_date"), or(v.get("result")),
+                w.get("performed_by_user_id"), w.get("performed_by_vendor"), or(v.get("protocol_reference")), or(v.get("notes")));
             Map<String, Object> f = map(body.get("file"));
             if (!f.isEmpty()) {
                 Map<String, Object> doc = new LinkedHashMap<>(f);
@@ -280,14 +401,36 @@ public class EquipmentService {
         if (q == null) throw new RuleException("Qualification not found");
         Map<String, Object> e = equipment(ctx, (String) q.get("equipment_id"));
         return sign(ctx, body, "Changed by", "Qualification " + q.get("qualification_code") + " of " + label(e) + " changed",
-            d -> EquipmentRepository.QUALIFICATIONS.upsert(d, List.of(withId(map(body.get("row")), qid)), Map.of()));
+            d -> correct(d, ctx, WorkRecord.Kind.QUALIFICATION, EquipmentRepository.QUALIFICATIONS, qid, (String) e.get("site_id"), map(body.get("row"))));
+    }
+
+    /** A calibration or qualification about to be recorded: who did it, when, and for a calibration its expiry. */
+    private Map<String, Object> work(Db d, RequestContext ctx, WorkRecord.Kind kind, Object equipmentId, Map<String, Object> v) {
+        Equipment e = load(d, equipmentId);
+        Map<String, Object> vals = performer(v);
+        if (kind == WorkRecord.Kind.CALIBRATION) vals.put("expiration_date", or(v.get("expiration_date")));
+        Object tagId = or(v.get("tag_id"));
+        return WorkRecord.checkedNew(kind, e, vals, tagId == null ? null : store.tag(d, tagId), null, clock.today(e.siteId()), ctx.userId());
+    }
+
+    /** A correction: QA's for the expiry, date, result or withdrawing, never the person who did or recorded it. */
+    private List<Map<String, Object>> correct(Db d, RequestContext ctx, WorkRecord.Kind kind, RecordWriter writer, String id, String site, Map<String, Object> row) {
+        Map<String, Object> vals = writer.pick(row);
+        Map<String, Object> stored = store.stored(d, kind.table(), id);
+        if (stored != null && !vals.isEmpty())
+            WorkRecord.checkCorrection(kind, stored, vals, clock.today(site), ctx.userId(), access.load(ctx.userId()).can("equipment.release", site));
+        return writer.upsert(d, List.of(withId(row, id)), Map.of());
     }
 
     public Map<String, Object> addDocument(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> e = equipment(ctx, id);
         Map<String, Object> f = map(body.get("file"));
         if (!truthy(f.get("content_base64"))) throw new RuleException("Choose the file to upload");
-        return sign(ctx, body, "Uploaded by", "Document " + str(f.get("file_name")) + " for " + label(e), d -> addDoc(d, e.get("id"), f, links("tag_id", f.get("tag_id"), null)));
+        return sign(ctx, body, "Uploaded by", "Document " + str(f.get("file_name")) + " for " + label(e), d -> {
+            EquipmentTag tag = truthy(f.get("tag_id")) ? store.tag(d, f.get("tag_id")) : null;
+            if (tag != null) tag.assertDocumentOf((String) e.get("id"));
+            return addDoc(d, e.get("id"), f, links("tag_id", f.get("tag_id"), null));
+        });
     }
 
     /** Titles, types and withdrawing of this lab's equipment documents. */
@@ -313,8 +456,11 @@ public class EquipmentService {
     // ---------------------------------------------------------------- schedules and transfers
     public List<Map<String, Object>> saveSchedules(RequestContext ctx, String id, Map<String, Object> body, List<Map<String, Object>> rows) {
         Map<String, Object> e = equipment(ctx, id);
-        return sign(ctx, body, "Changed by", "Maintenance schedules of " + label(e) + ": " + rows.size() + " change(s)",
-            d -> EquipmentRepository.SCHEDULES.upsert(d, rows, Map.of("equipment_id", e.get("id"))));
+        return sign(ctx, body, "Changed by", "Maintenance schedules of " + label(e) + ": " + rows.size() + " change(s)", d -> {
+            if (rows.stream().anyMatch(r -> r.get("id") == null)) load(d, e.get("id")).assertNotRetired();
+            return EquipmentRepository.SCHEDULES.upsert(d, checkedRows(d, rows, "maintenance_schedule", EquipmentRepository.SCHEDULES,
+                (stored, vals) -> MaintenanceSchedule.checked(Fields.after(stored, vals), vals)), Map.of("equipment_id", e.get("id")));
+        });
     }
 
     /** To another lab; the history goes with it and it arrives tagged out for qualification. */
@@ -322,8 +468,15 @@ public class EquipmentService {
         Map<String, Object> e = equipment(ctx, id);
         Map<String, Object> to = RequestContext.isUuid(body.get("to_site_id")) ? db.one("SELECT site_code FROM lab_site WHERE id = ?::uuid", body.get("to_site_id")) : null;
         if (to == null) throw new RuleException("Pick the lab it is going to");
-        return sign(ctx, body, "Transferred by", "Transfer " + label(e) + " to " + to.get("site_code"), d -> d.one("SELECT transfer_equipment(?::uuid, ?::uuid, ?::uuid, ?::uuid, ?) AS id",
-            e.get("id"), body.get("to_site_id"), or(body.get("owner_group_id")), or(body.get("department_id")), or(body.get("notes"))));
+        return sign(ctx, body, "Transferred by", "Transfer " + label(e) + " to " + to.get("site_code"), d -> {
+            Equipment eq = load(d, e.get("id"));
+            Transfer t = new Transfer(eq, (String) body.get("to_site_id"), store.siteCode(d, eq.siteId()), (String) to.get("site_code"), truthy(body.get("notes")) ? str(body.get("notes")) : null);
+            Object group = or(body.get("owner_group_id")), dept = or(body.get("department_id"));
+            t.check(RequestContext.isUuid(group) ? store.group(d, group) : null, RequestContext.isUuid(dept) ? store.department(d, dept) : null);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", store.transfer(d, t, (String) group, (String) dept));
+            return out;
+        });
     }
 
     // ---------------------------------------------------------------- helpers
@@ -343,6 +496,12 @@ public class EquipmentService {
 
     private static boolean truthy(Object v) {
         return v != null && !Boolean.FALSE.equals(v) && !"".equals(v) && !(v instanceof Number n && n.doubleValue() == 0);
+    }
+
+    private static Map<String, Object> withOptionalId(Map<String, Object> vals, Object id) {
+        Map<String, Object> r = new LinkedHashMap<>(vals);
+        if (id != null) r.put("id", id);
+        return r;
     }
 
     private static Map<String, Object> withId(Map<String, Object> row, Object id) {

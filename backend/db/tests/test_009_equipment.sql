@@ -60,8 +60,8 @@ SELECT pg_temp.expect_error('Changing the Equipment types list needs a signature
   $$INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.site('CFL'), 'Balance')$$);
 SELECT pg_temp.as_user('e.sup');
 INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.site('CFL'), 'Balance'), (pg_temp.site('CFL'), 'HPLC'), (pg_temp.site('CFL'), 'Pipette'), (pg_temp.site('CFL'), 'Spectrophotometer');
-INSERT INTO department (site_id, department_code, department_name) VALUES (pg_temp.site('CFL'), 'chem', 'Chemistry');
-SELECT pg_temp.expect_true('Department codes are stored in capitals', EXISTS (SELECT 1 FROM department WHERE department_code = 'CHEM'));
+INSERT INTO department (site_id, department_code, department_name) VALUES (pg_temp.site('CFL'), 'CHEM', 'Chemistry');
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): department codes are stored in capitals.
 SELECT pg_temp.expect_error('Type names are unique in a lab (ignoring capitals)', $$INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.site('CFL'), 'hplc')$$);
 SELECT pg_temp.expect_error('A CFL supervisor cannot change TPS''s lists', $$INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.site('TPS'), 'HPLC')$$);
 SELECT pg_temp.as_user('e.tps');
@@ -109,16 +109,14 @@ SELECT pg_temp.expect_error('Equipment cannot be moved to another lab by editing
 SELECT pg_temp.expect_true('No calibration yet: Deficient', calibration_status(pg_temp.eq('BAL-T1')) = 'Deficient');
 SELECT pg_temp.expect_true('Calibration not required: Not required', calibration_status(pg_temp.eq('UV-T1')) = 'Not required');
 SELECT pg_temp.as_user('e.ana');
-INSERT INTO calibration (equipment_id, performed_date, result, certificate_number) VALUES (pg_temp.eq('BAL-T1'), site_today(pg_temp.site('CFL')) - 10, 'Pass', 'C-1');
-SELECT pg_temp.expect_true('Expiry defaults from the 6-month interval; performer defaults to the person recording it',
-  (SELECT expiration_date = (performed_date + interval '6 months' - interval '1 day')::date AND performed_by_user_id = pg_temp.uid('e.ana') FROM calibration WHERE certificate_number = 'C-1'));
+-- the expiry and performer as Java fills them in
+INSERT INTO calibration (equipment_id, performed_date, expiration_date, result, performed_by_user_id, certificate_number)
+VALUES (pg_temp.eq('BAL-T1'), site_today(pg_temp.site('CFL')) - 10, (site_today(pg_temp.site('CFL')) - 10 + interval '6 months' - interval '1 day')::date, 'Pass', pg_temp.uid('e.ana'), 'C-1');
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): the expiry defaults from the 6-month interval; the performer defaults to the person recording it.
 SELECT pg_temp.expect_true('In-date passing calibration: Conforms', calibration_status(pg_temp.eq('BAL-T1')) = 'Conforms');
-SELECT pg_temp.expect_error('A calibration dated in the future is refused',
-  $$INSERT INTO calibration (equipment_id, performed_date, result) VALUES (pg_temp.eq('BAL-T1'), site_today(pg_temp.site('CFL')) + 1, 'Pass')$$);
-SELECT pg_temp.expect_error('Expiry before the calibration date is refused',
-  $$INSERT INTO calibration (equipment_id, performed_date, expiration_date, result) VALUES (pg_temp.eq('BAL-T1'), pg_temp.today() - 5, pg_temp.today() - 6, 'Pass')$$);
-SELECT pg_temp.expect_error('No interval and no expiry date: refused',
-  $$INSERT INTO calibration (equipment_id, performed_date, result) VALUES (pg_temp.eq('UV-T1'), pg_temp.today(), 'Pass')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): a calibration dated in the future is refused.
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): an expiry before the calibration date is refused.
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): no interval and no expiry date: refused.
 SELECT set_config('lims.reason', 'Certificate correction', false);
 SELECT pg_temp.expect_error('The analyst cannot change a calibration''s expiry (needs equipment.release)',
   $$UPDATE calibration SET expiration_date = expiration_date + 30 WHERE certificate_number = 'C-1'$$);
@@ -132,8 +130,7 @@ INSERT INTO group_member (group_id, user_id) VALUES (pg_temp.grp('CFL', 'Analyst
 SELECT pg_temp.as_user('e.qa2');
 INSERT INTO calibration (equipment_id, performed_date, expiration_date, result, performed_by_vendor, certificate_number)
 VALUES (pg_temp.eq('HPLC-T1'), pg_temp.today() - 400, pg_temp.today() - 35, 'Pass', 'Agilent service', 'C-H1');
-SELECT pg_temp.expect_error('QA cannot change a calibration they recorded themselves (someone else must)',
-  $$UPDATE calibration SET expiration_date = pg_temp.today() + 300 WHERE certificate_number = 'C-H1'$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): QA cannot change a calibration they recorded themselves (someone else must).
 SELECT set_config('lims.reason', '', false);
 SELECT pg_temp.expect_true('Expired calibration: Deficient; history kept (current = latest)',
   calibration_status(pg_temp.eq('HPLC-T1')) = 'Deficient' AND (current_calibration(pg_temp.eq('HPLC-T1'))).certificate_number = 'C-H1');
@@ -151,20 +148,18 @@ SELECT pg_temp.expect_error('Only the system makes automatic tag-outs',
   $$INSERT INTO equipment_tag (equipment_id, reason, source) VALUES (pg_temp.eq('UV-T1'), 'Calibration', 'Calibration due')$$);
 
 -- Releasing after calibration: the passing calibration under the tag, then QA (not the calibrator) releases
-SELECT pg_temp.as_user('e.qa2');
-SELECT pg_temp.expect_error('Release refused until the work is recorded',
-  $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('HPLC-T1', 'Calibration')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): release refused until the work is recorded.
 SELECT pg_temp.as_user('e.ana');
-INSERT INTO calibration (equipment_id, tag_id, performed_date, result, certificate_number) VALUES (pg_temp.eq('HPLC-T1'), pg_temp.open_tag('HPLC-T1', 'Calibration'), pg_temp.today() - 1, 'Pass', 'C-H2');
+INSERT INTO calibration (equipment_id, tag_id, performed_date, expiration_date, result, performed_by_user_id, certificate_number)
+VALUES (pg_temp.eq('HPLC-T1'), pg_temp.open_tag('HPLC-T1', 'Calibration'), pg_temp.today() - 1, (pg_temp.today() - 1 + interval '12 months' - interval '1 day')::date, 'Pass', pg_temp.uid('e.ana'), 'C-H2');
 SELECT pg_temp.expect_error('The analyst who calibrated cannot release it (no permission, and it is their work)',
   $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('HPLC-T1', 'Calibration')$$);
 SELECT pg_temp.as_user('e.qa2');
 UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('HPLC-T1', 'Calibration');
-SELECT pg_temp.expect_true('QA releases it: signed "Released by", available again, Conforms',
-  (SELECT tag_in_meaning = 'Released by' AND tagged_in_by = pg_temp.uid('e.qa2') AND tag_in_signature_id IS NOT NULL FROM equipment_tag WHERE equipment_id = pg_temp.eq('HPLC-T1') AND reason = 'Calibration')
-  AND (SELECT availability FROM equipment_view WHERE serial_number = 'HPLC-T1') = 'Available' AND calibration_status(pg_temp.eq('HPLC-T1')) = 'Conforms');
-SELECT pg_temp.expect_error('A closed tag cannot be changed',
-  $$UPDATE equipment_tag SET tagged_in_at = now() WHERE equipment_id = pg_temp.eq('HPLC-T1') AND reason = 'Calibration'$$);
+SELECT pg_temp.expect_true('QA releases it: available again, Conforms',
+  (SELECT availability FROM equipment_view WHERE serial_number = 'HPLC-T1') = 'Available' AND calibration_status(pg_temp.eq('HPLC-T1')) = 'Conforms');
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): the release is signed "Released by" with who released it.
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): a closed tag cannot be changed.
 SELECT pg_temp.expect_error('Tags are never deleted', $$DELETE FROM equipment_tag WHERE equipment_id = pg_temp.eq('HPLC-T1')$$);
 
 -- Repair: tagged out and repaired by QA One; QA One cannot release; QA Two can
@@ -174,8 +169,7 @@ SELECT pg_temp.as_user('e.ana');
 INSERT INTO equipment_tag (equipment_id, reason, description) VALUES (pg_temp.eq('BAL-T1'), 'Repair', 'Drifting, will not tare');
 SELECT pg_temp.expect_error('The same reason cannot be tagged twice at once',
   $$INSERT INTO equipment_tag (equipment_id, reason) VALUES (pg_temp.eq('BAL-T1'), 'Repair')$$);
-SELECT pg_temp.expect_error('A tag''s reason cannot be edited',
-  $$UPDATE equipment_tag SET reason = 'Maintenance' WHERE id = pg_temp.open_tag('BAL-T1', 'Repair')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): a tag's reason cannot be edited.
 SELECT pg_temp.as_user('e.qa');
 SELECT pg_temp.expect_error('QA cannot record maintenance work (no equipment.tag)',
   $$INSERT INTO equipment_event (equipment_id, tag_id, event_type, performed_date, summary) VALUES (pg_temp.eq('BAL-T1'), pg_temp.open_tag('BAL-T1', 'Repair'), 'Repair', pg_temp.today(), 'x')$$);
@@ -185,26 +179,23 @@ SELECT pg_temp.expect_error('The analyst who tagged it out and repaired it canno
   $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('BAL-T1', 'Repair')$$);
 SELECT pg_temp.as_user('e.qa');
 UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('BAL-T1', 'Repair');
-SELECT pg_temp.expect_true('QA (who did not do the work) releases after repair',
-  (SELECT tag_in_meaning FROM equipment_tag WHERE equipment_id = pg_temp.eq('BAL-T1') AND reason = 'Repair') = 'Released by');
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): QA (who did not do the work) releases after repair ("Released by").
 
 -- Segregation applies to QA too: QA Two (also on the bench) tags the HPLC out and repairs it; QA One releases it
 SELECT pg_temp.as_user('e.qa2');
 INSERT INTO equipment_tag (equipment_id, reason, description) VALUES (pg_temp.eq('HPLC-T1'), 'Repair', 'Leak at the injector');
 INSERT INTO equipment_event (equipment_id, tag_id, event_type, performed_date, summary) VALUES (pg_temp.eq('HPLC-T1'), pg_temp.open_tag('HPLC-T1', 'Repair'), 'Repair', pg_temp.today(), 'Rotor seal replaced');
-SELECT pg_temp.expect_error('QA who tagged it out and did the repair cannot release it (holds the permission, but it is their work)',
-  $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('HPLC-T1', 'Repair')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): QA who tagged it out and did the repair cannot release it (holds the permission, but it is their work).
 SELECT pg_temp.as_user('e.qa');
 UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('HPLC-T1', 'Repair');
 
 -- Maintenance: the analyst tags out, records the work and returns it to service (no QA release)
 SELECT pg_temp.as_user('e.ana');
 INSERT INTO equipment_tag (equipment_id, reason) VALUES (pg_temp.eq('UV-T1'), 'Maintenance');
-SELECT pg_temp.expect_error('Tag-in needs the work recorded first', $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('UV-T1', 'Maintenance')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): tag-in needs the work recorded first.
 INSERT INTO equipment_event (equipment_id, tag_id, event_type, performed_date, summary) VALUES (pg_temp.eq('UV-T1'), pg_temp.open_tag('UV-T1', 'Maintenance'), 'Maintenance', pg_temp.today(), 'Lamp replaced');
 UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('UV-T1', 'Maintenance');
-SELECT pg_temp.expect_true('After maintenance the same person returns it to service ("Returned to service by")',
-  (SELECT tag_in_meaning FROM equipment_tag WHERE equipment_id = pg_temp.eq('UV-T1')) = 'Returned to service by');
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): after maintenance the same person returns it to service ("Returned to service by").
 
 -- Schedules: due today with "tag out when due"; doing the work moves the next due date on
 SELECT pg_temp.as_user('e.sup');
@@ -221,8 +212,7 @@ SELECT pg_temp.expect_true('The due list shows the open tag (not the schedule tw
 SELECT pg_temp.as_user('e.ana');
 INSERT INTO equipment_event (equipment_id, tag_id, schedule_id, event_type, performed_date, summary)
 VALUES (pg_temp.eq('UV-T1'), pg_temp.open_tag('UV-T1', 'Maintenance'), (SELECT id FROM maintenance_schedule WHERE task_name = 'Wavelength check'), 'Maintenance', site_today(pg_temp.site('CFL')), 'Holmium filter within 0.5 nm');
-SELECT pg_temp.expect_true('Recording the scheduled work moves the next due date on by 3 months',
-  (SELECT next_due_date = (site_today(pg_temp.site('CFL')) + interval '3 months')::date FROM maintenance_schedule WHERE task_name = 'Wavelength check'));
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): recording the scheduled work moves the next due date on by 3 months.
 UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('UV-T1', 'Maintenance');
 
 -- Due list
@@ -231,30 +221,25 @@ SELECT pg_temp.expect_true('The due list has the never-calibrated pipette (tagge
   AND EXISTS (SELECT 1 FROM equipment_due_view WHERE equipment_name = 'Balance T1' AND kind = 'Calibration' AND urgency = 'Due soon'));
 
 -- Transfer to another lab: history goes with it, it arrives tagged out for qualification
-SELECT pg_temp.as_user('e.int');
-SELECT pg_temp.expect_error('Intake (no equipment.edit) cannot transfer equipment',
-  $$SELECT transfer_equipment(pg_temp.eq('BAL-T1'), pg_temp.site('TPS'), pg_temp.grp('TPS', 'Lab Supervisor'), (SELECT id FROM department WHERE department_code = 'QC'))$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): Intake (no equipment.edit) cannot transfer equipment; the receiving lab's owner must be a group of that lab
+-- and its department one of that lab's; the move keeps the history, arrives tagged out for Qualification and adds the type.
+-- The transfer as Java's Transfer writes it (a step of the system, so the person's permission checks are skipped):
 SELECT pg_temp.as_user('e.sup');
-SELECT pg_temp.expect_error('The receiving lab''s owner must be a group of that lab',
-  $$SELECT transfer_equipment(pg_temp.eq('BAL-T1'), pg_temp.site('TPS'), pg_temp.grp('CFL', 'Lab Supervisor'), (SELECT id FROM department WHERE department_code = 'QC'))$$);
-SELECT pg_temp.expect_error('The receiving lab''s department must be one of that lab''s',
-  $$SELECT transfer_equipment(pg_temp.eq('BAL-T1'), pg_temp.site('TPS'), pg_temp.grp('TPS', 'Lab Supervisor'), (SELECT id FROM department WHERE department_code = 'CHEM'))$$);
-SELECT transfer_equipment(pg_temp.eq('BAL-T1'), pg_temp.site('TPS'), pg_temp.grp('TPS', 'Lab Supervisor'), (SELECT id FROM department WHERE department_code = 'QC'), 'Moving to St. Petersburg');
+SELECT set_config('lims.equipment_internal', '1', false), set_config('lims.reason', 'Transferred to TPS: Moving to St. Petersburg', false);
+INSERT INTO equipment_type (site_id, type_name, description) VALUES (pg_temp.site('TPS'), 'Balance', 'Added when BAL-T1 was transferred in');
+UPDATE equipment_owner SET status = 'Inactive' WHERE equipment_id = pg_temp.eq('BAL-T1') AND status = 'Active';
+UPDATE equipment SET site_id = pg_temp.site('TPS'), equipment_type_id = pg_temp.typ('TPS', 'Balance'), department_id = (SELECT id FROM department WHERE department_code = 'QC'), location_id = NULL
+ WHERE id = pg_temp.eq('BAL-T1');
+INSERT INTO equipment_owner (equipment_id, group_id) VALUES (pg_temp.eq('BAL-T1'), pg_temp.grp('TPS', 'Lab Supervisor'));
+INSERT INTO equipment_tag (equipment_id, reason, source, description) VALUES (pg_temp.eq('BAL-T1'), 'Qualification', 'Transfer', 'Transferred in from CFL: qualify before use');
+INSERT INTO equipment_transfer (equipment_id, from_site_id, to_site_id, tag_id, notes)
+VALUES (pg_temp.eq('BAL-T1'), pg_temp.site('CFL'), pg_temp.site('TPS'), pg_temp.open_tag('BAL-T1', 'Qualification'), 'Moving to St. Petersburg');
+SELECT set_config('lims.equipment_internal', '', false), set_config('lims.reason', '', false);
 SET CONSTRAINTS ALL IMMEDIATE; SET CONSTRAINTS ALL DEFERRED;
-SELECT pg_temp.expect_true('Transferred: now at TPS, TPS group owns it, CFL group no longer does, history kept',
-  (SELECT site_id FROM equipment WHERE serial_number = 'BAL-T1') = pg_temp.site('TPS')
-  AND (SELECT owners FROM equipment_view WHERE serial_number = 'BAL-T1') = 'Lab Supervisor'
-  AND (SELECT count(*) FROM calibration WHERE equipment_id = pg_temp.eq('BAL-T1')) = 1
-  AND (SELECT department_code FROM equipment_view WHERE serial_number = 'BAL-T1') = 'QC'
-  AND EXISTS (SELECT 1 FROM equipment_transfer WHERE equipment_id = pg_temp.eq('BAL-T1')));
-SELECT pg_temp.expect_true('It arrives tagged out for Qualification, and TPS''s list gained the Balance type',
-  pg_temp.open_tag('BAL-T1', 'Qualification') IS NOT NULL AND pg_temp.typ('TPS', 'Balance') IS NOT NULL
-  AND (SELECT equipment_type_id FROM equipment WHERE serial_number = 'BAL-T1') = pg_temp.typ('TPS', 'Balance'));
 SELECT pg_temp.expect_error('CFL can no longer change it', $$UPDATE equipment SET notes = 'x' WHERE serial_number = 'BAL-T1'$$);
 SELECT pg_temp.as_user('e.tps');
 INSERT INTO qualification (equipment_id, tag_id, qualification_type, performed_date, result) VALUES (pg_temp.eq('BAL-T1'), pg_temp.open_tag('BAL-T1', 'Qualification'), 'IQ/OQ', pg_temp.today(), 'Pass');
-SELECT pg_temp.expect_error('The TPS supervisor who qualified it cannot release it',
-  $$UPDATE equipment_tag SET tagged_in_at = now() WHERE id = pg_temp.open_tag('BAL-T1', 'Qualification')$$);
+-- Moved to the Java backend in migration 064 (JUnit: EquipmentRulesTest): the TPS supervisor who qualified it cannot release it.
 
 -- Retired equipment
 SELECT pg_temp.as_user('e.sup');

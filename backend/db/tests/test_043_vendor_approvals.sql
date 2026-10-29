@@ -74,7 +74,7 @@ INSERT INTO supply_scope (scope_name, description, line_types, sort_order) VALUE
 INSERT INTO supplier_risk_class (class_name, requal_months, description, sort_order) VALUES ('Class 0 (critical)', 6, 'Critical single-source vendors', 0);
 SELECT pg_temp.expect_true('Corporate QA adds a supply scope and a shared risk class of its own (6 months)',
   pg_temp.va_sc('Waste disposal') IS NOT NULL AND (SELECT site_id IS NULL AND requal_months = 6 FROM supplier_risk_class WHERE class_name = 'Class 0 (critical)'));
-SELECT pg_temp.expect_error_like('An item type belongs to one scope', $$INSERT INTO supply_scope (scope_name, chemical_types, line_types) VALUES ('Standards again', '{Reference Standard}', '{Inventory item}')$$, 'already fall under');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.supplyScopes): an item type belongs to one scope
 
 -------------------------------------------------------------------------------
 -- 3. LOCAL APPROVALS WITH SCOPES, AND REQUESTS CHECKED AGAINST THEM
@@ -89,8 +89,7 @@ VALUES (pg_temp.va_sup('VA Calibration Svc'), pg_temp.va_site('CFL'), pg_temp.va
 SELECT pg_temp.expect_true('Approved at CFL only (not at TPS); the record keeps its scopes',
   pg_temp.va_st('VA Calibration Svc', 'CFL') = 'Approved' AND pg_temp.va_st('VA Calibration Svc', 'TPS') = 'Not qualified'
   AND scope_names((SELECT scope_ids FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc'))) = 'Calibration services');
-SELECT pg_temp.expect_error_like('An approval names active scopes', $$INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date, scope_ids)
-  VALUES (pg_temp.va_sup('VA Glassware'), pg_temp.va_site('CFL'), pg_temp.va_cls('Class I'), 'Approved', current_date, ARRAY[gen_random_uuid()])$$, 'active supply scopes');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): an approval names active scopes
 
 SELECT pg_temp.as_user('va.ana');
 INSERT INTO purchase_line (site_id, line_type, description, supplier_id, quantity, unit_price, scope_ids)
@@ -117,8 +116,7 @@ VALUES (pg_temp.va_sup('VA Glassware'), NULL, pg_temp.va_cls('Class I'), 'Approv
 SELECT pg_temp.expect_true('Corporate approval: every lab may use the vendor, decided at corporate level',
   pg_temp.va_st('VA Glassware', 'CFL') = 'Approved' AND pg_temp.va_st('VA Glassware', 'TPS') = 'Approved'
   AND (SELECT decided_at FROM vendor_decision(pg_temp.va_sup('VA Glassware'), pg_temp.va_site('TPS'))) = 'Corporate');
-SELECT pg_temp.expect_error_like('A corporate approval uses a shared risk class, not a lab''s', $$INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date)
-  VALUES (pg_temp.va_sup('VA Media Labs'), NULL, (SELECT id FROM supplier_risk_class WHERE site_id IS NOT NULL LIMIT 1), 'Approved', current_date)$$, 'shared class');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): a corporate approval uses a shared risk class, not a lab's
 SELECT pg_temp.as_user('va.tpsqa');
 SELECT set_config('lims.site_id', pg_temp.va_site('TPS')::text, false);
 INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date, justification)
@@ -133,84 +131,40 @@ INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_
 VALUES (pg_temp.va_sup('VA Glassware'), NULL, pg_temp.va_cls('Class I'), 'Suspended', current_date, 'Recall of a glassware lot');
 SELECT pg_temp.expect_true('Corporate suspension blocks every lab (whatever the labs decided)',
   pg_temp.va_st('VA Glassware', 'CFL') = 'Suspended' AND (SELECT decided_at FROM vendor_decision(pg_temp.va_sup('VA Glassware'), pg_temp.va_site('CFL'))) = 'Corporate');
-SELECT pg_temp.expect_true('Every lab gets a notice; CFL''s says its 2 open requests are stopped',
-  (SELECT count(*) FROM vendor_notice WHERE supplier_id = pg_temp.va_sup('VA Glassware') AND acknowledged_at IS NULL) = (SELECT count(*) FROM lab_site)
-  AND (SELECT notice LIKE 'Corporate QA suspended VA Glassware for every lab%2 open requests are stopped%' FROM vendor_notice WHERE supplier_id = pg_temp.va_sup('VA Glassware') AND site_id = pg_temp.va_site('CFL')));
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.noticesAndDocuments): every lab gets a notice; CFL's says its 2 open requests are stopped
 SELECT pg_temp.as_user('va.sup');
 SELECT pg_temp.expect_error_like('A stopped request cannot be approved, and says Corporate QA stopped it',
   $$SELECT approve_purchase_lines(ARRAY[(SELECT id FROM purchase_line WHERE description = 'VA beakers')])$$, 'by Corporate QA for every lab');
 SELECT pg_temp.as_user('va.qa');
 SELECT set_config('lims.site_id', pg_temp.va_site('CFL')::text, false);
-SELECT pg_temp.expect_error_like('Never looser: a lab cannot approve a vendor Corporate QA suspended',
-  $$INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date) VALUES (pg_temp.va_sup('VA Glassware'), pg_temp.va_site('CFL'), pg_temp.va_cls('Class I'), 'Approved', current_date)$$, 'a lab cannot approve it');
-SELECT pg_temp.expect_error_like('Someone else''s lab notice cannot be acknowledged',
-  $$SELECT acknowledge_vendor_notices(ARRAY(SELECT id FROM vendor_notice WHERE site_id = pg_temp.va_site('TPS')))$$, 'permission');
-SELECT acknowledge_vendor_notices(ARRAY(SELECT id FROM vendor_notice WHERE site_id = pg_temp.va_site('CFL')));
-SELECT pg_temp.expect_true('CFL''s QA acknowledges its notice (who and when recorded)',
-  (SELECT acknowledged_by = pg_temp.va_uid('va.qa') AND acknowledged_at IS NOT NULL FROM vendor_notice WHERE site_id = pg_temp.va_site('CFL') AND supplier_id = pg_temp.va_sup('VA Glassware')));
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): never looser, a lab cannot approve a vendor Corporate QA suspended
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.noticesAndDocuments): notices are acknowledged once, by the lab's QA (who and when recorded)
 
 -------------------------------------------------------------------------------
 -- 5. PROPOSING A LOCAL APPROVAL FOR CORPORATE APPROVAL
 -------------------------------------------------------------------------------
-SELECT pg_temp.expect_error_like('A proposal needs a document on the approval first',
-  $$SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), pg_temp.va_cls('Class III'), NULL, NULL)$$, 'Attach at least one document');
 INSERT INTO vendor_document (qualification_id, document_id, doc_kind, title, certificate_expires)
 VALUES ((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), pg_temp.va_doc(), 'Certificate', 'ISO 17034 certificate', current_date + 300);
-SELECT pg_temp.expect_error_like('A corporate approval uses a shared risk class',
-  $$SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), (SELECT id FROM supplier_risk_class WHERE site_id IS NOT NULL LIMIT 1), NULL, NULL)$$, 'shared risk classes');
-SELECT pg_temp.expect_error_like('A proposal asks no more than the lab approved',
-  $$SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), pg_temp.va_cls('Class III'), ARRAY[pg_temp.va_sc('Culture media')], NULL)$$, 'Propose only what this lab approved');
-SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), pg_temp.va_cls('Class III'), ARRAY[pg_temp.va_sc('Reference standards')], 'Used at CFL for 3 years without a complaint');
-SELECT pg_temp.expect_true('The proposal waits for Corporate QA, signed, with its scope and document',
-  (SELECT status = 'Proposed' AND proposal_signature_id IS NOT NULL AND scope_text = 'Reference standards' AND document_count = 1 FROM vendor_promotion_view WHERE supplier_name = 'VA Standards Co'));
-SELECT pg_temp.expect_error_like('One open proposal per vendor',
-  $$SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Standards Co')), pg_temp.va_cls('Class III'), NULL, NULL)$$, 'already waiting');
-SELECT pg_temp.expect_error_like('A lab''s QA cannot decide it', $$SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Approved', NULL)$$, 'Only Corporate QA');
-SELECT pg_temp.expect_error_like('A proposal is changed only through its steps', $$UPDATE vendor_promotion SET status = 'Approved'$$, 'changes only through');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.proposals): a proposal needs a document, a shared risk class, no more than the lab approved, one open per vendor;
+-- it is changed only through its steps; Corporate QA (never the proposer) decides, a rejection says why, an approval covers at most what the lab
+-- approved and carries the documents; withdrawing needs a reason; the lab is told. The corporate approval it makes is recorded directly here.
 SELECT pg_temp.as_user('va.corp1');
-SELECT pg_temp.expect_error_like('Rejecting needs the reason the lab will see', $$SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Rejected', '')$$, 'Say why');
-SELECT pg_temp.expect_error_like('Corporate QA approves at most what the lab approved',
-  $$SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Approved', NULL, NULL, ARRAY[pg_temp.va_sc('Culture media')])$$, 'at most what the lab approved');
-SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Approved', 'Evidence reviewed', NULL, NULL);
-SELECT pg_temp.expect_true('Approved: a corporate approval (Class III, reference standards) promoted from CFL''s, with the document carried',
-  (SELECT q.site_id IS NULL AND q.promoted_from_id IS NOT NULL AND scope_names(q.scope_ids) = 'Reference standards' AND q.signature_id IS NOT NULL
-     AND (SELECT count(*) FROM vendor_document d WHERE d.qualification_id = q.id) = 1
-     FROM vendor_qualification q WHERE q.supplier_id = pg_temp.va_sup('VA Standards Co') AND q.site_id IS NULL)
-  AND (SELECT status = 'Approved' AND corporate_qualification_id IS NOT NULL AND decided_by = pg_temp.va_uid('va.corp1') FROM vendor_promotion WHERE supplier_id = pg_temp.va_sup('VA Standards Co')));
+INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date, scope_ids, justification)
+VALUES (pg_temp.va_sup('VA Standards Co'), NULL, pg_temp.va_cls('Class III'), 'Approved', current_date, ARRAY[pg_temp.va_sc('Reference standards')], 'Corporate approval (rule test)');
 SELECT pg_temp.expect_true('TPS may now order reference standards from it, but not reagents (CFL''s alone)',
   (SELECT status FROM vendor_decision(pg_temp.va_sup('VA Standards Co'), pg_temp.va_site('TPS'), ARRAY[pg_temp.va_sc('Reference standards')])) = 'Approved'
   AND (SELECT status FROM vendor_decision(pg_temp.va_sup('VA Standards Co'), pg_temp.va_site('TPS'), ARRAY[pg_temp.va_sc('Reagents and solvents')])) = 'Not approved for this'
   AND (SELECT status FROM vendor_decision(pg_temp.va_sup('VA Standards Co'), pg_temp.va_site('CFL'), ARRAY[pg_temp.va_sc('Reagents and solvents')])) = 'Approved');
-SELECT pg_temp.expect_true('CFL is told its proposal was approved',
-  (SELECT notice LIKE 'Corporate QA approved VA Standards Co for every lab%' FROM vendor_notice WHERE supplier_id = pg_temp.va_sup('VA Standards Co') AND site_id = pg_temp.va_site('CFL')));
-
--- a second proposal, withdrawn; a third, rejected (the lab's own approval stands)
 SELECT pg_temp.as_user('va.qa');
 SELECT set_config('lims.site_id', pg_temp.va_site('CFL')::text, false);
 INSERT INTO vendor_document (qualification_id, document_id, doc_kind, title)
 VALUES ((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc')), pg_temp.va_doc(), 'Questionnaire', 'Supplier questionnaire 2026');
-SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc')), pg_temp.va_cls('Class II'), NULL, NULL);
-SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('Withdrawing a proposal needs a reason', $$SELECT withdraw_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'))$$, 'reason');
-SELECT set_config('lims.reason', 'Sent too early', false);
-SELECT withdraw_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'));
-SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.as_user('va.corp2');
-SELECT propose_vendor_promotion((SELECT id FROM vendor_qualification WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc')), pg_temp.va_cls('Class II'), NULL, 'Second try');
-SELECT pg_temp.expect_error_like('Whoever proposed it never decides it (va.corp2 proposed as CFL QA)',
-  $$SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Approved', NULL)$$, 'someone else in Corporate QA');
-SELECT pg_temp.as_user('va.corp1');
-SELECT decide_vendor_promotion((SELECT id FROM vendor_promotion WHERE status = 'Proposed'), 'Rejected', 'One lab''s use is not enough evidence yet');
-SELECT pg_temp.expect_true('Withdrawn then rejected; no corporate approval; CFL''s own approval stands and CFL is told why',
-  (SELECT array_agg(status ORDER BY created_at) FROM vendor_promotion WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc')) = ARRAY['Withdrawn','Rejected']
-  AND (vendor_corporate(pg_temp.va_sup('VA Calibration Svc'))).id IS NULL AND pg_temp.va_st('VA Calibration Svc', 'CFL') = 'Approved'
-  AND (SELECT notice LIKE '%did not approve%not enough evidence%stands.' FROM vendor_notice WHERE supplier_id = pg_temp.va_sup('VA Calibration Svc') ORDER BY created_at DESC LIMIT 1));
 
 -------------------------------------------------------------------------------
 -- 6. DOCUMENTS, VIEWS, AUDIT
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('va.qa');
-SELECT pg_temp.expect_error_like('A vendor document is never edited', $$UPDATE vendor_document SET title = 'x' WHERE title = 'Supplier questionnaire 2026'$$, 'never changed');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.noticesAndDocuments): a vendor document is never edited (Java only withdraws it)
 SELECT pg_temp.expect_error_like('A lab''s QA cannot add documents to a corporate approval',
   $$INSERT INTO vendor_document (qualification_id, document_id, doc_kind) VALUES ((vendor_corporate(pg_temp.va_sup('VA Standards Co'))).id, pg_temp.va_doc(), 'Other')$$, 'Corporate QA');
 SELECT pg_temp.expect_true('The vendor approvals page row: CFL decides locally, the corporate record beside it, its next certificate expiry',
@@ -219,9 +173,9 @@ SELECT pg_temp.expect_true('The vendor approvals page row: CFL decides locally, 
      FROM vendor_approval_view WHERE supplier_name = 'VA Standards Co' AND site_id = pg_temp.va_site('CFL')));
 SELECT pg_temp.expect_true('The stopped requests are counted on the page',
   (SELECT stopped_requests = 2 FROM vendor_approval_view WHERE supplier_name = 'VA Glassware' AND site_id = pg_temp.va_site('CFL')));
-SELECT pg_temp.expect_true('Audit entries name the proposal and the documents and link to the vendor',
-  EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'vendor_promotion' AND (audit_record_ref(table_name, record_id, new_row)->>'label') LIKE 'Proposal VP-%')
-  AND EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'vendor_document' AND (audit_record_ref(table_name, record_id, new_row)->>'link') LIKE '#/purchasing/suppliers/%'));
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.proposals): audit entries name the proposal (no proposal is made here any more)
+SELECT pg_temp.expect_true('Audit entries name the documents and link to the vendor',
+  EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'vendor_document' AND (audit_record_ref(table_name, record_id, new_row)->>'link') LIKE '#/purchasing/suppliers/%'));
 SELECT set_config('lims.site_id', '', false);
 SELECT pg_temp.as_user('akiddle');
 

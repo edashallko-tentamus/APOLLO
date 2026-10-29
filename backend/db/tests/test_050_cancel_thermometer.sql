@@ -47,7 +47,9 @@ SELECT pg_temp.expect_true('A test that is not yet in a batch is cancelled (kept
   (SELECT status::text = 'Cancelled' FROM requested_test WHERE id = pg_temp.k_rt('K-ONE', 1)));
 SELECT pg_temp.expect_error_like('A cancelled test is not reinstated',
   $$UPDATE requested_test SET status = 'Ordered' WHERE id = pg_temp.k_rt('K-ONE', 1)$$, 'cannot be reinstated');
+-- since 063 the Java backend cancels a cancelled sample's tests itself (JUnit: OrderRulesTest); here the same writes
 UPDATE sample SET status = 'Cancelled' WHERE id = pg_temp.k_s('K-ONE', 2);
+UPDATE requested_test SET status = 'Cancelled' WHERE sample_id = pg_temp.k_s('K-ONE', 2) AND status <> 'Cancelled';
 SELECT pg_temp.expect_true('Cancelling a sample (not yet received) cancels its tests',
   (SELECT status::text = 'Cancelled' FROM sample WHERE id = pg_temp.k_s('K-ONE', 2))
   AND NOT EXISTS (SELECT 1 FROM requested_test WHERE sample_id = pg_temp.k_s('K-ONE', 2) AND status <> 'Cancelled'));
@@ -55,10 +57,10 @@ SELECT pg_temp.expect_true('Cancelling a sample (not yet received) cancels its t
 CREATE TEMP TABLE k_o2 AS SELECT pg_temp.k_order('K-TWO') AS id;
 UPDATE lab_order SET status = 'Submitted' WHERE id = (SELECT id FROM k_o2);
 SELECT log_samples(ARRAY[pg_temp.k_s('K-TWO', 1), pg_temp.k_s('K-TWO', 2)]);
-SELECT pg_temp.expect_error_like('A logged sample is cancelled only with a reason',
-  $$UPDATE sample SET status = 'Cancelled' WHERE id = pg_temp.k_s('K-TWO', 1)$$, 'Reason for Change');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): A logged sample is cancelled only with a reason
 SELECT pg_temp.k_reason('Client withdrew the sample');
 UPDATE sample SET status = 'Cancelled' WHERE id = pg_temp.k_s('K-TWO', 1);
+UPDATE requested_test SET status = 'Cancelled' WHERE sample_id = pg_temp.k_s('K-TWO', 1) AND status <> 'Cancelled';
 SELECT pg_temp.expect_true('With a reason, a logged sample with no results is cancelled, its test too (audited with the reason)',
   (SELECT status::text = 'Cancelled' FROM sample WHERE id = pg_temp.k_s('K-TWO', 1))
   AND (SELECT status::text = 'Cancelled' FROM requested_test WHERE id = pg_temp.k_rt('K-TWO', 1))
@@ -74,8 +76,7 @@ SELECT pg_temp.expect_error_like('A test in a batch is not cancelled: take it ou
   $$UPDATE requested_test SET status = 'Cancelled' WHERE id = (SELECT rt FROM k_bat)$$, 'take it out of the batch');
 SELECT pg_temp.expect_error_like('A test with results is not cancelled',
   $$UPDATE requested_test SET status = 'Cancelled' WHERE id = (SELECT rt FROM k_res)$$, 'has results');
-SELECT pg_temp.expect_error_like('Nor is a sample holding one, saying which test',
-  $$UPDATE sample SET status = 'Cancelled' WHERE id = (SELECT s FROM k_res)$$, 'cannot be cancelled: ');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Nor is a sample holding one, saying which test
 SELECT pg_temp.expect_true('requested_test_cancel_problem says why, or nothing',
   requested_test_cancel_problem((SELECT rt FROM k_bat)) LIKE '%is in batch ' || (SELECT batch_code FROM k_bat) || '%'
   AND requested_test_cancel_problem(pg_temp.k_rt('K-TWO', 2)) IS NULL);

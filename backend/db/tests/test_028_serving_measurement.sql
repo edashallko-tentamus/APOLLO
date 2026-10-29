@@ -85,12 +85,15 @@ SELECT pg_temp.expect_error_like('A test''s serving role is Serving weight or De
 -------------------------------------------------------------------------------
 -- 2. RESULTS PER SERVING ORDER THE SERVING TEST (SOLID)
 -------------------------------------------------------------------------------
-SELECT pg_temp.expect_error_like('The measured unit weight is never typed', $$UPDATE sample SET unit_weight = 0.6 WHERE id = pg_temp.sv_s(1)$$, 'approved test results');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): The measured unit weight is never typed
+-- since 063 the Java backend orders the serving test when "Results per serving" is ticked (JUnit: OrderRulesTest); here the same order is placed
 UPDATE sample SET serving_count = 2, serving_count_unit = 'sccapsule', serving_size = 1.2, serving_unit = 'g', report_per_serving = true WHERE id = pg_temp.sv_s(1);
+SELECT order_serving_test(pg_temp.sv_s(1), 'Serving weight');
 SELECT pg_temp.expect_true('"Results per serving" on a sample served by weight orders the Serving weight test, at its catalogue price ($40, not on the quote)',
   (SELECT r.serving_order AND r.price = 40 AND r.list_price = 40 AND r.status <> 'Cancelled' FROM requested_test r WHERE r.sample_id = pg_temp.sv_s(1) AND r.test_id = pg_temp.sv_t('SV Serving weight')));
 UPDATE sample SET report_per_serving = false WHERE id = pg_temp.sv_s(1);
 UPDATE sample SET report_per_serving = true WHERE id = pg_temp.sv_s(1);
+SELECT order_serving_test(pg_temp.sv_s(1), 'Serving weight');
 SELECT pg_temp.expect_true('Ticked again: the serving test is ordered once', (SELECT count(*) FROM requested_test r WHERE r.sample_id = pg_temp.sv_s(1) AND r.test_id = pg_temp.sv_t('SV Serving weight')) = 1);
 SELECT pg_temp.expect_true('Until it is approved, the per-serving results are held: "waiting for SV Serving weight"',
   serving_problem(pg_temp.sv_rt(1)) LIKE 'waiting for SV Serving weight%');
@@ -129,6 +132,7 @@ SELECT pg_temp.expect_true('The label''s count changed to 3: the serving weight 
 -- 3. A LIQUID: THE DENSITY
 -------------------------------------------------------------------------------
 UPDATE sample SET serving_size = 15, serving_unit = 'mL', report_per_serving = true WHERE id = pg_temp.sv_s(2);
+SELECT order_serving_test(pg_temp.sv_s(2), 'Density');
 SELECT pg_temp.expect_true('A serving by volume orders the Density test ($55)',
   (SELECT r.serving_order AND r.price = 55 FROM requested_test r WHERE r.sample_id = pg_temp.sv_s(2) AND r.test_id = pg_temp.sv_t('SV Density')));
 SELECT pg_temp.sv_as('wd.ana');

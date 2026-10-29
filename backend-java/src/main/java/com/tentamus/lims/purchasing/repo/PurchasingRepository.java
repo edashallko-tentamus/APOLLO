@@ -15,7 +15,7 @@ public class PurchasingRepository {
         "justification", "item_url", "scope_ids");
     public static final RecordWriter NEW_LINE = new RecordWriter("purchase_line", concat(List.of("line_type"), LINE_FIELDS));
     public static final RecordWriter LINE = new RecordWriter("purchase_line", concat(LINE_FIELDS, List.of("status")));
-    public static final RecordWriter ORDER = new RecordWriter("purchase_order", List.of("external_po_number", "confirmation_number", "notes"));
+    public static final RecordWriter ORDER = new RecordWriter("purchase_order", com.tentamus.lims.purchasing.domain.PurchaseOrder.EDITABLE);
     public static final RecordWriter SCOPES = new RecordWriter("supply_scope", List.of("scope_name", "description", "chemical_types", "line_types", "default_for",
         "sort_order", "status"));
     public static final RecordWriter RISK_CLASSES = new RecordWriter("supplier_risk_class", List.of("class_name", "requal_months", "description", "sort_order", "status"));

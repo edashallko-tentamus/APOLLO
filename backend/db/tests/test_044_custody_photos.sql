@@ -158,8 +158,7 @@ SELECT pg_temp.as_user('akiddle');
 SELECT set_config('lims.reason', 'Rule test', false);
 UPDATE lab_site SET custody_signature_required = true WHERE site_code = 'CFL';
 SELECT pg_temp.as_user('cu.in');
-SELECT pg_temp.expect_error_like('Where the lab requires it, samples are logged only by receiving them (signed)',
-  $$SELECT log_samples(pg_temp.cu_samples((SELECT id FROM cu_o2)))$$, 'only when they are received');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Where the lab requires it, samples are logged only by receiving them (signed)
 SELECT receive_samples((SELECT id FROM cu_o2), pg_temp.cu_samples((SELECT id FROM cu_o2)), now(), NULL, NULL, NULL, NULL, NULL, NULL);
 SELECT pg_temp.expect_true('Receiving a Draft order''s samples submits it and makes its chain of custody',
   EXISTS (SELECT 1 FROM custody_document WHERE lab_order_id = (SELECT id FROM cu_o2))
@@ -173,21 +172,15 @@ SELECT pg_temp.as_user('cu.in');
 -- 4. RECEIPT PHOTOS (4:3) AND THE PHOTO REPORT LAYOUTS
 -------------------------------------------------------------------------------
 CREATE TEMP TABLE cu_s AS SELECT (pg_temp.cu_samples((SELECT id FROM cu_o)))[1] AS id;
-SELECT pg_temp.expect_error_like('A photo is 4:3', $$INSERT INTO sample_photo (sample_id, document_id, width_px, height_px) VALUES ((SELECT id FROM cu_s), pg_temp.cu_img(1000, 400), 1000, 400)$$, 'sample_photo_4_3');
-SELECT pg_temp.expect_error_like('and at least 400 x 300', $$INSERT INTO sample_photo (sample_id, document_id, width_px, height_px) VALUES ((SELECT id FROM cu_s), pg_temp.cu_img(200, 150), 200, 150)$$, 'px_check');
-SELECT pg_temp.expect_error_like('A photo is a JPEG or PNG image', $$INSERT INTO sample_photo (sample_id, document_id, width_px, height_px)
-  VALUES ((SELECT id FROM cu_s), (SELECT document_id FROM custody_event WHERE id = (SELECT id FROM cu_ev)), 1200, 900)$$, 'JPEG or PNG');
+-- Moved to the Java backend in migration 063 (JUnit: SamplePhotoRulesTest): A photo is 4:3, at least 400 x 300, a JPEG or PNG image
 INSERT INTO sample_photo (sample_id, document_id, width_px, height_px, caption, report_slot) VALUES ((SELECT id FROM cu_s), pg_temp.cu_img(1200, 900), 1200, 900, 'Tub', 1);
 INSERT INTO sample_photo (sample_id, document_id, width_px, height_px, caption) VALUES ((SELECT id FROM cu_s), pg_temp.cu_img(1600, 1200), 1600, 1200, 'Label');
 SELECT pg_temp.expect_true('Photos 1200 x 900 and 1600 x 1200 are 4:3', (SELECT count(*) = 2 FROM sample_photo WHERE sample_id = (SELECT id FROM cu_s)));
 SELECT pg_temp.expect_error('Only one photo is Report photo 1',
   $$UPDATE sample_photo SET report_slot = 1 WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label'$$);
 UPDATE sample_photo SET report_slot = 2 WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label';
-SELECT pg_temp.expect_error_like('A photo itself is never changed', $$UPDATE sample_photo SET width_px = 800, height_px = 600 WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label'$$, 'never changed');
-UPDATE sample_photo SET status = 'Inactive' WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label';
-SELECT pg_temp.expect_true('A retired photo leaves the report',
-  (SELECT report_slot IS NULL FROM sample_photo WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label'));
-SELECT pg_temp.expect_error_like('and stays retired', $$UPDATE sample_photo SET status = 'Active' WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label'$$, 'stays retired');
+-- Moved to the Java backend in migration 063 (JUnit: SamplePhotoRulesTest): A photo itself is never changed (the Java backend writes only its caption, place and status); a retired photo leaves the report and stays retired
+UPDATE sample_photo SET status = 'Inactive', report_slot = NULL WHERE sample_id = (SELECT id FROM cu_s) AND caption = 'Label';
 SELECT pg_temp.as_user('cu.exec');
 SELECT pg_temp.expect_error('The Executive (view only) cannot add photos',
   $$INSERT INTO sample_photo (sample_id, document_id, width_px, height_px) VALUES ((SELECT id FROM cu_s), pg_temp.cu_img(1200, 900), 1200, 900)$$);

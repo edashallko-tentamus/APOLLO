@@ -58,14 +58,11 @@ SELECT pg_temp.as_user('akiddle');
 -- Controlled Matrix list
 INSERT INTO matrix (matrix_name) VALUES ('Capsule');
 SELECT pg_temp.expect_error('Duplicate matrix name (any capitals) rejected', $$INSERT INTO matrix (matrix_name) VALUES ('capsule')$$);
-SELECT pg_temp.expect_error('Sample matrix must be on the Matrix list',
-  $$INSERT INTO sample (lab_order_id, client_sample_id, matrix) SELECT id, 'LOT-M1', 'Moon dust' FROM lab_order WHERE po_number = 'PO-7781'$$);
-INSERT INTO sample (lab_order_id, client_sample_id, matrix) SELECT id, 'LOT-M2', 'capsule' FROM lab_order WHERE po_number = 'PO-7781';
-SELECT pg_temp.expect_true('Matrix is stored with the list''s spelling', (SELECT matrix = 'Capsule' FROM sample WHERE client_sample_id = 'LOT-M2'));
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Sample matrix must be on the Matrix list, stored with the list's spelling
+INSERT INTO sample (lab_order_id, client_sample_id, matrix) SELECT id, 'LOT-M2', 'Capsule' FROM lab_order WHERE po_number = 'PO-7781';
 SELECT set_config('lims.reason', 'No longer tested at CFL', false);
 UPDATE matrix SET status = 'Inactive' WHERE matrix_name = 'Capsule';
-SELECT pg_temp.expect_error('Inactive matrix cannot be used on a new sample',
-  $$INSERT INTO sample (lab_order_id, client_sample_id, matrix) SELECT id, 'LOT-M3', 'Capsule' FROM lab_order WHERE po_number = 'PO-7781'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Inactive matrix cannot be used on a new sample
 UPDATE sample SET description = 'Fish oil capsules' WHERE client_sample_id = 'LOT-M2';
 SELECT pg_temp.expect_true('Existing sample keeps an Inactive matrix and can still be edited',
   (SELECT matrix = 'Capsule' AND description = 'Fish oil capsules' FROM sample WHERE client_sample_id = 'LOT-M2'));
@@ -82,7 +79,7 @@ SELECT pg_temp.expect_true('Override replaces the TAT and moves the due date; pr
           AND r.due_date > b.due_date AND r.price = b.price AND r.rush_fee = b.rush_fee FROM requested_test_view r, t_before b WHERE r.id = b.id));
 SELECT pg_temp.expect_true('Override is in the audit trail with its reason',
   EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'requested_test' AND changed_fields ? 'tat_override' AND reason = 'Client agreed to a longer turnaround'));
-SELECT pg_temp.expect_error('Negative TAT override rejected', $$UPDATE requested_test SET tat_override = -1 WHERE id = (SELECT id FROM t_before)$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Negative TAT override rejected
 UPDATE requested_test SET tat_override = NULL WHERE id = (SELECT id FROM t_before);
 SELECT pg_temp.expect_true('Clearing the override restores the calculated TAT and due date',
   (SELECT r.tat_days = b.tat_days AND r.due_date = b.due_date FROM requested_test_view r, t_before b WHERE r.id = b.id));

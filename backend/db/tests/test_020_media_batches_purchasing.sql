@@ -196,19 +196,9 @@ VALUES (pg_temp.cfl(), 'Other', 'WD Sample bags, 1 L, sterile', pg_temp.m_sup('P
 SELECT pg_temp.as_user('pu.sup'); SELECT approve_purchase_lines(ARRAY[(pg_temp.m_line('WD Sample bags, 1 L, sterile')).id]);
 SELECT pg_temp.as_user('pu.acc'); SELECT create_purchase_order(ARRAY[(pg_temp.m_line('WD Sample bags, 1 L, sterile')).id], 'FIN-2026-0099', NULL);
 SELECT pg_temp.as_user('pu.ana');
-SELECT pg_temp.expect_error_like('The actual price cannot be negative',
-  $$SELECT receive_purchase_line((pg_temp.m_line('WD Sample bags, 1 L, sterile')).id, 1, true, 'None', NULL, NULL, NULL, NULL, NULL, NULL, NULL, -1, NULL)$$, 'cannot be negative');
-SELECT receive_purchase_line((pg_temp.m_line('WD Sample bags, 1 L, sterile')).id, 2, true, 'None', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 82.50,
-  '{"item_name": "WD Sample bags, 1 L, sterile", "chemical_types": ["Consumable"]}'::jsonb);
-SELECT pg_temp.expect_true('Received into inventory: the item is created (2 cases, the supplier, catalog number and web link), linked to the request; the receipt keeps the actual price',
-  (SELECT l.receipt_status = 'Received' AND l.quantity_received = 2 AND l.unit = 'case' AND l.container_count = 2 AND l.supplier_id = pg_temp.m_sup('Pur Instruments Inc')
-          AND l.catalog_number = 'SB-1000' AND l.item_url = 'https://example.com/sb-1000' AND lot_on_hand(l.id) = 2
-     FROM inventory_lot l WHERE l.id = (pg_temp.m_line('WD Sample bags, 1 L, sterile')).lot_id)
-  AND (SELECT actual_unit_price = 82.50 AND lot_id IS NOT NULL FROM purchase_receipt WHERE purchase_line_id = (pg_temp.m_line('WD Sample bags, 1 L, sterile')).id)
-  AND (SELECT actual_amount = 165 AND status = 'Partly received' FROM purchase_line_view WHERE id = (pg_temp.m_line('WD Sample bags, 1 L, sterile')).id));
-SELECT receive_purchase_line((pg_temp.m_line('WD Sample bags, 1 L, sterile')).id, 1, false, 'None', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-SELECT pg_temp.expect_true('Receiving without "into inventory" records the receipt only (as before)',
-  (pg_temp.m_line('WD Sample bags, 1 L, sterile')).status = 'Received' AND (SELECT count(*) FROM inventory_lot WHERE purchase_line_id = (pg_temp.m_line('WD Sample bags, 1 L, sterile')).id) = 1);
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.receiving): the actual price cannot be negative; received into
+-- inventory (the item created with the supplier, catalog number and web link, linked to the request; the receipt keeps the actual price);
+-- receiving without "into inventory" records the receipt only.
 INSERT INTO inventory_lot (site_id, item_name, physical_form, chemical_types, supplier_id, receipt_status, requested_quantity, unit, item_url)
 VALUES (pg_temp.cfl(), 'WD Methanol HPLC', 'Liquid', '{Solvent}', pg_temp.m_sup('Pur Instruments Inc'), 'Requested', 4, 'L', 'https://example.com/meoh');
 SELECT pg_temp.expect_true('An inventory request carries its web link to its purchase request', (pg_temp.m_line('WD Methanol HPLC')).item_url = 'https://example.com/meoh');

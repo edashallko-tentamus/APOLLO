@@ -44,8 +44,10 @@ INSERT INTO supplier (supplier_name, supplier_type, website, email, phone) VALUE
  ('Culture Bank Biologicals', 'Supplier and Manufacturer', 'culturebank.example.com', 'service@culturebank.example.com', '800-555-0188')
 ON CONFLICT DO NOTHING;
 -- (since migration 011 purchases need an approved supplier: the demo suppliers are approved for all labs)
-INSERT INTO vendor_qualification (supplier_id, risk_class_id, approval_status, approval_date, accreditations, justification)
-SELECT s.id, (SELECT id FROM supplier_risk_class WHERE site_id IS NULL AND class_name = 'Class II'), 'Approved', current_date - 200, 'ISO 9001 (demo)', 'Sandbox demo supplier'
+-- (since migration 065 the expiry from the risk class is worked out by Java, so a data load gives it: Class II, 24 months)
+INSERT INTO vendor_qualification (supplier_id, risk_class_id, approval_status, approval_date, expiration_date, accreditations, justification)
+SELECT s.id, (SELECT id FROM supplier_risk_class WHERE site_id IS NULL AND class_name = 'Class II'), 'Approved', current_date - 200,
+       (current_date - 200 + interval '24 months')::date, 'ISO 9001 (demo)', 'Sandbox demo supplier'
   FROM supplier s WHERE NOT EXISTS (SELECT 1 FROM vendor_qualification q WHERE q.supplier_id = s.id);
 
 -- Storage locations (each lab)

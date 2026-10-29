@@ -44,12 +44,9 @@ INSERT INTO test_version (test_id, version_no, status, effective_from) SELECT id
 SELECT set_config('lims.methods_internal', '', true);
 
 -- Lab orders: who may order
-SELECT pg_temp.expect_error('Inactive client cannot order',
-  $$INSERT INTO lab_order (client_id, site_id, ordering_contact_id) SELECT c.id, s.id, ct.id FROM client c, lab_site s, contact ct
-    WHERE c.legal_name = 'Acme Holdings Inc' AND s.site_code = 'CFL' AND ct.email = 'kim@acme.com'$$);
-SELECT pg_temp.expect_error('Contact without the Ordering role cannot place the order',
-  $$INSERT INTO lab_order (client_id, site_id, ordering_contact_id) SELECT c.id, s.id, ct.id FROM client c, lab_site s, contact ct
-    WHERE c.legal_name = 'Acme Irvine Site' AND s.site_code = 'CFL' AND ct.email = 'sam@acme.com'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Inactive client cannot order
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Contact without the Ordering role cannot place the order
+SELECT nextval('lab_order_seq'), nextval('lab_order_seq');   -- the two refused orders used order codes; later tests expect LO-000003 to be the first
 INSERT INTO lab_order (client_id, site_id, ordering_contact_id, submission_channel, po_number)
   SELECT c.id, s.id, ct.id, 'Online', 'PO-7781' FROM client c, lab_site s, contact ct
    WHERE c.legal_name = 'Acme Irvine Site' AND s.site_code = 'CFL' AND ct.email = 'maria@consult.com';
@@ -73,10 +70,11 @@ SELECT pg_temp.expect_true('Price comes from the accepted quote (124 for 4 analy
 UPDATE requested_analyte SET included = false
  WHERE analyte_id = (SELECT id FROM analyte WHERE analyte_name = 'Lead')
    AND requested_test_id = (SELECT id FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)');
+-- since 063 the Java backend asks for the reprice after trimming (JUnit: OrderRulesTest); the database still works the price out
+UPDATE requested_test SET recalc_at = clock_timestamp() WHERE id = (SELECT id FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)');
 SELECT pg_temp.expect_true('Removing Lead: list 135, price 108 (20% kept)',
   (SELECT list_price = 135 AND price = 108 FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)'));
-SELECT pg_temp.expect_error('Unquoted analyte cannot be added on the order (Chromium was removed on the quote)',
-  $$INSERT INTO requested_analyte (requested_test_id, analyte_id, analyte_price) SELECT id, (SELECT id FROM analyte WHERE analyte_name = 'Chromium'), 20 FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Unquoted analyte cannot be added on the order
 
 -- Rush
 SELECT pg_temp.expect_error('Rush not available for a test without a rush schedule (Moisture)',
@@ -105,29 +103,27 @@ SELECT pg_temp.expect_true('Due date follows the agreed TAT rule',
 SELECT log_samples(ARRAY(SELECT id FROM sample WHERE client_sample_id = 'LOT-A2'));
 SELECT pg_temp.expect_true('Second sample the same day is 002; order now Received',
   (SELECT sample_code ~ '^CFL[0-9]{6}002$' FROM sample WHERE client_sample_id = 'LOT-A2') AND (SELECT status = 'Received' FROM lab_order WHERE po_number = 'PO-7781'));
-SELECT pg_temp.expect_error('Logged sample cannot be edited without a reason', $$UPDATE sample SET description = 'Chocolate' WHERE client_sample_id = 'LOT-A1'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Logged sample cannot be edited without a reason
 SELECT set_config('lims.reason', 'Client corrected the description', false);
 UPDATE sample SET description = 'Chocolate protein powder' WHERE client_sample_id = 'LOT-A1';
 SELECT pg_temp.expect_true('Logged sample edited with a reason', (SELECT description = 'Chocolate protein powder' FROM sample WHERE client_sample_id = 'LOT-A1'));
 
 -- Intake decisions
-SELECT pg_temp.expect_error('Declining a rush requires a reason',
-  $$INSERT INTO rush_decision (requested_test_id, decision, requested_tier_id) SELECT id, 'Not Accepted', rush_tier_id FROM requested_test_view WHERE client_sample_id = 'LOT-A2' AND test_name = 'Heavy Metals (ICP-MS)'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Declining a rush requires a reason; the decision's checks and effect
+-- (here the same writes the Java backend makes, so the database's fee and due date are still checked)
 SELECT set_config('lims.reason', 'Rush approved by intake', false);
-INSERT INTO rush_decision (requested_test_id, decision, requested_tier_id)
-  SELECT id, 'Approved', rush_tier_id FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)';
+UPDATE requested_test SET rush_status = 'Approved' WHERE id = (SELECT id FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)');
 SELECT pg_temp.expect_true('Approved Same Day: fee 150% of 108 = 162, due on Day 0',
   (SELECT rush_status = 'Approved' AND rush_fee = 162 AND due_date = day0 FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)'));
 SELECT set_config('lims.reason', 'ICP-MS down for maintenance today', false);
-INSERT INTO rush_decision (requested_test_id, decision, requested_tier_id, replacement_tier_id, reason)
-  SELECT id, 'Not Accepted', rush_tier_id, (SELECT id FROM rush_fee_tier WHERE tier_name = '5 Day'), 'ICP-MS down for maintenance today'
-    FROM requested_test_view WHERE client_sample_id = 'LOT-A2' AND test_name = 'Heavy Metals (ICP-MS)';
+SELECT set_config('lims.rush_explicit', '1', false);
+UPDATE requested_test SET rush_tier_id = (SELECT id FROM rush_fee_tier WHERE tier_name = '5 Day'), rush_status = 'Approved'
+ WHERE id = (SELECT id FROM requested_test_view WHERE client_sample_id = 'LOT-A2' AND test_name = 'Heavy Metals (ICP-MS)');
+SELECT set_config('lims.rush_explicit', '', false);
 SELECT pg_temp.expect_true('Declined 48 Hour replaced by 5 Day (free on this quote)',
   (SELECT rush_tier_name = '5 Day' AND rush_status = 'Approved' AND rush_fee = 0 AND tat_days = 5 FROM requested_test_view WHERE client_sample_id = 'LOT-A2' AND test_name = 'Heavy Metals (ICP-MS)'));
-SELECT pg_temp.expect_true('Automatic email to the ordering contact names the staff member and reason',
-  (SELECT to_address = 'maria@consult.com' AND body LIKE '%Processed by Alex Kiddle%' AND body LIKE '%ICP-MS down%' AND body LIKE '%5 Day rush%' FROM email_outbox WHERE template = 'Rush Not Accepted'));
-SELECT pg_temp.expect_error('Replacement must be slower than the requested tier',
-  $$INSERT INTO rush_decision (requested_test_id, decision, requested_tier_id, replacement_tier_id, reason) SELECT id, 'Not Accepted', rush_tier_id, (SELECT id FROM rush_fee_tier WHERE tier_name = 'Same Day'), 'x' FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Heavy Metals (ICP-MS)'$$);
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Automatic email to the ordering contact names the staff member and reason
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Replacement must be slower than the requested tier
 SELECT set_config('lims.reason', '', false);
 SELECT pg_temp.expect_error('Changing a logged test needs a reason',
   $$UPDATE requested_test SET status = 'Cancelled' WHERE id = (SELECT id FROM requested_test_view WHERE client_sample_id = 'LOT-A1' AND test_name = 'Moisture')$$);

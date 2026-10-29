@@ -109,10 +109,9 @@ SELECT pg_temp.expect_true('Per serving: 10 mg/kg in a 2.5 g serving = 0.025 mg;
 SELECT pg_temp.expect_true('Units that do not combine give no per-serving amount (a mass result and a serving counted in pieces)',
   (SELECT value IS NULL FROM per_serving(10, 'mg/kg', 2, 'each')) AND (SELECT value IS NULL FROM per_serving(10, 'CFU', 2, 'g')));
 SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('Changing a logged sample''s serving size needs a reason', $$UPDATE sample SET serving_size = 2.5, serving_unit = 'g' WHERE id = pg_temp.rf_smp('WD-STAB-1')$$, 'Reason for Change');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Changing a logged sample's serving size needs a reason
 SELECT set_config('lims.reason', 'Rule test', false);
-SELECT pg_temp.expect_error_like('A serving size has a unit', $$UPDATE sample SET serving_size = 2.5 WHERE id = pg_temp.rf_smp('WD-STAB-1')$$, 'unit');
-SELECT pg_temp.expect_error_like('The serving unit is from the Units list', $$UPDATE sample SET serving_size = 2.5, serving_unit = 'scoops of joy' WHERE id = pg_temp.rf_smp('WD-STAB-1')$$, 'Serving weight or volume unit');   -- (wording since 031)
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): A serving size has a unit; the serving unit is from the Units list
 
 -------------------------------------------------------------------------------
 -- 4. MEASUREMENT UNCERTAINTY (on a draft version)

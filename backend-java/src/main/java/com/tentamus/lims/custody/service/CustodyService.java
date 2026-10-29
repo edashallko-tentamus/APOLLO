@@ -9,6 +9,8 @@ import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.files.DocumentStore;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.custody.domain.SamplePhoto;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -17,7 +19,7 @@ import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 /**
- * The chain of custody (its receipts and paper copies) and sample photos (4:3). The chain of custody PDF and Receive
+ * The chain of custody (its receipts and paper copies) and sample photos (4:3; their rules: {@link SamplePhoto}). The chain of custody PDF and Receive
  * and sign (which keeps the signed PDF) make PDFs and stay in the Node backend for now.
  */
 @Service
@@ -142,6 +144,13 @@ public class CustodyService {
             "problem", need == null ? null : need.get("problem"), "can_edit", access.has(ctx, "orders.edit"));
     }
 
+    /** A time sent by the screen (ISO text). */
+    private static Instant instant(Object v) {
+        try { return java.time.OffsetDateTime.parse(v.toString()).toInstant(); } catch (RuntimeException e) {
+            try { return Instant.parse(v.toString()); } catch (RuntimeException e2) { return null; }
+        }
+    }
+
     private static Integer slot(Object v) {
         double n = Js.toNumber(v);
         return v != null && (n == 1 || n == 2) ? (int) n : null;
@@ -163,7 +172,9 @@ public class CustodyService {
             if (buf.length > 6 * 1024 * 1024) throw new RuleException("Photo " + (i + 1) + " is larger than 6 MB");
             if (Math.abs((long) size.w() * 3 - (long) size.h() * 4) > Math.max(size.w(), size.h()) * 0.03)
                 throw new RuleException("Photo " + (i + 1) + " is " + size.w() + " x " + size.h() + ": crop it to 4:3 (the photo dialog does this)");
-            prepared.add(new Photo(buf, size, Js.orNull(p.get("caption")), slot(p.get("report_slot")), Js.orNull(p.get("taken_at")),
+            Object takenAt = Js.orNull(p.get("taken_at"));
+            SamplePhoto.taken(size.w(), size.h(), size.type(), slot(p.get("report_slot")), takenAt == null ? null : instant(takenAt), Instant.now());
+            prepared.add(new Photo(buf, size, Js.orNull(p.get("caption")), slot(p.get("report_slot")), takenAt,
                 Js.truthy(p.get("file_name")) ? p.get("file_name") : "photo-" + (i + 1)));
         }
         return uow.run(ctx.orReason("Sample photos at receipt"), d -> {
@@ -191,13 +202,16 @@ public class CustodyService {
         Object current = p.get("report_slot");
         Integer slot = body.containsKey("report_slot") ? slot(body.get("report_slot")) : current == null ? null : ((Number) current).intValue();
         boolean retire = Js.truthy(body.get("retire"));
-        Object status = retire ? "Inactive" : p.get("status");
         if (retire && !Js.truthy(body.get("reason"))) throw new RuleException("Give the reason for retiring the photo");
+        SamplePhoto now = new SamplePhoto(((Number) p.get("width_px")).intValue(), ((Number) p.get("height_px")).intValue(), null,
+            current == null ? null : ((Number) current).intValue(), (String) p.get("status")).changed(slot, retire ? "Inactive" : (String) p.get("status"));
+        Object status = now.status();
+        Integer newSlot = now.slot();
         Object caption = body.containsKey("caption") ? Js.orNull(body.get("caption")) : p.get("caption");
         return uow.run(ctx.orReason("Photo details"), d -> {
-            if (slot != null && !Objects.equals(slot, current == null ? null : ((Number) current).intValue()))
-                d.update("UPDATE sample_photo SET report_slot = NULL WHERE sample_id = ?::uuid AND report_slot = ? AND status = ? AND id <> ?::uuid", p.get("sample_id"), slot, "Active", p.get("id"));
-            d.update("UPDATE sample_photo SET caption = ?, report_slot = ?::int, status = ? WHERE id = ?::uuid", caption, slot, status, p.get("id"));
+            if (newSlot != null && !Objects.equals(newSlot, current == null ? null : ((Number) current).intValue()))
+                d.update("UPDATE sample_photo SET report_slot = NULL WHERE sample_id = ?::uuid AND report_slot = ? AND status = ? AND id <> ?::uuid", p.get("sample_id"), newSlot, "Active", p.get("id"));
+            d.update("UPDATE sample_photo SET caption = ?, report_slot = ?::int, status = ? WHERE id = ?::uuid", caption, newSlot, status, p.get("id"));
             return ok();
         });
     }

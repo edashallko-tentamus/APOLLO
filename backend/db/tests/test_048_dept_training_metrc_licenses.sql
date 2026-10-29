@@ -50,17 +50,9 @@ INSERT INTO lab_order (client_id, site_id, ordering_contact_id)
 
 -- 2. the METRC ID
 INSERT INTO sample (lab_order_id, client_sample_id, matrix, metrc_id)
-  SELECT o.id, 'MET-1', (SELECT matrix_name FROM matrix WHERE status = 'Active' ORDER BY matrix_name LIMIT 1), '1a40 6030 0001 2340 0001 2345'
+  SELECT o.id, 'MET-1', (SELECT matrix_name FROM matrix WHERE status = 'Active' ORDER BY matrix_name LIMIT 1), '1A4060300001234000012345'
     FROM lab_order o JOIN client c ON c.id = o.client_id WHERE c.display_name = 'LicTest';
-SELECT pg_temp.expect_true('A METRC ID is stored in capitals without spaces',
-  (SELECT metrc_id = '1A4060300001234000012345' FROM sample WHERE client_sample_id = 'MET-1'));
-SELECT pg_temp.expect_error_like('A METRC ID that is not a METRC tag is refused',
-  $$UPDATE sample SET metrc_id = '1A40603000012' WHERE client_sample_id = 'MET-1'$$, 'not a METRC tag');
-SELECT pg_temp.expect_error_like('A tag not starting 1A is refused',
-  $$UPDATE sample SET metrc_id = '2B4060300001234000012340' WHERE client_sample_id = 'MET-1'$$, 'not a METRC tag');
-UPDATE sample SET metrc_id = '  ' WHERE client_sample_id = 'MET-1';
-SELECT pg_temp.expect_true('The METRC ID is optional: blank is stored as empty',
-  (SELECT metrc_id IS NULL FROM sample WHERE client_sample_id = 'MET-1'));
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): the METRC ID in capitals without spaces, a tag of 24 starting 1A, blank is none
 
 -- 3. client licenses
 INSERT INTO app_user (username, full_name) VALUES ('lc.ana', 'LC Analyst');
@@ -102,10 +94,7 @@ SELECT pg_temp.expect_true('A retired license is kept, shown as Retired',
 UPDATE lab_order SET client_license_id = pg_temp.lic('C11-0000001') WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest');
 SELECT pg_temp.expect_true('An order names one of its client''s licenses',
   (SELECT client_license_id = pg_temp.lic('C11-0000001') FROM lab_order WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest')));
-SELECT pg_temp.expect_error_like('Another client''s license is refused',
-  $$UPDATE lab_order SET client_license_id = pg_temp.lic('OTH-1') WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest')$$, 'another client');
-SELECT pg_temp.expect_error_like('A retired license cannot be chosen',
-  $$UPDATE lab_order SET client_license_id = pg_temp.lic('C12-0000003') WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest')$$, 'retired');
+-- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): Another client's license is refused; a retired license cannot be chosen
 UPDATE lab_order SET client_license_id = pg_temp.lic('CDPH-10002') WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest');
 SELECT pg_temp.expect_true('A license expiring soon (or expired) can be chosen: it is flagged, not refused',
   (SELECT client_license_id = pg_temp.lic('CDPH-10002') FROM lab_order WHERE client_id = (SELECT id FROM client WHERE display_name = 'LicTest')));

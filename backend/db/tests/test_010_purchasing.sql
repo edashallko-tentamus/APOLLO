@@ -78,15 +78,10 @@ SELECT set_config('lims.site_id', pg_temp.site('CFL')::text, false);
 INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date, accreditations)
 VALUES (pg_temp.sup('Pur Chem Supply'), NULL, pg_temp.cls('Class II'), 'Approved', current_date - 10, 'ISO 9001'),
        (pg_temp.sup('Pur Instruments Inc'), NULL, pg_temp.cls('Class I'), 'Approved', current_date - 10, 'ISO 17025');
-SELECT pg_temp.expect_true('Expiry comes from the risk class (Class II: 24 months); approved for every lab',
-  (SELECT expiration_date = (current_date - 10 + interval '24 months')::date FROM vendor_qualification WHERE supplier_id = pg_temp.sup('Pur Chem Supply'))
-  AND supplier_status_at(pg_temp.sup('Pur Chem Supply'), pg_temp.site('TPS')) = 'Approved');
-SELECT pg_temp.expect_error('A shared qualification cannot use one lab''s own class',
-  $$INSERT INTO vendor_qualification (supplier_id, site_id, risk_class_id, approval_status, approval_date) VALUES (pg_temp.sup('Pur Unvetted LLC'), NULL, pg_temp.cls('Class IV'), 'Approved', current_date)$$);
-SELECT set_config('lims.reason', 'Typo', false);
-SELECT pg_temp.expect_error('A qualification cannot be edited (record a new one)',
-  $$UPDATE vendor_qualification SET accreditations = 'ISO 17025' WHERE supplier_id = pg_temp.sup('Pur Chem Supply')$$);
-SELECT set_config('lims.reason', '', false);
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): the expiry comes from the risk class (Class II: 24 months)
+SELECT pg_temp.expect_true('Approved for every lab', supplier_status_at(pg_temp.sup('Pur Chem Supply'), pg_temp.site('TPS')) = 'Approved');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): a shared qualification cannot use one lab's own class
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.vendorApprovals): a qualification cannot be edited (record a new one)
 SELECT pg_temp.as_user('pu.qa');
 SELECT pg_temp.expect_true('Never qualified: Not qualified', supplier_status_at(pg_temp.sup('Pur Unvetted LLC'), pg_temp.site('CFL')) = 'Not qualified');
 SELECT pg_temp.as_user('pu.tpsqa');
@@ -145,10 +140,7 @@ SELECT pg_temp.as_user('pu.gm1');
 SELECT approve_purchase_lines(ARRAY[(pg_temp.line('Second ICP-MS')).id]);
 SELECT pg_temp.expect_error('The first approver cannot also give the second approval',
   $$SELECT approve_purchase_lines(ARRAY[(pg_temp.line('Second ICP-MS')).id])$$);
-SELECT pg_temp.as_user('pu.sup');
-SELECT pg_temp.expect_error('Rejecting needs a reason', $$SELECT reject_purchase_lines(ARRAY[(pg_temp.line('Second ICP-MS')).id], '')$$);
-SELECT reject_purchase_lines(ARRAY[(pg_temp.line('Second ICP-MS')).id], 'Not in this year''s budget');
-SELECT pg_temp.expect_true('Rejected with the reason kept', (pg_temp.line('Second ICP-MS')).status = 'Rejected' AND (pg_temp.line('Second ICP-MS')).rejected_reason LIKE 'Not in%');
+-- Moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.approval): rejecting needs a reason; rejected with the reason kept
 
 -- Purchase orders
 SELECT pg_temp.as_user('pu.ana');
@@ -170,37 +162,24 @@ SELECT pg_temp.as_user('pu.acc');
 SELECT pg_temp.expect_error('Ordering from a supplier suspended since approval is refused', $$SELECT create_purchase_order(ARRAY[(pg_temp.line('Gloves')).id], 'FIN-9', NULL)$$);
 SELECT set_config('lims.site_id', '', false);
 
--- Receiving: partial with a back-order, discrepancy, equipment into the register, service
+-- Receiving: moved to the Java backend in migration 065 (JUnit: PurchasingRulesTest.receiving): a problem on delivery needs a note; a partial
+-- receipt with a back-order lot; the back-order arriving; the problem kept on the receipt; received equipment needs its details and a
+-- responsible group, goes into the register owned by the group and tagged out for qualification; a service received as done; a received
+-- request cannot be received again.
 SELECT pg_temp.as_user('pu.ana');
-SELECT pg_temp.expect_error('A problem on delivery needs a note',
-  $$SELECT receive_purchase_line((pg_temp.line('Lab coats (box)')).id, 2, false, 'Damaged', '', NULL, NULL, NULL, NULL, NULL, NULL)$$);
-SELECT receive_purchase_line((pg_temp.line('Acetonitrile HPLC grade')).id, 2, true, 'Short shipped', 'Only 2 of 5 bottles; rest back-ordered', NULL, 'ACN-77', current_date + 700, NULL, NULL, NULL);
-SELECT pg_temp.expect_true('Partial receipt: the lot is received with 2 L; a back-order lot for 3 L stays Ordered on the same request',
-  (pg_temp.line('Acetonitrile HPLC grade')).status = 'Partly received' AND (pg_temp.line('Acetonitrile HPLC grade')).received_quantity = 2
-  AND (SELECT count(*) FROM inventory_lot WHERE purchase_line_id = (pg_temp.line('Acetonitrile HPLC grade')).id) = 2
-  AND (SELECT receipt_status = 'Ordered' AND requested_quantity = 3 FROM inventory_lot WHERE id = (pg_temp.line('Acetonitrile HPLC grade')).lot_id)
-  AND EXISTS (SELECT 1 FROM inventory_lot WHERE item_name = 'Acetonitrile HPLC grade' AND receipt_status = 'Received' AND quantity_received = 2));
-SELECT receive_purchase_line((pg_temp.line('Acetonitrile HPLC grade')).id, 3, false, 'None', NULL, NULL, 'ACN-78', current_date + 700, NULL, NULL, NULL);
-SELECT pg_temp.expect_true('The back-order arrives: request Received, 5 L in total', (pg_temp.line('Acetonitrile HPLC grade')).status = 'Received' AND (pg_temp.line('Acetonitrile HPLC grade')).received_quantity = 5);
-SELECT receive_purchase_line((pg_temp.line('Lab coats (box)')).id, 2, false, 'Damaged', 'One box crushed; usable', NULL, NULL, NULL, NULL, NULL, NULL);
-SELECT pg_temp.expect_true('The problem is kept on the receipt', EXISTS (SELECT 1 FROM purchase_line_view WHERE description = 'Lab coats (box)' AND discrepancies = 'Damaged' AND status = 'Received'));
-SELECT pg_temp.expect_error('Received equipment needs its details and a responsible group',
-  $$SELECT receive_purchase_line((pg_temp.line('Viscometer DV2T')).id, 1, false, 'None', NULL, NULL, NULL, NULL, NULL, NULL, '{}'::jsonb)$$);
+-- The received viscometer as Java's receiving puts it into the register (later tests use "Viscometer 2" as a stability chamber)
 SELECT pg_temp.as_user('akiddle');
 INSERT INTO equipment_type (site_id, type_name) VALUES (pg_temp.site('CFL'), 'Pur Viscometer');
 INSERT INTO department (site_id, department_code, department_name) VALUES (pg_temp.site('CFL'), 'PURQ', 'Pur QC');
-SELECT pg_temp.as_user('pu.ana');
-SELECT receive_purchase_line((pg_temp.line('Viscometer DV2T')).id, 1, false, 'None', NULL, NULL, NULL, NULL, NULL, NULL,
-  jsonb_build_object('equipment_name', 'Viscometer 2', 'equipment_type_id', (SELECT id FROM equipment_type WHERE type_name = 'Pur Viscometer'),
-    'department_id', (SELECT id FROM department WHERE department_code = 'PURQ'), 'serial_number', 'DV2T-555', 'manufacturer', 'Brookfield', 'owner_group_id', pg_temp.grp('CFL', 'Lab Supervisor')));
+INSERT INTO equipment (site_id, equipment_name, equipment_type_id, department_id, serial_number, manufacturer)
+  VALUES (pg_temp.site('CFL'), 'Viscometer 2', (SELECT id FROM equipment_type WHERE type_name = 'Pur Viscometer'), (SELECT id FROM department WHERE department_code = 'PURQ'), 'DV2T-555', 'Brookfield');
+INSERT INTO equipment_owner (equipment_id, group_id) SELECT id, pg_temp.grp('CFL', 'Lab Supervisor') FROM equipment WHERE serial_number = 'DV2T-555';
+SELECT set_config('lims.equipment_internal', '1', false);
+INSERT INTO equipment_tag (equipment_id, reason, source, description) SELECT id, 'Qualification', 'New equipment', 'New equipment received: install and qualify before use' FROM equipment WHERE serial_number = 'DV2T-555';
+SELECT set_config('lims.equipment_internal', '', false);
 SET CONSTRAINTS ALL IMMEDIATE; SET CONSTRAINTS ALL DEFERRED;
-SELECT pg_temp.expect_true('Received equipment is in the register, owned by the group, tagged out for qualification',
-  (SELECT e.equipment_name = 'Viscometer 2' AND v.owners = 'Lab Supervisor' AND v.tagged_for = 'Qualification'
-     FROM purchase_line l JOIN equipment e ON e.id = l.equipment_id JOIN equipment_view v ON v.id = e.id WHERE l.description = 'Viscometer DV2T'));
-SELECT receive_purchase_line((pg_temp.line('Annual balance calibration visit')).id, 1, false, 'None', 'Visit done 2 days early', NULL, NULL, NULL, NULL, NULL, NULL);
-SELECT pg_temp.expect_true('A service is received as done', (pg_temp.line('Annual balance calibration visit')).status = 'Received');
-SELECT pg_temp.expect_error('A received request cannot be received again',
-  $$SELECT receive_purchase_line((pg_temp.line('Annual balance calibration visit')).id, 1, false, 'None', NULL, NULL, NULL, NULL, NULL, NULL, NULL)$$);
+SELECT pg_temp.as_user('pu.ana');
+INSERT INTO purchase_receipt (purchase_line_id, quantity, discrepancy, note) VALUES ((pg_temp.line('Lab coats (box)')).id, 1, 'None', 'Rule test receipt');
 SELECT pg_temp.expect_error('Receipts cannot be changed', $$UPDATE purchase_receipt SET note = 'x' WHERE quantity = 1$$);
 
 -- Cancelling, and edits sending a request back for approval

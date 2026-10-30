@@ -75,7 +75,7 @@ SELECT pg_temp.expect_true('A week with no invoices has no LIMS revenue (0, not 
 SELECT pg_temp.db_as('db.fin', false);
 SELECT pg_temp.expect_ok('Finance types a week''s costs without the books'' revenue', $$INSERT INTO finance_week (site_id, week_ending, costs) VALUES (pg_temp.dbcfl(), current_date - 17, 900)$$);
 SELECT pg_temp.expect_true('...stored with no books'' revenue', (SELECT revenue IS NULL FROM finance_week WHERE site_id = pg_temp.dbcfl() AND week_ending = current_date - 17));
-SELECT pg_temp.expect_error_like('The books'' revenue, when typed, is still not negative', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbcfl(), current_date - 24, -5, 1)$$, 'not negative');
+-- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): the books' revenue, when typed, is still not negative
 SELECT pg_temp.db_as('db.gm', false);
 SELECT pg_temp.expect_error_like('A GM still does not type the finance figures', $$INSERT INTO finance_week (site_id, week_ending, costs) VALUES (pg_temp.dbcfl(), current_date - 31, 1)$$, 'finance.enter');
 

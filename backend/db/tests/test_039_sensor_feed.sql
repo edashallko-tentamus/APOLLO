@@ -77,24 +77,21 @@ SELECT pg_temp.sf_as('e.sup', false);
 SELECT pg_temp.expect_error_like('Linking a sensor is signed',
   $$INSERT INTO sensor_link (site_id, external_id, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R501', 'temperature', pg_temp.sf_eqx(), pg_temp.sf_lbx(), 'temperature')$$, 'electronic signature');
 SELECT pg_temp.sf_as('e.sup');
-SELECT pg_temp.expect_error_like('A sensor feeds a number field only',
-  $$INSERT INTO sensor_link (site_id, external_id, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R501', 'temperature', pg_temp.sf_eqx(), pg_temp.sf_lbx(), 'note')$$, 'not a number field');
-SELECT pg_temp.expect_error_like('... for equipment the logbook covers',
-  $$INSERT INTO sensor_link (site_id, external_id, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R501', 'temperature', (SELECT id FROM equipment WHERE equipment_name = 'WD Balance 1'), pg_temp.sf_lbx(), 'temperature')$$, 'does not cover');
+-- Moved to the Java backend in migration 070 (JUnit: SensorRulesTest): a sensor feeds a number field only, for equipment the logbook covers (sensor_link_problem, still the database's, decides; SensorLink refuses)
 SELECT pg_temp.expect_ok('The Lab Supervisor links sensor R501 (temperature) to the logbook and the equipment (signed)',
   $$INSERT INTO sensor_link (site_id, external_id, sensor_name, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R501', 'Rule fridge', 'temperature', pg_temp.sf_eqx(), pg_temp.sf_lbx(), 'temperature')$$);
 SELECT pg_temp.expect_true('It waits for QA', (SELECT status FROM sensor_link WHERE id = pg_temp.sf_lnk()) = 'Awaiting QA');
 SELECT pg_temp.expect_error_like('One link per sensor and value',
   $$INSERT INTO sensor_link (site_id, external_id, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R501', 'temperature', pg_temp.sf_eqx(), pg_temp.sf_lbx(), 'temperature')$$, 'duplicate key');
 SELECT pg_temp.expect_error_like('A link is not edited (retire it and link again)', $$UPDATE sensor_link SET gap_minutes = 60 WHERE id = pg_temp.sf_lnk()$$, 'retire it');
-SELECT pg_temp.expect_error_like('The Lab Supervisor cannot approve it (logbook.review)', $$SELECT approve_sensor_link(pg_temp.sf_lnk())$$, 'logbook.review');
+-- Moved to the Java backend in migration 070 (JUnit: SensorRulesTest): the Lab Supervisor cannot approve it (SensorsService asks logbook.review)
 SELECT pg_temp.sf_feed();
 SELECT pg_temp.expect_true('Before QA approves it, the feed records nothing for it', sensor_add_readings(pg_temp.sf_lnk(), pg_temp.sf_rows()) = 0);
-SELECT pg_temp.sf_as('e.qa', false);
-SELECT pg_temp.expect_error_like('Approving a link is signed', $$SELECT approve_sensor_link(pg_temp.sf_lnk())$$, 'electronic signature');
+-- Moved to the Java backend in migration 070 (JUnit: SensorRulesTest): approving a link is signed (SensorsService), the feed starts at most 7 days back, never by whoever linked it
 SELECT pg_temp.sf_as('e.qa');
-SELECT pg_temp.expect_error_like('The feed starts at most 7 days back', $$SELECT approve_sensor_link(pg_temp.sf_lnk(), now() - interval '8 days')$$, 'at most 7 days back');
-SELECT pg_temp.expect_ok('QA approves it (signed), feeding from just before the first reading, 11 hours ago', $$SELECT approve_sensor_link(pg_temp.sf_lnk(), pg_temp.sf_a(-5))$$);
+SELECT pg_temp.expect_ok('QA approves it (signed), feeding from just before the first reading, 11 hours ago (as Java records it)',
+  $$SELECT set_config('lims.sensor_internal', '1', true); UPDATE sensor_link SET status = 'Active', approved_by = current_app_user(), approved_at = clock_timestamp(), approval_signature_id = NULLIF(current_setting('lims.signature_id', true), '')::uuid,
+      feeds_from = pg_temp.sf_a(-5) WHERE id = pg_temp.sf_lnk(); SELECT set_config('lims.sensor_internal', '', true)$$);
 SELECT pg_temp.expect_true('... Active, approved by QA with the signature, feeding from then', (SELECT status = 'Active' AND approved_by = (SELECT id FROM app_user WHERE username = 'e.qa') AND approval_signature_id IS NOT NULL
    AND feeds_from = pg_temp.sf_a(-5) FROM sensor_link WHERE id = pg_temp.sf_lnk()));
 
@@ -170,8 +167,8 @@ SELECT pg_temp.expect_true('The approved excursion is untouched', (pg_temp.sf_en
 
 -- 6. retiring the link
 SELECT pg_temp.sf_as('e.sup');
-SELECT pg_temp.expect_error_like('Retiring a link needs a reason', $$SELECT retire_sensor_link(pg_temp.sf_lnk(), '')$$, 'Say why');
-SELECT pg_temp.expect_ok('The Lab Supervisor retires it (signed, with a reason)', $$SELECT retire_sensor_link((SELECT id FROM sensor_link WHERE external_id = 'R501'), 'Sensor moved to the new fridge')$$);
+-- Moved to the Java backend in migration 070 (JUnit: SensorRulesTest): retiring a link needs a reason
+SELECT pg_temp.expect_ok('The Lab Supervisor retires it (as Java records it)', $$SELECT set_config('lims.sensor_internal', '1', true); UPDATE sensor_link SET status = 'Retired', retired_reason = 'Sensor moved to the new fridge' WHERE external_id = 'R501'; SELECT set_config('lims.sensor_internal', '', true)$$);
 SELECT pg_temp.sf_feed();
 SELECT pg_temp.expect_true('A retired link records nothing', sensor_add_readings((SELECT id FROM sensor_link WHERE external_id = 'R501'), pg_temp.sf_rows()) = 0
   AND sensor_feed_refresh((SELECT id FROM sensor_link WHERE external_id = 'R501')) = '{"skipped": true}');

@@ -2,7 +2,9 @@ package com.tentamus.lims.admin.service;
 
 import static com.tentamus.lims.core.web.Answers.*;
 
+import com.tentamus.lims.admin.domain.HandwrittenSignature;
 import com.tentamus.lims.admin.domain.ReasonCode;
+import com.tentamus.lims.core.access.UserAccess;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
@@ -143,14 +145,27 @@ public class AdminService {
             throw new RuleException("The signature must be a PNG or JPEG image (a scan or photo of the handwritten signature)");
         return signatures.signed(ctx.orReason("Handwritten signature recorded"), body, new SignatureService.Meaning("Recorded by", "Handwritten signature and title", "Admin"), d -> {
             Object doc = null;
+            byte[] buf = new byte[0];
             if (!b64.isEmpty()) {
-                byte[] buf;
                 try { buf = Base64.getMimeDecoder().decode(b64); } catch (IllegalArgumentException e) { buf = new byte[0]; }
+            }
+            Map<String, Object> person = d.one("SELECT full_name FROM app_user WHERE id = ?::uuid AND NOT is_automated", userId);
+            UserAccess me = access.load(ctx.userId());
+            boolean may = me.systemAdmin() || access.load(userId).memberSites().stream().anyMatch(s -> me.can("admin.users", s));
+            String title = HandwrittenSignature.check(person == null ? null : (String) person.get("full_name"), may, b64.isEmpty() ? null : Js.string(body.get("mime_type")),
+                buf.length, Js.string(Js.orBlank(body.get("title"))));
+            if (!b64.isEmpty()) {
                 String name = Js.truthy(body.get("file_name")) ? Js.string(body.get("file_name")) : "signature";
                 doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, ?, ?, decode(?, 'base64')) RETURNING id",
                     name.substring(0, Math.min(200, name.length())), body.get("mime_type"), buf.length, DocumentStore.sha256(buf), b64).get("id");
             }
-            d.one("SELECT set_user_signature(?::uuid, ?::uuid, ?)", userId, doc, Js.orBlank(body.get("title")));
+            d.one("SELECT set_config('lims.group_sync', '1', true)");   // the app_user trigger lets only this write through and audits it
+            d.update("""
+                UPDATE app_user SET title = ?, signature_document_id = COALESCE(?::uuid, signature_document_id),
+                       signature_set_at = CASE WHEN ?::uuid IS NOT NULL THEN clock_timestamp() ELSE signature_set_at END,
+                       signature_set_by = CASE WHEN ?::uuid IS NOT NULL THEN ?::uuid ELSE signature_set_by END WHERE id = ?::uuid""",
+                title, doc, doc, doc, ctx.userId(), userId);
+            d.one("SELECT set_config('lims.group_sync', '', true)");
             return ok();
         });
     }

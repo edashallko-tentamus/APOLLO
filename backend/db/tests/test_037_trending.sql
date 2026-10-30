@@ -66,22 +66,22 @@ SELECT pg_temp.expect_true('It is numbered TC-, watched, with every rule, made b
 SELECT pg_temp.expect_error_like('One active chart per name at a lab', $$INSERT INTO trend_chart (site_id, chart_name, source) VALUES (pg_temp.trcfl(), ' tr FRIDGE ', 'pareto')$$, 'trend_chart_name_uq');
 SELECT pg_temp.expect_error_like('Rules are the known ones only', $$INSERT INTO trend_chart (site_id, chart_name, source, rules) VALUES (pg_temp.trcfl(), 'TR bad rule', 'counts', '{R1,R9}')$$, 'check');
 SELECT pg_temp.expect_error_like('Sources are the known ones only', $$INSERT INTO trend_chart (site_id, chart_name, source) VALUES (pg_temp.trcfl(), 'TR bad source', 'invoices')$$, 'check');
-SELECT pg_temp.expect_error_like('Only QC charts are shown in QC Review', $$UPDATE trend_chart SET show_in_review = true WHERE id = (pg_temp.trc('TR fridge')).id$$, 'Only QC charts');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): only QC charts are shown in QC Review
 SELECT pg_temp.expect_ok('A QC chart can be', $$INSERT INTO trend_chart (site_id, chart_name, source, params, show_in_review) VALUES (pg_temp.trcfl(), 'TR LCS', 'qc', '{"test_id":"x"}', true)$$);
-SELECT pg_temp.expect_error_like('A chart stays with its lab', $$UPDATE trend_chart SET site_id = (SELECT id FROM lab_site WHERE id <> pg_temp.trcfl() LIMIT 1) WHERE id = (pg_temp.trc('TR fridge')).id$$, 'stays with its lab');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a chart stays with its lab
 
 -- 2. frozen limits
-SELECT pg_temp.expect_error_like('Frozen limits need their baseline (at least 2 points)', $$UPDATE trend_chart SET frozen_cl = 5, frozen_sigma = 0.5, frozen_n = 1 WHERE id = (pg_temp.trc('TR fridge')).id$$, 'at least 2 points');
-SELECT pg_temp.expect_error_like('and a sigma', $$UPDATE trend_chart SET frozen_cl = 5, frozen_n = 25 WHERE id = (pg_temp.trc('TR fridge')).id$$, 'a sigma');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): frozen limits need their baseline (at least 2 points)
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): and a sigma
 SELECT pg_temp.expect_ok('Limits frozen from a baseline of 25 points', $$UPDATE trend_chart SET frozen_cl = 5, frozen_sigma = 0.5, frozen_n = 25, frozen_from = '2026-01-01', frozen_to = '2026-06-30' WHERE id = (pg_temp.trc('TR fridge')).id$$);
-SELECT pg_temp.expect_true('Who froze them and when are recorded by the database', (pg_temp.trc('TR fridge')).frozen_by = pg_temp.tru('tr.sup') AND (pg_temp.trc('TR fridge')).frozen_at IS NOT NULL);
-SELECT pg_temp.expect_error_like('While frozen, the chart cannot chart something else', $$UPDATE trend_chart SET params = '{"logbook_id":"x","field_key":"humidity"}' WHERE id = (pg_temp.trc('TR fridge')).id$$, 'unfreeze them');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): who froze them and when (TrendChartRepository stamps them)
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): while frozen, the chart cannot chart something else
 SELECT pg_temp.expect_ok('Its name and rules can still change', $$UPDATE trend_chart SET chart_name = 'TR fridge 1', rules = '{R1,LIM}' WHERE id = (pg_temp.trc('TR fridge')).id$$);
 SELECT pg_temp.tras('tr.ana');
 SELECT pg_temp.expect_error_like('An analyst cannot unfreeze them', $$UPDATE trend_chart SET frozen_cl = NULL WHERE id = (pg_temp.trc('TR fridge 1')).id$$, 'trending.manage');
 SELECT pg_temp.tras('tr.sup');
 SELECT pg_temp.expect_ok('The supervisor unfreezes them (limits from the data again)', $$UPDATE trend_chart SET frozen_cl = NULL WHERE id = (pg_temp.trc('TR fridge 1')).id$$);
-SELECT pg_temp.expect_true('Unfreezing clears the whole baseline', (SELECT frozen_sigma IS NULL AND frozen_n IS NULL AND frozen_from IS NULL AND frozen_by IS NULL AND frozen_at IS NULL FROM trend_chart WHERE id = (pg_temp.trc('TR fridge 1')).id));
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): unfreezing clears the whole baseline
 SELECT pg_temp.expect_ok('Then it can chart something else', $$UPDATE trend_chart SET params = '{"logbook_id":"x","field_key":"humidity"}' WHERE id = (pg_temp.trc('TR fridge 1')).id$$);
 
 -- 3. signal reviews
@@ -89,14 +89,14 @@ SELECT pg_temp.tras('tr.ana');
 SELECT pg_temp.expect_error_like('An analyst cannot review a signal', $$INSERT INTO trend_signal_review (chart_id, point_key, point_label, rule, outcome, comment)
   VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'LBE-000001', 'R1', 'Action taken', 'Door open')$$, 'trending.manage');
 SELECT pg_temp.tras('tr.sup');
-SELECT pg_temp.expect_error_like('A review needs a comment', $$INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'R1', 'Action taken', ' ')$$, 'check');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a review needs a comment
 SELECT pg_temp.expect_error_like('and one of the outcomes', $$INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'R1', 'Ignored', 'x')$$, 'check');
 SELECT pg_temp.expect_ok('The supervisor reviews the signal', $$INSERT INTO trend_signal_review (chart_id, point_key, point_label, rule, outcome, comment)
   VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'LBE-000001', 'R1', 'Action taken', 'Door left open during the restock')$$);
 SELECT pg_temp.expect_true('Recorded with who and when', (SELECT reviewed_by = pg_temp.tru('tr.sup') AND reviewed_at IS NOT NULL FROM trend_signal_review WHERE point_key = 'entry-1'));
 SELECT pg_temp.expect_error_like('One active review per signal', $$INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'R1', 'Expected (known cause)', 'x')$$, 'trend_signal_review_uq');
 SELECT pg_temp.expect_ok('Another rule at the same point is its own signal', $$INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'LIM', 'Linked to an OOS or deviation', 'DEV-12')$$);
-SELECT pg_temp.expect_error_like('A review stays with its signal', $$UPDATE trend_signal_review SET rule = 'R2' WHERE point_key = 'entry-1' AND rule = 'R1'$$, 'stays with its signal');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a review stays with its signal (Java never moves one)
 SELECT pg_temp.expect_ok('A review is replaced by retiring it first', $$UPDATE trend_signal_review SET status = 'Inactive' WHERE point_key = 'entry-1' AND rule = 'R1';
   INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'R1', 'Investigated: no action', 'Re-checked: probe reading was right')$$);
 

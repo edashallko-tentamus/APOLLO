@@ -1,6 +1,7 @@
 package com.tentamus.lims.oos.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.access.UserAccess;
@@ -12,6 +13,10 @@ import com.tentamus.lims.core.paging.PagedList;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.oos.domain.Checklist;
+import com.tentamus.lims.oos.domain.OosInvestigation;
+import com.tentamus.lims.oos.domain.OosOpening;
+import com.tentamus.lims.oos.repo.OosStore;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +27,7 @@ import org.springframework.stereotype.Service;
 /**
  * OOS investigations: the list, one investigation, its signed steps (open, analyst, supervisor, cancel, retests, the
  * retest determination, the client's Phase II decision), the client's answers handled, the stored report and an Outbox
- * email's attachment, and the OOS checklists (QA). The rules live in the database. The conclusion (which makes the
+ * email's attachment, and the OOS checklists (QA). The rules are the domain's ({@link OosInvestigation}, {@link OosOpening}, {@link Checklist}). The conclusion (which makes the
  * report PDF) and the client's public answer page stay in the Node backend for now.
  */
 @Service
@@ -44,8 +49,10 @@ public class OosService {
     private final SignatureService signatures;
     private final OosChecks checks;
     private final ObjectMapper json;
+    private final OosStore store;
 
-    public OosService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, OosChecks checks, ObjectMapper json) {
+    public OosService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, OosChecks checks, ObjectMapper json, OosStore store) {
+        this.store = store;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -59,6 +66,25 @@ public class OosService {
     private static Object orNull(Object v) { return truthy(v) ? v : null; }
 
     private static Object orBlank(Object v) { return truthy(v) ? v : ""; }
+
+    /** What Node answered for SELECT fn(...) returning void: {fields: [{name, dataTypeID}], rows: [{fn: ""}]}. */
+    private static Map<String, Object> voidAnswer(String fn) {
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("name", fn);
+        field.put("dataTypeID", 2278L);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put(fn, "");
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("fields", List.of(field));
+        out.put("rows", List.of(row));
+        return out;
+    }
+
+    /** A text field as the database read it (null and false as blank). */
+    private static String str(Object v) { return truthy(v) ? Js.string(v) : ""; }
+
+    /** The checklist answers as JSON ({} when none). */
+    private JsonNode answers(Map<String, Object> body) { return json.valueToTree(truthy(body.get("answers")) ? body.get("answers") : Map.of()); }
 
     private String toJson(Object v) {
         try { return json.writeValueAsString(v == null || "".equals(v) || Boolean.FALSE.equals(v) ? Map.of() : v); }
@@ -82,7 +108,13 @@ public class OosService {
 
     private List<Map<String, Object>> runChecks(RequestContext ctx, String id) {
         List<Map<String, Object>> list = checks.run(id);
-        uow.run(ctx, "Automatic data checks run", d -> d.one("SELECT record_oos_checks(?::uuid, ?::jsonb)", id, toJson(list)));
+        uow.run(ctx, "Automatic data checks run", d -> {
+            OosInvestigation o = store.load(d, id);
+            if (!store.has(d, "oos.open", o.siteId()) && !store.has(d, "testing.review", o.siteId())) store.requirePermission(d, "oos.open", o.siteId());
+            o.checkChecksOpen();
+            store.saveChecks(d, o.id(), toJson(list));
+            return null;
+        });
         return list;
     }
 
@@ -172,8 +204,22 @@ public class OosService {
             "SELECT o.site_id FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id WHERE rt.id = ?::uuid", body.get("requested_test_id")) : null;
         if (rt == null) throw new RuleException("Test not found");
         access.checkSite(ctx, (String) rt.get("site_id"));
-        Map<String, Object> out = signed(ctx, body, "Opened by", "OOS investigation opened", "OOS investigation opened", d -> d.one("SELECT open_oos(?::uuid, ?::uuid, ?::uuid, ?) AS id",
-            body.get("requested_test_id"), body.get("analyte_id"), RequestContext.isUuid(body.get("batch_id")) ? body.get("batch_id") : null, orNull(body.get("reason"))));
+        Map<String, Object> out = signed(ctx, body, "Opened by", "OOS investigation opened", "OOS investigation opened", d -> {
+            Object test = body.get("requested_test_id"), analyte = RequestContext.isUuid(body.get("analyte_id")) ? body.get("analyte_id") : null;
+            Object batch = RequestContext.isUuid(body.get("batch_id")) ? body.get("batch_id") : null;
+            Map<String, Object> t = store.testOf(d, test);
+            store.requirePermission(d, "oos.open", (String) t.get("site_id"));
+            store.assertSigned(d, "open an OOS investigation");
+            OosOpening.Result stored = store.storedResult(d, test, analyte);
+            OosOpening.Result res = OosOpening.check(store.openCode(d, test, analyte), stored, stored == null ? null : store.closedCodeOf(d, stored.resultId()),
+                (String) batch, store.batchCode(d, batch), stored == null ? store.reading(d, batch, test, analyte) : null);
+            String procedure = OosOpening.procedure(Boolean.TRUE.equals(t.get("gmp")), (String) t.get("lab_default"));
+            Object id = store.insert(d, t, test, analyte, res, procedure, OosOpening.closeWithin(store.closeWithinDays(d, procedure)),
+                truthy(body.get("reason")) ? Js.string(body.get("reason")) : null);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", id);
+            return m;
+        });
         try { runChecks(ctx, (String) out.get("id")); } catch (RuntimeException ignored) { }
         return out;
     }
@@ -186,19 +232,42 @@ public class OosService {
     public Map<String, Object> analyst(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> o = oosOf(ctx, id);
         return signed(ctx, body, "Investigated by", o.get("oos_code") + ": analyst section", "OOS investigation: analyst section signed",
-            d -> d.raw("SELECT sign_oos_analyst(?::uuid, ?::jsonb, ?, ?)", o.get("id"), toJson(body.get("answers")), orNull(body.get("comment")), orNull(body.get("hypothesis"))));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                x.checkAnalystSection();
+                store.requirePermission(d, "testing.perform", x.siteId());
+                store.assertSigned(d, "sign the analyst section of an OOS investigation");
+                Checklist.check("Analyst", store.items(d, x.procedure(), "Analyst"), answers(body));
+                store.signAnalyst(d, x.id(), toJson(body.get("answers")), str(body.get("comment")), str(body.get("hypothesis")));
+                return voidAnswer("sign_oos_analyst");
+            });
     }
 
     public Map<String, Object> supervisor(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> o = oosOf(ctx, id);
         return signed(ctx, body, "Reviewed by", o.get("oos_code") + ": supervisor section", "OOS investigation: supervisor section signed",
-            d -> d.raw("SELECT sign_oos_supervisor(?::uuid, ?::jsonb, ?)", o.get("id"), toJson(body.get("answers")), orNull(body.get("comment"))));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                x.checkSupervisorSection(ctx.userId(), store.didBenchWork(d, x.batchId()));
+                store.requirePermission(d, "testing.review", x.siteId());
+                store.assertSigned(d, "sign the supervisor section of an OOS investigation");
+                Checklist.check("Supervisor", store.items(d, x.procedure(), "Supervisor"), answers(body));
+                store.signSupervisor(d, x.id(), toJson(body.get("answers")), str(body.get("comment")));
+                return voidAnswer("sign_oos_supervisor");
+            });
     }
 
     public Map<String, Object> cancel(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> o = oosOf(ctx, id);
         return signed(ctx, body, "Cancelled by", o.get("oos_code") + " cancelled", null,
-            d -> d.raw("SELECT cancel_oos(?::uuid, ?)", o.get("id"), orBlank(body.get("reason"))));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                String why = str(body.get("reason"));
+                x.checkCancel(ctx.userId(), store.has(d, "oos.approve", x.siteId()), store.has(d, "oos.open", x.siteId()), why);
+                store.assertSigned(d, "cancel an OOS investigation");
+                store.cancel(d, x.id(), why);
+                return voidAnswer("cancel_oos");
+            });
     }
 
     public Map<String, Object> retest(RequestContext ctx, String id, Map<String, Object> body) {
@@ -206,28 +275,68 @@ public class OosService {
         double asked = Js.toNumber(body.get("replicates"));
         Object reps = Double.isNaN(asked) || asked == 0 ? 1 : asked == Math.rint(asked) ? (Object) (long) asked : asked;
         return signed(ctx, body, "Ordered by", o.get("oos_code") + ": " + ("Client".equals(body.get("kind")) ? "client" : "lab investigation") + " retest", null,
-            d -> d.one("SELECT order_oos_retest(?::uuid, ?, ?, ?::uuid) AS id", o.get("id"), body.get("kind"), reps,
-                RequestContext.isUuid(body.get("response_id")) ? body.get("response_id") : null));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                store.requirePermission(d, "orders.edit", x.siteId());
+                store.assertSigned(d, "order an OOS retest");
+                Map<String, Object> f = store.retestFacts(d, x.requestedTestId());
+                double n = Js.toNumber(reps);
+                // a fraction is refused, as the database's integer argument refused it
+                if (n != Math.rint(n)) throw RuleException.database("A retest is single, duplicate or triplicate");
+                OosInvestigation.Retest r = x.retest(Js.string(body.get("kind")), (int) n, Boolean.TRUE.equals(f.get("gone")), (String) f.get("sample_code"),
+                    Boolean.TRUE.equals(f.get("replaced")));
+                Object made = store.orderRetest(d, x, r, RequestContext.isUuid(body.get("response_id")) ? body.get("response_id") : null);
+                if (x.recordsPhase2(r)) store.recordPhase2Retest(d, x.id());
+                store.reopenOrder(d, f.get("order_id"), (String) f.get("order_status"));
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", made);
+                return m;
+            });
     }
 
     public Map<String, Object> determination(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> o = oosOf(ctx, id);
         return signed(ctx, body, "Approved by", o.get("oos_code") + ": retest determination", "Retest determination recorded",
-            d -> d.raw("SELECT record_retest_determination(?::uuid, ?, ?)", o.get("id"), orBlank(body.get("determination")), orBlank(body.get("reason"))));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                store.requirePermission(d, "oos.approve", x.siteId());
+                store.assertSigned(d, "record the retest determination");
+                Map<String, Object> r = store.clientRetest(d, x.id());
+                String det = str(body.get("determination")), why = str(body.get("reason"));
+                String billing = x.determine(r != null, r != null && Boolean.TRUE.equals(r.get("approved")), store.determination(d, x.id()), det, why);
+                store.determine(d, x.id(), det, why, r.get("id"), billing);
+                return voidAnswer("record_retest_determination");
+            });
     }
 
     /** The client's Phase II decision recorded on the sample: "no re-test" closes the loop, signed. */
     public Map<String, Object> phase2(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> o = oosOf(ctx, id);
         return signed(ctx, body, "Recorded by", o.get("oos_code") + ": client's Phase II decision (no re-test)", "Phase II decision: no re-test",
-            d -> d.raw("SELECT record_oos_phase2(?::uuid, ?, ?)", o.get("id"), "No retest", orBlank(body.get("note"))));
+            d -> {
+                OosInvestigation x = store.load(d, o.get("id"));
+                if (!store.has(d, "orders.edit", x.siteId()) && !store.has(d, "oos.open", x.siteId()) && !store.has(d, "reports.finalize", x.siteId()))
+                    store.requirePermission(d, "orders.edit", x.siteId());
+                store.assertSigned(d, "record the client's Phase II decision");
+                String note = str(body.get("note"));
+                x.checkNoRetest("No retest", note);
+                store.recordNoRetest(d, x, note);
+                return voidAnswer("record_oos_phase2");
+            });
     }
 
     public Map<String, Object> responseHandled(RequestContext ctx, String rid, Map<String, Object> body) {
         Map<String, Object> x = db.one("SELECT o.id FROM oos_client_response cr JOIN oos_investigation o ON o.id = cr.oos_id WHERE cr.id = ?::uuid", rid);
         if (x == null) throw new RuleException("Response not found");
         oosOf(ctx, (String) x.get("id"));
-        return uow.run(ctx, "Client response handled", d -> d.raw("SELECT handle_oos_response(?::uuid, ?)", rid, orNull(body.get("note"))));
+        return uow.run(ctx, "Client response handled", d -> {
+            Map<String, Object> r = store.response(d, rid);
+            String site = (String) r.get("site_id");
+            if (!store.has(d, "orders.edit", site) && !store.has(d, "oos.open", site)) store.requirePermission(d, "orders.edit", site);
+            OosInvestigation.checkHandle(Boolean.TRUE.equals(r.get("handled")));
+            store.handle(d, rid, str(body.get("note")));
+            return voidAnswer("handle_oos_response");
+        });
     }
 
     // ---------------------------------------------------------------- files

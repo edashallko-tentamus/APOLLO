@@ -43,4 +43,23 @@ class ChargeRulesTest {
         assertEquals("A Reason for Change is required to change or cancel a charge",
             refusal(() -> new OrderCharge("1", "OC-000001", "O1", "Active", false).checkChange(true, false)));
     }
+
+    @Test
+    void anOrderChargesAmounts() {
+        // migration 069: the signed amounts order_charge_rules worked out
+        OrderCharge.Price item = OrderCharge.price("Shipping", new BigDecimal("15.00"), null, null, null);
+        assertEquals(0, item.listPrice().compareTo(new BigDecimal("15")));
+        assertEquals(0, item.unitPrice().compareTo(new BigDecimal("15")));
+        OrderCharge.Price quoted = OrderCharge.price("Kit", new BigDecimal("40"), null, new BigDecimal("30"), "QC1");
+        assertEquals(0, quoted.unitPrice().compareTo(new BigDecimal("30")));
+        assertEquals("QC1", quoted.quotedChargeId());
+        OrderCharge.Price typed = OrderCharge.price("Kit", new BigDecimal("40"), new BigDecimal("-35"), new BigDecimal("30"), "QC1");
+        assertEquals(0, typed.unitPrice().compareTo(new BigDecimal("35")));
+        assertNull(typed.quotedChargeId());
+        OrderCharge.Price discount = OrderCharge.price("Discount", new BigDecimal("10"), new BigDecimal("10"), null, null);
+        assertEquals(0, discount.listPrice().compareTo(new BigDecimal("-10")));
+        assertEquals(0, discount.unitPrice().compareTo(new BigDecimal("-10")));
+        assertEquals(0, OrderCharge.signed("Discount", new BigDecimal("5")).compareTo(new BigDecimal("-5")));
+        assertEquals("The quantity must be at least 1.", refusal(() -> OrderCharge.checkQuantity(0)));
+    }
 }

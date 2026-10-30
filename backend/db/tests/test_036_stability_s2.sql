@@ -79,14 +79,11 @@ SELECT pg_temp.expect_true('It copies the design the study runs to, each timepoi
   AND (SELECT count(*) FROM stability_cell WHERE project_version_id = pg_temp.s2v(2) AND status = 'Active')
       = (SELECT count(*) FROM stability_cell WHERE project_version_id = pg_temp.s2v(1) AND status = 'Active'));
 SELECT pg_temp.expect_error_like('A second Draft is refused', $$SELECT new_stability_version(pg_temp.s2proj())$$, 'already a Draft');
-SELECT pg_temp.expect_error_like('The interval of a timepoint already pulled stays',
-  $$UPDATE stability_timepoint SET interval_value = 4 WHERE id = pg_temp.s2tp(2, '3 M')$$, 'already ordered or pulled');
-SELECT pg_temp.expect_error_like('T0 stays the baseline', $$UPDATE stability_timepoint SET interval_value = 1, interval_unit = 'Weeks' WHERE id = pg_temp.s2tp(2, 'T0')$$, 'T0 was ordered');
-SELECT pg_temp.expect_error_like('A test cannot be added at a timepoint already pulled for that condition',
-  $$INSERT INTO stability_cell (project_version_id, line_id, timepoint_id, condition_id) VALUES (pg_temp.s2v(2), pg_temp.s2line(2, 'T-00001'), pg_temp.s2tp(2, '1 M'), pg_temp.s2cond('25 °C / 60% RH'))$$, 'already ordered or pulled');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): the interval of a timepoint already pulled stays
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): T0 stays the baseline
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): a test cannot be added at a timepoint already pulled for that condition
 UPDATE stability_cell SET status = 'Removed' WHERE project_version_id = pg_temp.s2v(2) AND line_id = pg_temp.s2line(2, 'T-00001') AND timepoint_id = pg_temp.s2tp(2, 'T0');
-SELECT pg_temp.expect_error_like('T0 tests cannot change once the study started',
-  $$UPDATE stability_cell SET status = 'Active' WHERE project_version_id = pg_temp.s2v(2) AND line_id = pg_temp.s2line(2, 'T-00001') AND timepoint_id = pg_temp.s2tp(2, 'T0')$$, 'T0 was ordered');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): T0 tests cannot change once the study started
 -- what the client asked for: extend to 24 months (moisture at both conditions, metals at 25/60), stop moisture at
 -- 14 M at 40/75, and add 30/65 with moisture at 24 M
 SELECT pg_temp.expect_ok('The amendment adds 24 M, drops 14 M at 40/75 and adds the 30/65 condition',
@@ -158,19 +155,37 @@ SELECT pg_temp.expect_true('An unassessed excursion stops the report being issue
   EXISTS (SELECT 1 FROM stability_report_problems((pg_temp.s2st()).id) WHERE severity = 'Block' AND problem LIKE '%not assessed by QA%'));
 INSERT INTO s2k SELECT 'exc', logbook_entry_id FROM stability_excursion_status_view WHERE study_id = (pg_temp.s2st()).id ORDER BY entry_at LIMIT 1;
 SELECT pg_temp.s2as('s2.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot assess it', $$SELECT assess_stability_excursion((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'No impact', 'Fine')$$, 'permission');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): an analyst cannot assess it (StabilityService asks stability.assess)
 SELECT pg_temp.s2as('s2.qa', false);
-SELECT pg_temp.expect_error_like('QA signs the assessment', $$SELECT assess_stability_excursion((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'No impact', 'Fine')$$, 'electronic signature');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): QA signs the assessment (SignatureService)
 SELECT pg_temp.s2as('s2.qa');
-SELECT pg_temp.expect_error_like('and justifies it', $$SELECT assess_stability_excursion((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'No impact', '  ')$$, 'Justify');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): and justifies it
+-- QA's assessment as Java records it since migration 070 (ExcursionRepository.record): a fixture for the checks below
+CREATE OR REPLACE FUNCTION pg_temp.s2assess(p_study uuid, p_entry uuid, p_decision text, p_justification text) RETURNS uuid LANGUAGE plpgsql AS $f$
+DECLARE v uuid;
+BEGIN
+    PERFORM set_config('lims.stability_internal', '1', true);
+    UPDATE stability_excursion_assessment SET status = 'Inactive' WHERE study_id = p_study AND logbook_entry_id = p_entry AND status = 'Active';
+    INSERT INTO stability_excursion_assessment (study_id, logbook_entry_id, storage_id, decision, justification, excursion_text, affected_pull_ids, signature_id)
+    SELECT x.study_id, x.logbook_entry_id, x.storage_id, p_decision, btrim(p_justification),
+           x.equipment_code || ' ' || x.equipment_name || ', ' || to_char(x.entry_at AT TIME ZONE (SELECT time_zone FROM lab_site WHERE id = st.site_id), 'Mon DD, YYYY HH24:MI') || ': '
+             || array_to_string(x.problems, '; ') || COALESCE(' (' || x.failure_reason || ')', ''),
+           COALESCE((SELECT array_agg(p.id ORDER BY p.scheduled_date) FROM stability_pull p WHERE p.storage_id = x.storage_id AND p.status <> 'Cancelled'
+                      AND (p.pulled_at IS NULL OR p.pulled_at >= x.window_start)), '{}'),
+           NULLIF(current_setting('lims.signature_id', true), '')::uuid
+      FROM (SELECT * FROM stability_excursion_view WHERE study_id = p_study AND logbook_entry_id = p_entry LIMIT 1) x JOIN stability_study st ON st.id = x.study_id
+    RETURNING id INTO v;
+    PERFORM set_config('lims.stability_internal', '', true);
+    RETURN v;
+END $f$;
 SELECT pg_temp.expect_ok('QA: impact, the results of the exposed material are flagged',
-  $$SELECT assess_stability_excursion((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'Impact: results flagged', '44 °C for at least a day: the 40/75 moisture results after it are flagged for the client')$$);
+  $$SELECT pg_temp.s2assess((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'Impact: results flagged', '44 °C for at least a day: the 40/75 moisture results after it are flagged for the client')$$);
 SELECT pg_temp.expect_true('The assessment records the reading, the signature and the pulls of the exposed material (those still to come included)',
   (SELECT decision = 'Impact: results flagged' AND signature_id IS NOT NULL AND excursion_text LIKE '%Door seal failed%'
           AND (SELECT v::uuid FROM s2k WHERE k = 'ordered40') = ANY (affected_pull_ids)
           AND (pg_temp.s2pull('24 M', '40 °C / 75% RH')).id = ANY (affected_pull_ids)
      FROM stability_excursion_assessment WHERE study_id = (pg_temp.s2st()).id AND status = 'Active'));
-SELECT pg_temp.expect_ok('A later assessment replaces it', $$SELECT assess_stability_excursion((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'Client to decide', 'Client asked to review the 40/75 data')$$);
+SELECT pg_temp.expect_ok('A later assessment replaces it', $$SELECT pg_temp.s2assess((pg_temp.s2st()).id, (SELECT v::uuid FROM s2k WHERE k = 'exc'), 'Client to decide', 'Client asked to review the 40/75 data')$$);
 SELECT pg_temp.expect_true('One current assessment; the earlier one is kept, inactive',
   (SELECT count(*) FROM stability_excursion_assessment WHERE study_id = (pg_temp.s2st()).id AND status = 'Active') = 1
   AND (SELECT count(*) FROM stability_excursion_assessment WHERE study_id = (pg_temp.s2st()).id AND status = 'Inactive') = 1

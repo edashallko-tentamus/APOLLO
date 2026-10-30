@@ -48,8 +48,7 @@ SELECT pg_temp.expect_ok('QA sets up chambers and racks',
     INSERT INTO stability_chamber (equipment_id, condition_id) SELECT id, pg_temp.t26cond('40 °C / 75% RH') FROM equipment WHERE equipment_name = 'Viscometer 2';
     INSERT INTO stability_rack (chamber_id, rack_code, positions) SELECT c.id, 'R1', 20 FROM stability_chamber c JOIN equipment e ON e.id = c.equipment_id WHERE e.equipment_name IN ('HPLC T1','Viscometer 2');
     INSERT INTO stability_rack (chamber_id, rack_code) SELECT c.id, 'R2' FROM stability_chamber c JOIN equipment e ON e.id = c.equipment_id WHERE e.equipment_name = 'Viscometer 2'$$);
-SELECT pg_temp.expect_error_like('Retired equipment is not a chamber',
-  $$INSERT INTO stability_chamber (equipment_id, condition_id) SELECT id, pg_temp.t26cond('5 °C') FROM equipment WHERE equipment_name = 'Spectro T1'$$, 'retired');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): retired equipment is not a chamber
 SELECT pg_temp.expect_true('A chamber takes its lab from its equipment', (SELECT bool_and(site_id = pg_temp.t26site('CFL')) FROM stability_chamber));
 SELECT pg_temp.expect_error_like('Rack codes are unique in a chamber',
   $$INSERT INTO stability_rack (chamber_id, rack_code) SELECT c.id, 'r1' FROM stability_chamber c JOIN equipment e ON e.id = c.equipment_id WHERE e.equipment_name = 'Viscometer 2'$$, 'stability_rack_code_uq');
@@ -64,8 +63,7 @@ SELECT pg_temp.expect_true('A stability quote gets an SQ- code', (SELECT project
 SELECT new_project_version(id) FROM project WHERE project_name = 'Rule test stability';
 INSERT INTO stability_plan (project_version_id, site_id, product, lot, unit_name, escalation_pct, reserve_pct)
 VALUES (pg_temp.t26v(), pg_temp.t26site('CFL'), 'Fish oil softgels', 'FO-2610', 'bottles', 3, 10);
-SELECT pg_temp.expect_error_like('The study is stored and tested by the quote''s lab',
-  $$UPDATE stability_plan SET site_id = pg_temp.t26site('TPS') WHERE project_version_id = pg_temp.t26v()$$, 'lab the quote was made in');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): the study is stored and tested by the quote's lab
 INSERT INTO stability_version_condition (project_version_id, condition_id, sort_order)
 VALUES (pg_temp.t26v(), pg_temp.t26cond('25 °C / 60% RH'), 1), (pg_temp.t26v(), pg_temp.t26cond('40 °C / 75% RH'), 2);
 INSERT INTO stability_timepoint (project_version_id, label, interval_value, interval_unit, days_early, days_late)
@@ -74,10 +72,8 @@ INSERT INTO quoted_test_configuration (project_version_id, test_id) SELECT pg_te
 UPDATE quoted_test_configuration SET final_price = list_price WHERE project_version_id = pg_temp.t26v();
 SELECT pg_temp.expect_error_like('Issuing is refused while the design has an Error (tests in no cell)',
   $$UPDATE project_version SET status = 'Quoted', valid_until = current_date + 30 WHERE id = pg_temp.t26v()$$, 'not at any timepoint');
-SELECT pg_temp.expect_error_like('T0 has no storage condition',
-  $$INSERT INTO stability_cell (project_version_id, line_id, timepoint_id, condition_id) VALUES (pg_temp.t26v(), pg_temp.t26line('T-00002'), pg_temp.t26tp('T0'), pg_temp.t26cond('25 °C / 60% RH'))$$, 'no storage condition');
-SELECT pg_temp.expect_error_like('A pull is for one of the study''s conditions',
-  $$INSERT INTO stability_cell (project_version_id, line_id, timepoint_id, condition_id) VALUES (pg_temp.t26v(), pg_temp.t26line('T-00002'), pg_temp.t26tp('1 M'), pg_temp.t26cond('5 °C'))$$, 'one of the study');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): T0 has no storage condition
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): a pull is for one of the study's conditions
 -- the matrix: moisture at T0 and every pull at both conditions; metals at T0 and 14 M at 25/60
 INSERT INTO stability_cell (project_version_id, line_id, timepoint_id, condition_id, units_required)
 SELECT pg_temp.t26v(), pg_temp.t26line('T-00002'), t.id, CASE WHEN t.interval_value = 0 THEN NULL ELSE c.condition_id END, 2
@@ -89,8 +85,7 @@ SELECT pg_temp.expect_true('A line''s quantity is the number of times the study 
   (SELECT quantity FROM quoted_test_configuration WHERE id = pg_temp.t26line('T-00002')) = 7 AND (SELECT quantity FROM quoted_test_configuration WHERE id = pg_temp.t26line('T-00001')) = 2);
 SELECT pg_temp.expect_true('The design has no Error now (warnings only)', NOT EXISTS (SELECT 1 FROM stability_quote_problems(pg_temp.t26v()) WHERE severity = 'Error'));
 SELECT pg_temp.expect_ok('The quote is issued', $$UPDATE project_version SET status = 'Quoted', valid_until = current_date + 30 WHERE id = pg_temp.t26v()$$);
-SELECT pg_temp.expect_error_like('The design is locked once issued',
-  $$UPDATE stability_cell SET units_required = 5 WHERE project_version_id = pg_temp.t26v()$$, 'locked');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): the design is locked once issued (StabilityService refuses a version that is not Draft or Submitted)
 SELECT pg_temp.expect_true('A stability quote''s tests are never orderable by hand',
   NOT EXISTS (SELECT 1 FROM orderable_lines((SELECT id FROM client WHERE legal_name = 'Beta Foods LLC')) WHERE line_id IN (pg_temp.t26line('T-00001'), pg_temp.t26line('T-00002'))));
 
@@ -181,9 +176,8 @@ SELECT pg_temp.expect_true('Year-one pulls are priced at the quoted price',
     WHERE rt.stability_study_id = (pg_temp.t26study()).id AND rt.status <> 'Cancelled'));
 
 -- 8. setup that would strand material is refused; the audit trail links
-SELECT pg_temp.expect_error_like('A chamber holding study material keeps its condition',
-  $$UPDATE stability_chamber SET condition_id = pg_temp.t26cond('30 °C / 65% RH') WHERE equipment_id = (SELECT id FROM equipment WHERE equipment_name = 'HPLC T1')$$, 'stored in this chamber');
-SELECT pg_temp.expect_error_like('A condition on a quote keeps its temperature', $$UPDATE stability_condition SET temperature_c = 26 WHERE id = pg_temp.t26cond('25 °C / 60% RH')$$, 'fixed');
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): a chamber holding study material keeps its condition
+-- Moved to the Java backend in migration 070 (JUnit: StabilityRulesTest): a condition on a quote keeps its temperature
 SELECT pg_temp.expect_true('The audit trail links the study and the quote to their pages',
   (SELECT audit_record_ref('stability_study', id, to_jsonb(s)) ->> 'href' LIKE '#/stability/studies/%' FROM stability_study s WHERE id = (pg_temp.t26study()).id)
   AND (SELECT audit_record_ref('project', id, to_jsonb(p)) ->> 'href' LIKE '#/stability/quotes/%' FROM project p WHERE project_name = 'Rule test stability'));

@@ -60,69 +60,52 @@ SELECT pg_temp.expect_true('trending.approve: QA, not the Lab Supervisor',
 -- 1. QA status follows what the chart is
 SELECT pg_temp.qas('tq.sup');
 SELECT pg_temp.expect_ok('A chart without QA review', $$INSERT INTO trend_chart (site_id, chart_name, source, params) VALUES (pg_temp.qcfl(), 'TQ plain', 'counts', '{"metric":"oos_opened"}')$$);
-SELECT pg_temp.expect_true('... needs no QA approval', (pg_temp.qc('TQ plain')).qa_status = 'Not required');
-SELECT pg_temp.expect_ok('A QA reviewable QC chart', format($$INSERT INTO trend_chart (site_id, chart_name, source, params, qa_review) VALUES (pg_temp.qcfl(), 'TQ QC chart', 'qc', %L::jsonb, true)$$,
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a chart without QA review needs no QA approval
+SELECT pg_temp.expect_ok('A QA reviewable QC chart', format($$INSERT INTO trend_chart (site_id, chart_name, source, params, qa_review, qa_status) VALUES (pg_temp.qcfl(), 'TQ QC chart', 'qc', %L::jsonb, true, 'Awaiting QA')$$,
   (SELECT jsonb_build_object('test_id', test_id, 'qc_type', qc_type, 'limit_type', limit_type, 'analyte_id', analyte_id) FROM tq_qc)));
-SELECT pg_temp.expect_true('... waits for QA', (pg_temp.qc('TQ QC chart')).qa_status = 'Awaiting QA');
-SELECT pg_temp.expect_ok('A QC chart shown in QC Review, saved without QA review ticked', format($$INSERT INTO trend_chart (site_id, chart_name, source, params, show_in_review) VALUES (pg_temp.qcfl(), 'TQ in review', 'qc', %L::jsonb, true)$$,
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a QA reviewable chart waits for QA
+SELECT pg_temp.expect_ok('A QC chart shown in QC Review', format($$INSERT INTO trend_chart (site_id, chart_name, source, params, show_in_review, qa_review, qa_status) VALUES (pg_temp.qcfl(), 'TQ in review', 'qc', %L::jsonb, true, true, 'Awaiting QA')$$,
   (SELECT jsonb_build_object('test_id', test_id) FROM tq_qc)));
-SELECT pg_temp.expect_true('... is QA reviewed all the same, and waits for QA', (pg_temp.qc('TQ in review')).qa_review AND (pg_temp.qc('TQ in review')).qa_status = 'Awaiting QA');
-SELECT pg_temp.expect_error_like('Nobody sets a chart Approved by editing it', $$UPDATE trend_chart SET qa_status = 'Approved' WHERE id = (pg_temp.qc('TQ QC chart')).id$$, 'signed approval');
-SELECT pg_temp.expect_error_like('A Lab Supervisor cannot take a chart off QA review', $$UPDATE trend_chart SET qa_review = false WHERE id = (pg_temp.qc('TQ QC chart')).id$$, 'trending.approve');
-SELECT pg_temp.expect_error_like('A chart in QC Review cannot be taken off QA review', $$UPDATE trend_chart SET qa_review = false WHERE id = (pg_temp.qc('TQ in review')).id$$, 'take it out of QC Review first');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a chart in QC Review is QA reviewed all the same, and waits for QA
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): nobody sets a chart Approved by editing it (only QA's signed approval)
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest; TrendingService asks trending.approve): a Lab Supervisor cannot take a chart off QA review
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a chart in QC Review cannot be taken off QA review
 
 -- 2. QA's approval
-SELECT pg_temp.expect_error_like('A Lab Supervisor cannot approve a chart (trending.approve)', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$, 'trending.approve');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a Lab Supervisor cannot approve a chart (trending.approve), approval
+-- is signed, Approved with who, when and the signature, not twice, and a chart without QA review has nothing to approve
 SELECT pg_temp.qas('tq.qa');
-SELECT pg_temp.expect_error_like('QA approval needs a signature', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$, 'signature');
-SELECT script_signature('Approved by', false);
-SELECT pg_temp.expect_ok('QA approves the chart (signed)', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$);
-SELECT pg_temp.expect_true('... Approved, with who, when and the signature',
-  (pg_temp.qc('TQ QC chart')).qa_status = 'Approved' AND (pg_temp.qc('TQ QC chart')).qa_approved_by = pg_temp.qu('tq.qa') AND (pg_temp.qc('TQ QC chart')).qa_signature_id IS NOT NULL);
-SELECT pg_temp.expect_error_like('A chart already approved is not approved twice', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$, 'already approved');
-SELECT pg_temp.expect_error_like('A chart without QA review has nothing to approve', $$SELECT approve_trend_chart((pg_temp.qc('TQ plain')).id)$$, 'not set for QA review');
 
 -- 3. a change sends it back to QA; whoever changed it cannot approve it
 SELECT pg_temp.qas('tq.sup');
 SELECT pg_temp.expect_ok('The supervisor changes the chart''s rules', $$UPDATE trend_chart SET rules = '{R1,R2}' WHERE id = (pg_temp.qc('TQ QC chart')).id$$);
-SELECT pg_temp.expect_true('... back to Awaiting QA, the earlier approval cleared', (pg_temp.qc('TQ QC chart')).qa_status = 'Awaiting QA' AND (pg_temp.qc('TQ QC chart')).qa_approved_by IS NULL);
-SELECT pg_temp.expect_ok('A change of name only keeps it as it is', $$UPDATE trend_chart SET chart_name = 'TQ QC chart' WHERE id = (pg_temp.qc('TQ QC chart')).id$$);
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a change sends it back to Awaiting QA, the earlier approval cleared
 SELECT pg_temp.qas('tq.sup2');
 SELECT pg_temp.expect_ok('Another supervisor freezes its limits from a baseline', $$UPDATE trend_chart SET frozen_cl = 100, frozen_sigma = 4, frozen_n = 20 WHERE id = (pg_temp.qc('TQ QC chart')).id$$);
-SELECT pg_temp.expect_true('... still waits for QA (frozen limits are approved too)', (pg_temp.qc('TQ QC chart')).qa_status = 'Awaiting QA');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): frozen limits wait for QA too
 SELECT pg_temp.expect_true('The limits cannot go to the test before QA approves them',
   (SELECT problem FROM trend_limits_for_test((pg_temp.qc('TQ QC chart')).id)) LIKE 'QA approves%');
-
--- QA in the Lab Supervisor group too: froze or changed it, so cannot approve it
-SELECT pg_temp.qas('akiddle');
-SELECT script_signature('Rule test', false);
-INSERT INTO group_member (group_id, user_id) SELECT g.id, pg_temp.qu('tq.sup2') FROM lab_group g WHERE g.site_id = pg_temp.qcfl() AND g.group_name = 'QA' ON CONFLICT DO NOTHING;
-SELECT pg_temp.qas('tq.sup2');
-SELECT script_signature('Approved by', false);
-SELECT pg_temp.expect_error_like('Whoever froze the limits cannot approve the chart', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$, 'someone else approves');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): whoever froze the limits cannot approve the chart
 SELECT pg_temp.qas('tq.qa');
-SELECT script_signature('Approved by', false);
-SELECT pg_temp.expect_ok('QA approves the chart and its frozen limits', $$SELECT approve_trend_chart((pg_temp.qc('TQ QC chart')).id)$$);
+-- (fixture: QA's approval, which Java records since migration 070)
+UPDATE trend_chart SET qa_status = 'Approved', qa_approved_by = pg_temp.qu('tq.qa'), qa_approved_at = clock_timestamp() WHERE id = (pg_temp.qc('TQ QC chart')).id;
 SELECT pg_temp.expect_true('Its limits for the test: centre line ± 3 sigma (88 to 112), no problem',
   (SELECT problem IS NULL AND lcl = 88 AND ucl = 112 FROM trend_limits_for_test((pg_temp.qc('TQ QC chart')).id)));
 
 -- 4. the limits into the test: only into a Draft version, signed, by someone with methods.design
 SELECT pg_temp.qas('tq.sup');
-SELECT pg_temp.expect_error_like('The limits go only into a Draft version of the chart''s test', $$SELECT record_trend_limits_applied((pg_temp.qc('TQ QC chart')).id, NULL)$$, 'Draft version');
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): the limits go only into a Draft version of the chart's test, not the
+-- effective one; the chart keeps the version, who and when, and stays approved
 SELECT script_signature('Changed by', false);
-SELECT pg_temp.expect_error_like('Not into the effective version', $$SELECT record_trend_limits_applied((pg_temp.qc('TQ QC chart')).id, (SELECT id FROM test_version WHERE test_id = (SELECT test_id FROM tq_qc) AND status = 'Effective'))$$, 'Draft version');
 CREATE TEMP TABLE IF NOT EXISTS tq_v (id uuid); DELETE FROM tq_v;
 SELECT pg_temp.expect_ok('A Draft version of the test (signed)', $$INSERT INTO tq_v SELECT new_test_version((SELECT test_id FROM tq_qc))$$);
-SELECT pg_temp.expect_ok('The supervisor records the limits carried into the Draft (signed)', $$SELECT record_trend_limits_applied((pg_temp.qc('TQ QC chart')).id, (SELECT id FROM tq_v))$$);
-SELECT pg_temp.expect_true('... the chart keeps the version, who and when', (pg_temp.qc('TQ QC chart')).applied_version_id = (SELECT id FROM tq_v) AND (pg_temp.qc('TQ QC chart')).applied_by = pg_temp.qu('tq.sup'));
-SELECT pg_temp.expect_true('... and is still approved (recording it is not a change to the chart)', (pg_temp.qc('TQ QC chart')).qa_status = 'Approved');
 SELECT pg_temp.expect_true('A chart charting each analyte cannot carry limits to a test',
   (SELECT problem FROM trend_limits_for_test((pg_temp.qc('TQ in review')).id)) IS NOT NULL);
 
 -- 5. QA can take a chart off QA review
 SELECT pg_temp.qas('tq.qa');
 SELECT pg_temp.expect_ok('QA takes a chart off QA review', $$UPDATE trend_chart SET qa_review = false WHERE id = (pg_temp.qc('TQ QC chart')).id$$);
-SELECT pg_temp.expect_true('... no QA approval needed any more', (pg_temp.qc('TQ QC chart')).qa_status = 'Not required' AND (pg_temp.qc('TQ QC chart')).qa_approved_by IS NULL);
+-- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): off QA review, no QA approval is needed any more
 
 SELECT set_config('lims.site_id', '', false);
 SELECT set_config('lims.signature_id', '', false);

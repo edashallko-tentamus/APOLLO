@@ -166,40 +166,76 @@ SELECT pg_temp.expect_true('A new version of a quote carries its charges',
   (SELECT version_no = 2 FROM project_version WHERE id = pg_temp.m_v('CH draft quote'))
   AND EXISTS (SELECT 1 FROM quoted_charge WHERE project_version_id = pg_temp.m_v('CH draft quote') AND unit_price = 30 AND list_price = 40));
 
+-- Charges and drafts as Java writes them (their rules moved to the Java backend in migration 069: ChargeRulesTest, InvoicingRulesTest)
+CREATE OR REPLACE FUNCTION pg_temp.claim_charges(p_charges uuid[]) RETURNS uuid[] LANGUAGE plpgsql AS $$
+DECLARE o record; inv uuid; v uuid; out uuid[] := '{}';
+BEGIN
+  PERFORM set_invoice_internal(true);
+  FOR o IN SELECT DISTINCT lab_order_id FROM charge_ready_view WHERE order_charge_id = ANY (p_charges) LOOP
+    inv := invoice_draft_for(o.lab_order_id);
+    FOR v IN SELECT order_charge_id FROM charge_ready_view WHERE order_charge_id = ANY (p_charges) AND lab_order_id = o.lab_order_id ORDER BY sample_code NULLS FIRST, charge_name LOOP
+      PERFORM invoice_add_charge_line(inv, v);
+    END LOOP;
+    PERFORM invoice_totals(inv);
+    out := out || inv;
+  END LOOP;
+  PERFORM set_invoice_internal(false);
+  RETURN out;
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.add_charge(p_inv uuid, p_item uuid, p_price numeric, p_note text) RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE ci charge_item; v uuid;
+BEGIN
+  SELECT * INTO ci FROM charge_item WHERE id = p_item;
+  INSERT INTO order_charge (lab_order_id, charge_item_id, quantity, list_price, unit_price, source, note)
+  SELECT lab_order_id, p_item, 1, charge_sign(ci.kind) * ci.price, charge_sign(ci.kind) * abs(p_price), 'Invoice', p_note FROM invoice WHERE id = p_inv RETURNING id INTO v;
+  PERFORM set_invoice_internal(true);
+  PERFORM invoice_add_charge_line(p_inv, v);
+  PERFORM invoice_totals(p_inv);
+  PERFORM set_invoice_internal(false);
+  RETURN v;
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.pay(p_inv uuid, p_on date, p_note text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM ensure_reason(CASE WHEN p_on IS NULL THEN 'Payment record cleared' ELSE 'Payment recorded' END);
+  PERFORM set_invoice_internal(true);
+  PERFORM set_config('lims.invoice_after_issue', 'payment', true);
+  UPDATE invoice SET paid_on = p_on, paid_note = p_note, paid_recorded_by = current_app_user(), paid_recorded_at = clock_timestamp() WHERE id = p_inv;
+  PERFORM set_config('lims.invoice_after_issue', '', true);
+  PERFORM set_invoice_internal(false);
+END $$;
+
 -------------------------------------------------------------------------------
 -- 4. CHARGES ON ORDERS AND INVOICES
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('ch.in');
 SELECT pg_temp.m_reason('');
 SELECT pg_temp.m_order('CH Quoted Co', 'M-CHG');
-INSERT INTO order_charge (lab_order_id, charge_item_id) SELECT pg_temp.m_o('M-CHG'), id FROM charge_item WHERE charge_name = 'Ground shipping';
+-- the client's quoted price, as Java's OrderCharge.price works it out
+INSERT INTO order_charge (lab_order_id, charge_item_id, list_price, unit_price, quoted_charge_id)
+  SELECT pg_temp.m_o('M-CHG'), ci.id, ci.price, cp.unit_price, cp.quoted_charge_id FROM charge_item ci, client_charge_price(pg_temp.m_client('CH Quoted Co'), ci.id) cp
+   WHERE ci.charge_name = 'Ground shipping';
 SELECT pg_temp.expect_true('A charge on an order takes the client''s quoted price',
   (SELECT oc.unit_price = 15 AND oc.list_price = 25 AND oc.quoted_charge_id IS NOT NULL AND oc.charge_no LIKE 'OC-%' FROM order_charge oc WHERE oc.lab_order_id = pg_temp.m_o('M-CHG')));
-SELECT pg_temp.expect_error_like('A charge typed at another price needs a reason',
-  $$INSERT INTO order_charge (lab_order_id, charge_item_id, unit_price, quantity) SELECT pg_temp.m_o('M-CHG'), id, 35, 2 FROM charge_item WHERE charge_name = 'Sampling kit'$$, 'Say why');
+-- Moved to the Java backend in migration 069 (JUnit: ChargeRulesTest.chargesOnAnOrder): a charge typed at another price needs a reason
 SELECT pg_temp.m_reason('Two kits at the promised price');
-INSERT INTO order_charge (lab_order_id, charge_item_id, unit_price, quantity) SELECT pg_temp.m_o('M-CHG'), id, 35, 2 FROM charge_item WHERE charge_name = 'Sampling kit';
+INSERT INTO order_charge (lab_order_id, charge_item_id, list_price, unit_price, quantity) SELECT pg_temp.m_o('M-CHG'), id, price, 35, 2 FROM charge_item WHERE charge_name = 'Sampling kit';
 SELECT pg_temp.m_reason('');
 SELECT pg_temp.expect_true('Charges are ready to invoice at once (no workflow, no COA)',
   (SELECT count(*) FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')) = 2
   AND (SELECT sum(amount) FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')) = 85);
-SELECT pg_temp.expect_error_like('A charge''s item is fixed',
-  $$UPDATE order_charge SET charge_item_id = (SELECT id FROM charge_item WHERE charge_name = 'Sampling kit') WHERE lab_order_id = pg_temp.m_o('M-CHG') AND unit_price = 15$$, 'fixed');
-SELECT pg_temp.expect_error_like('Changing a charge needs a reason',
-  $$UPDATE order_charge SET quantity = 3 WHERE lab_order_id = pg_temp.m_o('M-CHG') AND unit_price = 15$$, 'Reason for Change');
-SELECT pg_temp.expect_error_like('Only billing claims charges',
-  $$SELECT claim_invoice_charges(ARRAY(SELECT order_charge_id FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')))$$, 'permission');
+-- Moved to the Java backend in migration 069 (JUnit: ChargeRulesTest): a charge's item is fixed (Java never changes it)
+-- Moved to the Java backend in migration 069 (JUnit: ChargeRulesTest.chargesOnAnOrder): changing a charge needs a reason
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): only billing claims charges (the database permission function stays)
 SELECT pg_temp.as_user('ch.bill');
-CREATE TEMP TABLE m_inv AS SELECT unnest(claim_invoice_charges(ARRAY(SELECT order_charge_id FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')))) AS id;
+CREATE TEMP TABLE m_inv AS SELECT unnest(pg_temp.claim_charges(ARRAY(SELECT order_charge_id FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')))) AS id;
 SELECT pg_temp.expect_true('Claiming charges makes one draft for the order, a line per charge',
   (SELECT count(*) FROM m_inv) = 1 AND (SELECT count(*) FROM invoice_line WHERE invoice_id = (SELECT id FROM m_inv) AND order_charge_id IS NOT NULL) = 2
   AND NOT EXISTS (SELECT 1 FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')));
 SELECT pg_temp.m_reason('Charge on an invoice');
 SELECT pg_temp.as_user('ch.in');
-SELECT pg_temp.expect_error_like('A charge on an invoice is changed there, not on the order',
-  $$UPDATE order_charge SET quantity = 3 WHERE lab_order_id = pg_temp.m_o('M-CHG') AND unit_price = 15$$, 'on an invoice');
+-- Moved to the Java backend in migration 069 (JUnit: ChargeRulesTest.chargesOnAnOrder): a charge on an invoice is changed there, not on the order
 SELECT pg_temp.as_user('ch.bill');
-SELECT add_invoice_charge((SELECT id FROM m_inv), (SELECT id FROM charge_item WHERE charge_name = 'Loyalty discount'), 1, 10, 'Goodwill');
+SELECT pg_temp.add_charge((SELECT id FROM m_inv), (SELECT id FROM charge_item WHERE charge_name = 'Loyalty discount'), 10, 'Goodwill');
 SELECT pg_temp.expect_true('A discount added on the draft is taken off, and is recorded on the order',
   (SELECT total = 75 FROM invoice WHERE id = (SELECT id FROM m_inv))
   AND EXISTS (SELECT 1 FROM order_charge WHERE lab_order_id = pg_temp.m_o('M-CHG') AND source = 'Invoice' AND unit_price = -10));
@@ -213,15 +249,14 @@ SELECT pg_temp.expect_true('QuickBooks gets the discount as a negative line',
 -- 5. PAYMENT STATUS AND THE PO CORRECTION
 -------------------------------------------------------------------------------
 SELECT pg_temp.expect_true('An issued invoice not yet due is Unpaid', invoice_payment_status((SELECT id FROM m_inv)) = 'Unpaid');
-SELECT pg_temp.expect_error_like('A payment cannot be dated in the future',
-  $$SELECT record_invoice_payment((SELECT id FROM m_inv), site_today(pg_temp.m_site('CFL')) + 1, NULL)$$, 'future');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.paymentsAndTerms): a payment cannot be dated in the future
 SELECT pg_temp.m_reason('');
-SELECT record_invoice_payment((SELECT id FROM m_inv), site_today(pg_temp.m_site('CFL')), 'Cheque 1042');
+SELECT pg_temp.pay((SELECT id FROM m_inv), site_today(pg_temp.m_site('CFL')), 'Cheque 1042');
 SELECT pg_temp.expect_true('Recording the payment marks it Paid, with who and when',
   invoice_payment_status((SELECT id FROM m_inv)) = 'Paid' AND (SELECT paid_recorded_by IS NOT NULL AND paid_note = 'Cheque 1042' FROM invoice WHERE id = (SELECT id FROM m_inv)));
 SELECT pg_temp.expect_true('The payment is in the audit trail with its reason',
   EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'invoice' AND record_id = (SELECT id FROM m_inv) AND reason = 'Payment recorded'));
-SELECT record_invoice_payment((SELECT id FROM m_inv), NULL, NULL);
+SELECT pg_temp.pay((SELECT id FROM m_inv), NULL, NULL);
 SELECT pg_temp.expect_true('A payment record can be cleared', invoice_payment_status((SELECT id FROM m_inv)) = 'Unpaid');
 SELECT pg_temp.expect_error_like('An issued invoice''s amounts never change',
   $$SELECT set_invoice_internal(true); UPDATE invoice SET total = 1 WHERE id = (SELECT id FROM m_inv)$$, 'never changed');
@@ -255,8 +290,7 @@ SELECT pg_temp.expect_true('A credit note credits a charge line and names the ch
   (SELECT count(*) = 1 AND bool_and(order_charge_id IS NOT NULL AND amount = -15) FROM invoice_line WHERE invoice_id = (SELECT id FROM m_cn)));
 SELECT pg_temp.expect_true('A charge credited without re-billing is closed (not ready to invoice again)',
   NOT EXISTS (SELECT 1 FROM charge_ready_view WHERE lab_order_id = pg_temp.m_o('M-CHG')));
-SELECT pg_temp.expect_error_like('A credit note is not paid',
-  $$SELECT record_invoice_payment((SELECT id FROM m_cn), site_today(pg_temp.m_site('CFL')), NULL)$$, 'not paid');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.paymentsAndTerms): a credit note is not paid
 
 SELECT set_config('lims.reason', '', false);
 SELECT test, outcome AS result FROM results;

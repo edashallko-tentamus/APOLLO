@@ -50,14 +50,10 @@ SELECT pg_temp.expect_ok('A Lab Supervisor designs one (logbook.design)',
   $$INSERT INTO logbook (site_id, logbook_name, kind, subject, entry_frequency, review_frequency) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'Rule balance check', 'Equipment check', 'Equipment', 'Daily', 'Daily')$$);
 SELECT pg_temp.expect_true('It gets an LB- code and a Draft version 1', (SELECT l.logbook_code ~ '^LB-\d{4}$' AND v.status = 'Draft' AND v.version_no = 1
    FROM logbook l JOIN logbook_version v ON v.logbook_id = l.id WHERE l.logbook_name = 'Rule balance check'));
-SELECT pg_temp.expect_error_like('A field key is lower-case letters, digits and _',
-  $$INSERT INTO logbook_field (version_id, field_key, label, field_type) VALUES (pg_temp.lbv('Rule balance check'), '9x', 'Bad', 'Number')$$, 'lower-case');
-SELECT pg_temp.expect_error_like('A Choice field lists its choices',
-  $$INSERT INTO logbook_field (version_id, label, field_type) VALUES (pg_temp.lbv('Rule balance check'), 'Grade', 'Choice')$$, 'lists its choices');
-SELECT pg_temp.expect_error_like('Only a logbook about lots publishes values',
-  $$INSERT INTO logbook_field (version_id, label, field_type, publish) VALUES (pg_temp.lbv('Rule balance check'), 'Reading', 'Number', true)$$, 'publishes values');
-SELECT pg_temp.expect_error_like('A lower limit above the upper limit is refused',
-  $$INSERT INTO logbook_field (version_id, label, field_type, limit_min, limit_max) VALUES (pg_temp.lbv('Rule balance check'), 'Reading', 'Number', 5, 1)$$, 'above the upper limit');
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a field key is lower-case letters, digits and _
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a Choice field lists its choices
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): only a logbook about lots publishes values
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a lower limit above the upper limit is refused
 SELECT pg_temp.expect_ok('Fields: check weight, nominal, reading, and the error calculated with a limit per balance',
   $$INSERT INTO logbook_field (version_id, field_key, label, field_type, sort_order, unit, limit_max, equipment_limits, formula) VALUES
     (pg_temp.lbv('Rule balance check'), 'check_weight', 'Check weight ID', 'Text', 10, NULL, NULL, false, NULL),
@@ -72,8 +68,7 @@ SELECT pg_temp.lb_as('e.qa');
 SELECT pg_temp.expect_error_like('A design with an Error cannot be approved', $$SELECT approve_logbook_version(pg_temp.lbv('Rule balance check'))$$, 'problem(s) to fix');
 SELECT pg_temp.lb_as('e.sup');
 SELECT pg_temp.expect_ok('The formula fixed', $$UPDATE logbook_field SET formula = 'abs({reading_g} - {nominal_g}) / {nominal_g} * 100' WHERE version_id = pg_temp.lbv('Rule balance check') AND field_key = 'error_pct'$$);
-SELECT pg_temp.expect_error_like('A Lot or Equipment logbook covers equipment of its own lab only',
-  $$INSERT INTO logbook_equipment (logbook_id, equipment_id) VALUES (pg_temp.lb('Rule balance check'), pg_temp.lbeq('Balance T1'))$$, 'another lab');
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a logbook covers equipment of its own lab only
 SELECT pg_temp.expect_ok('It covers WD Balance 1 (error at most 0.05 %) and WD Balance 2 (the field''s 0.1 %)',
   $$INSERT INTO logbook_equipment (logbook_id, equipment_id, limits) VALUES (pg_temp.lb('Rule balance check'), pg_temp.lbeq('WD Balance 1'), '{"error_pct": {"max": 0.05}}'),
     (pg_temp.lb('Rule balance check'), pg_temp.lbeq('WD Balance 2'), '{}')$$);
@@ -89,7 +84,7 @@ SELECT pg_temp.expect_ok('QA approves it (signed)', $$SELECT approve_logbook_ver
 SELECT pg_temp.expect_true('Version 1 is Effective, approved by QA with the signature', (SELECT v.status = 'Effective' AND v.approved_by = (SELECT id FROM app_user WHERE username = 'e.qa') AND v.signature_id IS NOT NULL
    FROM logbook_version v WHERE v.id = pg_temp.lbv('Rule balance check')));
 SELECT pg_temp.lb_as('e.sup');
-SELECT pg_temp.expect_error_like('An Effective design is locked', $$UPDATE logbook_field SET limit_max = 0.2 WHERE version_id = pg_temp.lbv('Rule balance check') AND field_key = 'error_pct'$$, 'start a new version');
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): an Effective design is locked (LogbooksService writes fields only to the Draft)
 SELECT pg_temp.expect_ok('A new version copies the design as a Draft', $$SELECT new_logbook_version(pg_temp.lb('Rule balance check'), 'Rule test')$$);
 SELECT pg_temp.expect_true('... with its four fields', (SELECT count(*) = 4 FROM logbook_field WHERE version_id = pg_temp.lbv('Rule balance check') AND status = 'Active')
    AND (SELECT status FROM logbook_version WHERE id = pg_temp.lbv('Rule balance check')) = 'Draft');
@@ -241,12 +236,12 @@ SELECT pg_temp.expect_true('A reading inside the limits of the 25 °C chamber pa
 
 -- 7. a logbook that makes lots, and a value across logbooks (a culture's passage)
 SELECT pg_temp.lb_as('e.sup');
-SELECT pg_temp.expect_error_like('A logbook that makes lots is about lots', $$INSERT INTO logbook (site_id, logbook_name, kind, subject, creates_lot) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'Rule bad', 'Inoculum', 'None', true)$$, 'about lots');
-SELECT pg_temp.expect_error_like('... and signs its entries', $$INSERT INTO logbook (site_id, logbook_name, kind, subject, creates_lot, signing) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'Rule bad', 'Inoculum', 'Lot', true, 'Recorded')$$, 'signs its entries');
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a logbook that makes lots is about lots
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): ... and signs its entries
 SELECT pg_temp.expect_ok('A culture logbook publishes each culture''s passage',
   $$INSERT INTO logbook (site_id, logbook_name, kind, subject, review_frequency) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'Rule cultures', 'Culture', 'Lot', 'Weekly');
     INSERT INTO logbook_field (version_id, field_key, label, field_type, sort_order, limit_max, publish) VALUES (pg_temp.lbv('Rule cultures'), 'passage', 'Passage', 'Number', 10, 5, true)$$);
-SELECT pg_temp.expect_error_like('A published value cannot take a name the bench formulas use', $$INSERT INTO logbook_field (version_id, field_key, label, field_type, publish) VALUES (pg_temp.lbv('Rule cultures'), 'weight', 'Weight', 'Number', true)$$, 'bench formulas use');
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a published value cannot take a name the bench formulas use
 SELECT pg_temp.expect_ok('An inoculum logbook makes a lot per entry (valid 24 h), and reads the culture''s passage',
   $$INSERT INTO logbook (site_id, logbook_name, kind, subject, creates_lot, lot_name, validity_hours, review_frequency) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'Rule inocula', 'Inoculum', 'Lot', true, 'Challenge inoculum', 24, 'Daily');
     INSERT INTO logbook_field (version_id, field_key, label, field_type, sort_order, limit_max, formula, publish, unit) VALUES

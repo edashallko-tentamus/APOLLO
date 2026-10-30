@@ -76,46 +76,30 @@ SELECT pg_temp.expect_true('The department sets its own count (department traine
   (training_rule_for(pg_temp.tr_site('CFL'), (SELECT department_id FROM tr_fx))).dept_trained_after = 1
   AND (training_rule_for(pg_temp.tr_site('CFL'), gen_random_uuid())).dept_trained_after = 4);
 SELECT pg_temp.expect_error_like('One rule per department', $$INSERT INTO training_rule (site_id, department_id) VALUES (pg_temp.tr_site('CFL'), (SELECT department_id FROM tr_fx))$$, 'training_rule_one');
-SELECT pg_temp.expect_error_like('Runs and months go together', $$UPDATE training_rule SET min_runs = 3 WHERE site_id = pg_temp.tr_site('CFL') AND department_id = (SELECT department_id FROM tr_fx)$$, 'training_rule_runs');
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.theRules): runs and months go together (and the other rule ranges, at least one route)
 
 -------------------------------------------------------------------------------
 -- 2. INITIAL COMPETENCY BY RECORD
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('tc.ana');
-SELECT pg_temp.expect_error_like('A trainee does not start their own training (no training.record)',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Read the SOP', site_today(pg_temp.tr_site('CFL')))$$, 'may not start training');
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.startingAnAttempt): only a trainer starts training, never their own; a record says
+--   what was done; continuing competency needs a qualification to keep up; one open attempt per person and test; someone qualified is not given an
+--   initial competency again
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.initialCompetencyByRecord): an attempt changes only through its steps; a record is
+--   evaluated with its evidence attached; nobody evaluates their own competency; a fail says why; only QA (training.approve) decides, never the trainee
+--   or the evaluator; rejecting says why; QA's approval grants the qualification; a qualification is never typed in (the Java service signs each step)
+-- fixture: tc.ana's initial competency by record, approved by QA, as the Java service writes it
 SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('A record says what was done', $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', '', site_today(pg_temp.tr_site('CFL')))$$, 'Describe the training');
-SELECT pg_temp.expect_error_like('Continuing competency needs a qualification to keep up',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly check', site_today(pg_temp.tr_site('CFL')))$$, 'has none');
-SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Read the SOP; observed 3 runs; ran 3 supervised', current_date - 2);
+INSERT INTO competency_attempt (user_id, test_id, site_id, kind, route, description, trained_on, status, evaluation, evaluated_by, evaluated_at, decided_by, decided_at)
+VALUES (pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), pg_temp.tr_site('CFL'), 'Initial', 'Record', 'Read the SOP; observed 3 runs; ran 3 supervised', current_date - 2,
+        'Approved', 'Pass', pg_temp.tr_uid('tc.sup'), now(), pg_temp.tr_uid('tc.qa'), now());
 CREATE TEMP TABLE tr_a1 AS SELECT attempt_code AS code, id FROM competency_attempt WHERE user_id = pg_temp.tr_uid('tc.ana') ORDER BY created_at DESC LIMIT 1;
-SELECT pg_temp.expect_true('The attempt is TA-..., Initial, by record, in progress', (SELECT attempt_code LIKE 'TA-%' AND kind = 'Initial' AND route = 'Record' AND status = 'In progress' FROM competency_attempt WHERE id = (SELECT id FROM tr_a1)));
-SELECT pg_temp.expect_error_like('One open attempt per person and test',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'Again', site_today(pg_temp.tr_site('CFL')))$$, 'already has an open');
-SELECT pg_temp.expect_error_like('An attempt changes only through its steps', $$UPDATE competency_attempt SET status = 'Approved' WHERE id = (SELECT id FROM tr_a1)$$, 'only through its steps');
-SELECT pg_temp.expect_error_like('A record is evaluated with its evidence attached', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Pass', NULL)$$, 'evidence');
 INSERT INTO competency_evidence (attempt_id, document_id, title) VALUES ((SELECT id FROM tr_a1), pg_temp.tr_doc(), 'Signed training form');
-SELECT pg_temp.as_user('tc.ana');
-SELECT pg_temp.expect_error_like('Nobody evaluates their own competency', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Pass', NULL)$$, 'own competency');
-SELECT pg_temp.as_user('tc.sup');
-SELECT set_config('lims.signature_id', '', false);
-SELECT pg_temp.expect_error_like('The evaluation is signed', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Pass', NULL)$$, 'signature');
-SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('A fail says why', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Fail', '')$$, 'Say why');
-SELECT evaluate_competency_attempt((SELECT id FROM tr_a1), 'Pass', NULL);
-SELECT pg_temp.expect_error_like('The Lab Supervisor does not approve (training.approve)', $$SELECT decide_competency_attempt((SELECT id FROM tr_a1), 'Approved', NULL)$$, 'training.approve');
-SELECT pg_temp.as_user('tc.qa');
-SELECT pg_temp.expect_error_like('Rejecting says why', $$SELECT decide_competency_attempt((SELECT id FROM tr_a1), 'Rejected', NULL)$$, 'Say why');
-SELECT decide_competency_attempt((SELECT id FROM tr_a1), 'Approved', NULL);
-SELECT pg_temp.expect_true('QA''s approval grants the qualification: AQ-, from the initial competency, current, approved and signed',
-  (SELECT qualification_code LIKE 'AQ-%' AND source = 'Initial competency' AND attempt_id = (SELECT id FROM tr_a1) AND approved_by = pg_temp.tr_uid('tc.qa') AND signature_id IS NOT NULL
-   FROM analyst_qualification WHERE user_id = pg_temp.tr_uid('tc.ana') AND test_id = (SELECT test_id FROM tr_fx) AND status = 'Active')
+INSERT INTO analyst_qualification (user_id, test_id, site_id, source, attempt_id, approved_by, signature_id)
+VALUES (pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), pg_temp.tr_site('CFL'), 'Initial competency', (SELECT id FROM tr_a1), pg_temp.tr_uid('tc.qa'),
+        NULLIF(current_setting('lims.signature_id', true), '')::uuid);
+SELECT pg_temp.expect_true('The qualification is AQ-..., from the initial competency, and current',
+  (SELECT qualification_code LIKE 'AQ-%' AND source = 'Initial competency' FROM analyst_qualification WHERE user_id = pg_temp.tr_uid('tc.ana') AND test_id = (SELECT test_id FROM tr_fx) AND status = 'Active')
   AND qualification_current(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx)));
-SELECT pg_temp.expect_error_like('A qualification is never typed in', $$INSERT INTO analyst_qualification (user_id, test_id, site_id, source) VALUES (pg_temp.tr_uid('tc.ana2'), (SELECT test_id FROM tr_fx), pg_temp.tr_site('CFL'), 'Legacy')$$, 'granted by approving');
-SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('Someone qualified is not given an initial competency again',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Initial', 'Record', NULL, '[]', 'x', site_today(pg_temp.tr_site('CFL')))$$, 'already qualified');
 
 -------------------------------------------------------------------------------
 -- 3. DEPARTMENT TRAINED AND WHAT IT UNLOCKS
@@ -159,59 +143,29 @@ UPDATE lab_site SET require_training = false WHERE site_code = 'CFL';
 -------------------------------------------------------------------------------
 -- 5. CONTINUING COMPETENCY BY RECORD (A CONDITIONAL PASS)
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('tc.sup');
-SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx), 'Continuing', 'Record', NULL, '[]', 'Yearly observed run', site_today(pg_temp.tr_site('CFL')));
-CREATE TEMP TABLE tr_a2 AS SELECT id FROM competency_attempt WHERE user_id = pg_temp.tr_uid('tc.ana') AND kind = 'Continuing' ORDER BY created_at DESC LIMIT 1;
-INSERT INTO competency_evidence (attempt_id, document_id, title) VALUES ((SELECT id FROM tr_a2), pg_temp.tr_doc(), 'Observation sheet');
-SELECT pg_temp.expect_error_like('A conditional pass says what it is conditional on', $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a2), 'Conditional pass', NULL)$$, 'conditional on');
-SELECT evaluate_competency_attempt((SELECT id FROM tr_a2), 'Conditional pass', 'Repeat the digestion step under observation once');
-SELECT pg_temp.as_user('tc.qa');
-SELECT decide_competency_attempt((SELECT id FROM tr_a2), 'Approved', NULL);
-SELECT pg_temp.expect_true('Approved, the continuing competency keeps the qualification up (current again) and records the condition',
-  (SELECT state = 'Current' AND last_competency_at > now() - interval '1 minute' AND conditions LIKE 'Repeat the digestion%' FROM analyst_qualification_view WHERE user_id = pg_temp.tr_uid('tc.ana') AND status = 'Active'));
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.continuingAndFailing): a conditional pass says what it is conditional on; approved,
+--   a continuing competency keeps the qualification up and records the condition; approving a fail grants nothing
 
 -------------------------------------------------------------------------------
 -- 6. TRAINING SAMPLES
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('Training samples need the known value of an analyte',
-  $$SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana2'), (SELECT test_id FROM tr_ts), 'Initial', 'Training samples', 2, '[]', NULL, NULL)$$, 'known value');
-SELECT start_competency_attempt(pg_temp.tr_uid('tc.ana2'), (SELECT test_id FROM tr_ts), 'Initial', 'Training samples', 2,
-  jsonb_build_array(jsonb_build_object('analyte_id', (SELECT analyte_id FROM tr_ts), 'value', 50, 'tolerance_pct', 10)), NULL, NULL);
-CREATE TEMP TABLE tr_a3 AS SELECT id, lab_order_id FROM competency_attempt WHERE user_id = pg_temp.tr_uid('tc.ana2') ORDER BY created_at DESC LIMIT 1;
-SELECT pg_temp.expect_true('Two training samples TRN-... on an internal order (logged), each with the test and the known value as its specification (45 to 55)',
-  (SELECT count(*) = 2 AND bool_and(s.sample_code LIKE 'TRN-%' AND s.status = 'Logged') FROM requested_test rt JOIN sample s ON s.id = rt.sample_id WHERE rt.competency_attempt_id = (SELECT id FROM tr_a3))
-  AND (SELECT bool_and(sp.min_value = 45 AND sp.max_value = 55) FROM specification sp JOIN requested_test rt ON rt.id = sp.requested_test_id WHERE rt.competency_attempt_id = (SELECT id FROM tr_a3))
-  AND (SELECT c.is_internal FROM lab_order o JOIN client c ON c.id = o.client_id WHERE o.id = (SELECT lab_order_id FROM tr_a3)));
-SELECT pg_temp.expect_true('The training samples are not billed (the lab''s own work, no price)',
-  (SELECT bool_and(price = 0) FROM requested_test WHERE competency_attempt_id = (SELECT id FROM tr_a3)));
-SELECT pg_temp.expect_error_like('Evaluated only once every training sample has its approved final result',
-  $$SELECT evaluate_competency_attempt((SELECT id FROM tr_a3), 'Pass', NULL)$$, 'no approved final result');
-SELECT pg_temp.expect_true('Its results list each sample, waiting', (SELECT count(*) = 2 AND bool_and(NOT final) FROM competency_results((SELECT id FROM tr_a3))));
-SELECT withdraw_competency_attempt((SELECT id FROM tr_a3), 'Trainee moved to another bench');
-SELECT pg_temp.expect_true('Withdrawn: its training sample tests not yet batched are cancelled',
-  (SELECT status = 'Withdrawn' FROM competency_attempt WHERE id = (SELECT id FROM tr_a3))
-  AND (SELECT bool_and(status = 'Cancelled') FROM requested_test WHERE competency_attempt_id = (SELECT id FROM tr_a3)));
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.trainingSamples): training samples need the known value of an analyte (1 to 10
+--   samples); the known value plus or minus the tolerance is each sample's specification; evaluated only once every training sample has its approved
+--   final result; withdrawing (a trainer or QA, with the reason) cancels the training sample tests not yet batched. The internal order and its TRN-
+--   samples are made by the Java service (TrainingRepository.makeTrainingSamples); their price still comes from requested_test_derive.
 
 -------------------------------------------------------------------------------
 -- 7. LEGACY QUALIFICATIONS; WITHDRAWING; THE COUNTER; AUDIT
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('tc.sup');
-SELECT pg_temp.expect_error_like('Legacy qualifications are QA''s', $$SELECT grant_legacy_qualifications(pg_temp.tr_site('CFL'))$$, 'training.approve');
+-- Moved to the Java backend in migration 071 (JUnit: TrainingRulesTest.evidenceAndQualifications): legacy qualifications and withdrawing one are QA's
+--   (training.approve, signed); withdrawing gives the reason. The Java service grants legacy qualifications (TrainingRepository.grantLegacy).
+SELECT pg_temp.expect_true('The rolling counter: a person''s bench runs of a test (all time) and the last run',
+  (SELECT x.runs >= 1 AND x.last_at IS NOT NULL FROM step_run r JOIN workflow_step ws ON ws.id = r.step_id,
+          LATERAL training_runs(r.performed_by, (SELECT test_id FROM tr_fx), pg_temp.tr_site('CFL'), NULL) x
+    WHERE r.batch_id = (SELECT batch_id FROM tr_fx) AND r.completed_at IS NOT NULL AND r.performed_by IS NOT NULL AND ws.step_type::text <> 'QC Review' LIMIT 1));
+-- fixture: QA withdraws tc.ana's qualification, as the Java service writes it
 SELECT pg_temp.as_user('tc.qa');
-CREATE TEMP TABLE tr_leg AS SELECT grant_legacy_qualifications(pg_temp.tr_site('CFL')) AS n;
-SELECT pg_temp.expect_true('Legacy: whoever signed a bench step at CFL in the last 12 months gets a qualification for that test (signed by QA), their last run as their last competency',
-  (SELECT n > 0 FROM tr_leg) AND NOT EXISTS (
-     SELECT 1 FROM step_run r JOIN test_batch b ON b.id = r.batch_id JOIN workflow_step ws ON ws.id = r.step_id JOIN app_user u ON u.id = r.performed_by
-      WHERE b.site_id = pg_temp.tr_site('CFL') AND r.completed_at > now() - interval '12 months' AND ws.step_type::text <> 'QC Review' AND NOT b.is_verification
-        AND b.status::text <> 'Cancelled' AND NOT u.is_automated AND u.is_active
-        AND NOT EXISTS (SELECT 1 FROM analyst_qualification q WHERE q.user_id = r.performed_by AND q.test_id = b.test_id AND q.status = 'Active'))
-  AND (SELECT bool_and(signature_id IS NOT NULL AND approved_by = pg_temp.tr_uid('tc.qa')) FROM analyst_qualification WHERE source = 'Legacy'));
-SELECT pg_temp.expect_true('Run again, it grants nothing more', grant_legacy_qualifications(pg_temp.tr_site('CFL')) = 0);
-SELECT pg_temp.expect_true('The rolling counter: a legacy person''s runs of the test (12 months and all) and the last run',
-  (SELECT bool_and(runs_12m >= 1 AND runs_total >= runs_12m AND last_run IS NOT NULL) FROM analyst_qualification_view WHERE source = 'Legacy'));
-SELECT pg_temp.expect_error_like('Withdrawing gives the reason', $$SELECT withdraw_qualification((SELECT id FROM analyst_qualification WHERE user_id = pg_temp.tr_uid('tc.ana') AND status = 'Active'), '')$$, 'reason');
-SELECT withdraw_qualification((SELECT id FROM analyst_qualification WHERE user_id = pg_temp.tr_uid('tc.ana') AND status = 'Active'), 'Left the chemistry bench');
+UPDATE analyst_qualification SET status = 'Inactive', withdrawn_reason = 'Left the chemistry bench' WHERE user_id = pg_temp.tr_uid('tc.ana') AND status = 'Active';
 SELECT pg_temp.expect_true('Withdrawn: kept, with the reason, no longer current',
   (SELECT state = 'Withdrawn' AND withdrawn_reason = 'Left the chemistry bench' FROM analyst_qualification_view WHERE user_id = pg_temp.tr_uid('tc.ana') AND status = 'Inactive')
   AND NOT qualification_current(pg_temp.tr_uid('tc.ana'), (SELECT test_id FROM tr_fx)));

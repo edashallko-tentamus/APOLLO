@@ -65,8 +65,7 @@ INSERT INTO logbook_field (version_id, field_key, label, field_type, sort_order,
   (pg_temp.lbv('Rule sample weights'), 'balance', 'Balance', 'Equipment', 10, NULL), (pg_temp.lbv('Rule sample weights'), 'weight', 'Weight', 'Number', 20, 'g');
 SELECT pg_temp.as_user('e.qa');
 SELECT approve_logbook_version(pg_temp.lbv('Rule challenge inoculum')), approve_logbook_version(pg_temp.lbv('Rule sample weights'));
-SELECT pg_temp.expect_error_like('A sample weights logbook is reviewed in the batch', $$UPDATE logbook SET review_route = 'Logbook' WHERE id = pg_temp.lb('Rule sample weights')$$, 'reviewed in the batch that uses them');
-
+-- Moved to the Java backend in migration 070 (JUnit: LogbookDesignRulesTest): a sample weights logbook is reviewed in the batch
 -- 2. the recovery test: {inoc.cfu_added} from the lot scanned at Inoculate
 SELECT pg_temp.as_user('wd.ana');
 SELECT create_test(pg_temp.cfl(), 'WD Recovery', (SELECT d.id FROM department d WHERE d.site_id = pg_temp.cfl() AND d.department_code = 'WDC'),

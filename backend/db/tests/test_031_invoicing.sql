@@ -108,14 +108,77 @@ SELECT pg_temp.expect_true('A rush reported late shows by how many working days;
   AND (SELECT is_ordered AND NOT met FROM invoice_rush_options(pg_temp.ivrt(pg_temp.iv999(), 'WD Metals')) WHERE tier_name = 'Next day')
   AND (SELECT met FROM invoice_rush_options(pg_temp.ivrt(pg_temp.iv999(), 'WD Metals')) WHERE tier_id IS NULL));
 
+-- Drafts as Java's Billing writes them (the draft rules moved to the Java backend in migration 069: InvoicingRulesTest)
+CREATE OR REPLACE FUNCTION pg_temp.claim(p_tests uuid[], p_note text DEFAULT NULL) RETURNS uuid[] LANGUAGE plpgsql AS $$
+DECLARE o record; inv uuid; v uuid; out uuid[] := '{}';
+BEGIN
+  PERFORM set_invoice_internal(true);
+  FOR o IN SELECT DISTINCT lab_order_id FROM invoice_ready_view WHERE requested_test_id = ANY (p_tests) LOOP
+    inv := invoice_draft_for(o.lab_order_id, p_note);
+    FOR v IN SELECT requested_test_id FROM invoice_ready_view WHERE requested_test_id = ANY (p_tests) AND lab_order_id = o.lab_order_id ORDER BY sample_code, test_name LOOP
+      PERFORM invoice_add_line(inv, v);
+    END LOOP;
+    PERFORM invoice_totals(inv);
+    out := out || inv;
+  END LOOP;
+  PERFORM set_invoice_internal(false);
+  RETURN out;
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.line_price(p_line uuid, p_price numeric, p_note text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_invoice_internal(true);
+  UPDATE invoice_line SET price = p_price, price_note = p_note, rush_fee = CASE WHEN rush_tier_id IS NULL THEN 0 ELSE rush_fee END,
+         amount = p_price + CASE WHEN rush_tier_id IS NULL THEN 0 ELSE rush_fee END WHERE id = p_line;
+  PERFORM invoice_totals((SELECT invoice_id FROM invoice_line WHERE id = p_line));
+  PERFORM set_invoice_internal(false);
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.line_rush(p_line uuid, p_tier uuid, p_note text) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE opt record;
+BEGIN
+  SELECT x.* INTO opt FROM invoice_line l, invoice_rush_options(l.requested_test_id, l.completed_on) x WHERE l.id = p_line AND x.tier_id IS NOT DISTINCT FROM p_tier;
+  PERFORM set_invoice_internal(true);
+  UPDATE invoice_line SET rush_tier_id = opt.tier_id, rush_billed = CASE WHEN opt.tier_id IS NULL THEN NULL ELSE opt.tier_name END, rush_fee = opt.fee,
+         rush_note = CASE WHEN opt.is_ordered THEN NULL ELSE p_note END, amount = price + opt.fee WHERE id = p_line;
+  PERFORM invoice_totals((SELECT invoice_id FROM invoice_line WHERE id = p_line));
+  PERFORM set_invoice_internal(false);
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.draft_edit(p_inv uuid, p_po text, p_note text, p_internal text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_invoice_internal(true);
+  UPDATE invoice SET po_number = p_po, note = p_note, internal_note = p_internal WHERE id = p_inv;
+  PERFORM set_invoice_internal(false);
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.take_off(p_lines uuid[]) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE inv uuid := (SELECT invoice_id FROM invoice_line WHERE id = p_lines[1]);
+BEGIN
+  PERFORM set_invoice_internal(true);
+  UPDATE invoice_line SET status = 'Removed' WHERE id = ANY (p_lines) AND status = 'Active';
+  IF NOT EXISTS (SELECT 1 FROM invoice_line WHERE invoice_id = inv AND status = 'Active') THEN
+    UPDATE invoice SET status = 'Discarded', discarded_at = clock_timestamp() WHERE id = inv;
+  ELSE PERFORM invoice_totals(inv); END IF;
+  PERFORM set_invoice_internal(false);
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.release_draft(p_inv uuid) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_invoice_internal(true);
+  UPDATE invoice_line SET status = 'Removed' WHERE invoice_id = p_inv AND status = 'Active';
+  UPDATE invoice SET status = 'Discarded', discarded_at = clock_timestamp() WHERE id = p_inv;
+  PERFORM set_invoice_internal(false);
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.set_terms(p_client uuid, p_days integer) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('lims.group_sync', '1', true);
+  UPDATE client SET payment_terms_days = p_days WHERE id = p_client;
+  PERFORM set_config('lims.group_sync', '', true);
+END $$;
+
 -- 4. claiming work into drafts
 SELECT pg_temp.iv_as('wd.ana', false);
-SELECT pg_temp.expect_error_like('Someone without invoicing.issue cannot claim work',
-  $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Metals')])$$, 'permission');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): someone without invoicing.issue cannot claim work (the database permission function stays)
 SELECT pg_temp.iv_as('inv.acc', false);
-SELECT pg_temp.expect_error_like('Claiming needs a choice', $$SELECT claim_invoice_work('{}')$$, 'Choose the completed work');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): claiming needs a choice
 SELECT pg_temp.expect_ok('Accounting claims three tests of CFL261015999 (no signature: it only says who is checking them)',
-  $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Metals'), pg_temp.ivrt(pg_temp.iv999(), 'WD Micro Screen')], 'Week 42')$$);
+  $$SELECT pg_temp.claim(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Metals'), pg_temp.ivrt(pg_temp.iv999(), 'WD Micro Screen')], 'Week 42')$$);
 SELECT pg_temp.expect_true('One Draft for the lab order, held by the claimer, numbered DR-, its lines billed as ordered (the rush as ordered)',
   (SELECT count(*) FROM invoice WHERE claimed_by = pg_temp.ivu('inv.acc') AND status = 'Draft') = 1
   AND (SELECT count(*) FROM invoice_line WHERE invoice_id = pg_temp.ivdraft('inv.acc', 'LO-000003') AND status = 'Active') = 2
@@ -124,19 +187,16 @@ SELECT pg_temp.expect_true('One Draft for the lab order, held by the claimer, nu
   AND (SELECT total = (SELECT sum(amount) FROM invoice_line WHERE invoice_id = i.id AND status = 'Active') FROM invoice i WHERE i.id = pg_temp.ivdraft('inv.acc', 'LO-000003'))
   AND NOT EXISTS (SELECT 1 FROM invoice_ready_view WHERE requested_test_id = pg_temp.ivrt(pg_temp.iv999(), 'WD Metals')));
 SELECT pg_temp.expect_ok('Claiming more work of the same order adds it to the same draft',
-  $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Growth Promotion')])$$);
+  $$SELECT pg_temp.claim(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Growth Promotion')])$$);
 SELECT pg_temp.expect_true('Still one draft for LO-000003, now three lines',
   (SELECT count(*) FROM invoice WHERE claimed_by = pg_temp.ivu('inv.acc') AND status = 'Draft') = 1
   AND (SELECT count(*) FROM invoice_line WHERE invoice_id = pg_temp.ivdraft('inv.acc', 'LO-000003') AND status = 'Active') = 3);
 SELECT pg_temp.iv_as('inv.acc2', false);
-SELECT pg_temp.expect_error_like('Nobody else claims work already on a draft',
-  $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Metals')])$$, 'already on a draft');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): nobody else claims work already on a draft
 SELECT pg_temp.expect_ok('A second person claims other work of the same order (their own draft)',
-  $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.ivc('002'), 'WD Micro Screen'), pg_temp.ivrt(pg_temp.ivc('002'), 'WD Growth Promotion')])$$);
-SELECT pg_temp.expect_error_like('Nobody else changes a draft',
-  $$SELECT update_invoice_draft(pg_temp.ivdraft('inv.acc', 'LO-000003'), 'PO-1', '', '')$$, 'being checked by INV Accounting');
-SELECT pg_temp.expect_error_like('Nobody else releases a draft (unless a lab administrator)',
-  $$SELECT release_invoice_draft(pg_temp.ivdraft('inv.acc', 'LO-000003'))$$, 'only they, or a lab administrator');
+  $$SELECT pg_temp.claim(ARRAY[pg_temp.ivrt(pg_temp.ivc('002'), 'WD Micro Screen'), pg_temp.ivrt(pg_temp.ivc('002'), 'WD Growth Promotion')])$$);
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): nobody else changes a draft
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.draftsAndClaims): nobody else releases a draft (unless a lab administrator)
 SELECT pg_temp.expect_error_like('Invoices are not written directly',
   $$UPDATE invoice SET note = 'x' WHERE id = pg_temp.ivdraft('inv.acc', 'LO-000003')$$, 'only through Billing');
 SELECT pg_temp.expect_error_like('Invoice lines are not written directly',
@@ -144,44 +204,39 @@ SELECT pg_temp.expect_error_like('Invoice lines are not written directly',
 
 -- 5. checking the draft: the price, the late rush
 SELECT pg_temp.iv_as('inv.acc', false);
-SELECT pg_temp.expect_error_like('A price above the list price is refused',
-  $$SELECT set_invoice_line_price((pg_temp.ivline(pg_temp.iv999(), 'WD Micro Screen')).id, 999, 'x')$$, 'above the list price');
-SELECT pg_temp.expect_error_like('A price other than the order''s needs a reason',
-  $$SELECT set_invoice_line_price((pg_temp.ivline(pg_temp.iv999(), 'WD Micro Screen')).id, 60, '')$$, 'Say why the price differs');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.priceAndLateRush): a price above the list price is refused
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.priceAndLateRush): a price other than the order's needs a reason
 SELECT pg_temp.expect_ok('The price corrected with its reason',
-  $$SELECT set_invoice_line_price((pg_temp.ivline(pg_temp.iv999(), 'WD Micro Screen')).id, 60, 'Discount corrected to the accepted quote')$$);
+  $$SELECT pg_temp.line_price((pg_temp.ivline(pg_temp.iv999(), 'WD Micro Screen')).id, 60, 'Discount corrected to the accepted quote')$$);
 SELECT pg_temp.expect_true('The line keeps the order''s price, the price billed and why; the total follows',
   (SELECT quoted_price = 80 AND price = 60 AND amount = 60 AND price_note = 'Discount corrected to the accepted quote' FROM pg_temp.ivline(pg_temp.iv999(), 'WD Micro Screen'))
   AND (SELECT total = (SELECT sum(amount) FROM invoice_line WHERE invoice_id = i.id AND status = 'Active') AND discount_total = 20 FROM invoice i WHERE i.id = pg_temp.ivdraft('inv.acc', 'LO-000003')));
-SELECT pg_temp.expect_error_like('A late rush is not billed at a tier also missed',
-  $$SELECT set_invoice_line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't3'), 'late')$$, 'was not met either');
-SELECT pg_temp.expect_error_like('Billing another tier needs a reason',
-  $$SELECT set_invoice_line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't7'), '')$$, 'Say why the rush');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.priceAndLateRush): a late rush is not billed at a tier also missed
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.priceAndLateRush): billing another tier needs a reason
 SELECT pg_temp.expect_ok('The late rush billed at the closest tier met (12-day, flat 20)',
-  $$SELECT set_invoice_line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't7'), 'Reported 8 business days late: billed at the 12-day tier met')$$);
+  $$SELECT pg_temp.line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't7'), 'Reported 8 business days late: billed at the 12-day tier met')$$);
 SELECT pg_temp.expect_true('The line shows the rush ordered and the rush billed, its fee and why',
   (SELECT rush_ordered = 'Next day' AND rush_billed = '12-day' AND rush_fee = 20 AND amount = price + 20 AND rush_note LIKE 'Reported%' FROM pg_temp.ivline(pg_temp.iv999(), 'WD Metals')));
 SELECT pg_temp.expect_ok('Or standard (no rush fee)',
-  $$SELECT set_invoice_line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, NULL, 'Late: standard price')$$);
+  $$SELECT pg_temp.line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, NULL, 'Late: standard price')$$);
 SELECT pg_temp.expect_true('Standard: no rush fee', (SELECT rush_billed IS NULL AND rush_fee = 0 AND amount = price FROM pg_temp.ivline(pg_temp.iv999(), 'WD Metals')));
-SELECT pg_temp.expect_ok('Back to the 12-day tier', $$SELECT set_invoice_line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't7'), 'Late: 12-day tier met')$$);
-SELECT pg_temp.expect_ok('The PO and the note printed on the invoice', $$SELECT update_invoice_draft(pg_temp.ivdraft('inv.acc', 'LO-000003'), 'PO-778', 'Thank you for your business.', 'checked')$$);
+SELECT pg_temp.expect_ok('Back to the 12-day tier', $$SELECT pg_temp.line_rush((pg_temp.ivline(pg_temp.iv999(), 'WD Metals')).id, (SELECT v::uuid FROM ivk WHERE k = 't7'), 'Late: 12-day tier met')$$);
+SELECT pg_temp.expect_ok('The PO and the note printed on the invoice', $$SELECT pg_temp.draft_edit(pg_temp.ivdraft('inv.acc', 'LO-000003'), 'PO-778', 'Thank you for your business.', 'checked')$$);
 
 -- 6. taking work off, releasing
-SELECT pg_temp.expect_ok('A line taken off the draft', $$SELECT remove_invoice_lines(ARRAY[(pg_temp.ivline(pg_temp.iv999(), 'WD Growth Promotion')).id])$$);
+SELECT pg_temp.expect_ok('A line taken off the draft', $$SELECT pg_temp.take_off(ARRAY[(pg_temp.ivline(pg_temp.iv999(), 'WD Growth Promotion')).id])$$);
 SELECT pg_temp.expect_true('Its work is ready to invoice again',
   EXISTS (SELECT 1 FROM invoice_ready_view WHERE requested_test_id = pg_temp.ivrt(pg_temp.iv999(), 'WD Growth Promotion'))
   AND (SELECT count(*) FROM invoice_line WHERE invoice_id = pg_temp.ivdraft('inv.acc', 'LO-000003') AND status = 'Active') = 2);
 SELECT pg_temp.iv_as('akiddle', false);
-SELECT pg_temp.expect_ok('A lab administrator releases someone else''s draft (with a reason)', $$SELECT release_invoice_draft(pg_temp.ivdraft('inv.acc2', 'LO-000003'))$$);
+SELECT pg_temp.expect_ok('A lab administrator releases someone else''s draft (with a reason)', $$SELECT pg_temp.release_draft(pg_temp.ivdraft('inv.acc2', 'LO-000003'))$$);
 SELECT pg_temp.expect_true('The released draft is kept, discarded; its work is ready again',
   EXISTS (SELECT 1 FROM invoice WHERE claimed_by = pg_temp.ivu('inv.acc2') AND status = 'Discarded')
   AND EXISTS (SELECT 1 FROM invoice_ready_view WHERE requested_test_id = pg_temp.ivrt(pg_temp.ivc('002'), 'WD Micro Screen')));
 
 -- 7. payment terms
 SELECT pg_temp.iv_as('wd.ana', false);
-SELECT pg_temp.expect_error_like('Only people who issue invoices change payment terms',
-  $$SELECT set_client_payment_terms((SELECT client_id FROM lab_order WHERE order_code = 'LO-000003'), 45)$$, 'invoicing.issue');
+-- Moved to the Java backend in migration 069 (JUnit: InvoicingRulesTest.paymentsAndTerms): only people who issue invoices change payment terms
 SELECT pg_temp.iv_as('inv.acc', false);
 SELECT pg_temp.expect_true('Net 30 by default', (SELECT payment_terms_days FROM client c JOIN lab_order o ON o.client_id = c.id WHERE o.order_code = 'LO-000003') = 30);
 
@@ -215,8 +270,8 @@ SELECT pg_temp.expect_error_like('The PDF is attached only when it is issued',
   $$SELECT record_invoice_document((SELECT v::uuid FROM ivk WHERE k = 'draftA'), pg_temp.ivpdf('again'), encode(sha256(convert_to('%PDF-1.4 again', 'UTF8')), 'hex'))$$, 'already has its PDF');
 
 -- terms changed, a second invoice
-SELECT pg_temp.expect_ok('Payment terms set to net 45 by Accounting', $$SELECT set_client_payment_terms((SELECT client_id FROM lab_order WHERE order_code = 'LO-000003'), 45)$$);
-SELECT pg_temp.expect_ok('More work claimed', $$SELECT claim_invoice_work(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Growth Promotion'), pg_temp.ivrt(pg_temp.ivc('002'), 'WD Micro Screen')])$$);
+SELECT pg_temp.expect_ok('Payment terms set to net 45 by Accounting', $$SELECT pg_temp.set_terms((SELECT client_id FROM lab_order WHERE order_code = 'LO-000003'), 45)$$);
+SELECT pg_temp.expect_ok('More work claimed', $$SELECT pg_temp.claim(ARRAY[pg_temp.ivrt(pg_temp.iv999(), 'WD Growth Promotion'), pg_temp.ivrt(pg_temp.ivc('002'), 'WD Micro Screen')])$$);
 INSERT INTO ivk VALUES ('draftB', pg_temp.ivdraft('inv.acc', 'LO-000003'));
 SELECT pg_temp.expect_ok('Issued without its PDF in this transaction', $$SELECT issue_invoices(ARRAY[(SELECT v::uuid FROM ivk WHERE k = 'draftB')])$$);
 SELECT pg_temp.expect_true('The next number, net 45',

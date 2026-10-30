@@ -1,5 +1,14 @@
 package com.tentamus.lims.invoicing.service;
 
+import com.tentamus.lims.charges.domain.OrderCharge;
+import com.tentamus.lims.charges.repo.OrderChargeStore;
+import com.tentamus.lims.invoicing.domain.Invoice;
+import com.tentamus.lims.invoicing.domain.InvoiceLine;
+import com.tentamus.lims.invoicing.domain.PaymentTerms;
+import com.tentamus.lims.invoicing.repo.InvoiceStore;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.access.UserAccess;
 import com.tentamus.lims.core.db.Db;
@@ -21,7 +30,7 @@ import org.springframework.stereotype.Service;
 /**
  * Billing: work ready to invoice, claimed into the reviewer's own draft per lab order; the draft checked (price, late
  * rush, PO, note, charges) or released; payments recorded by hand; an order's billing; settings (payment terms, the
- * accounting connection). Every rule lives in the database. Issuing, credit notes, PO corrections and a draft's PDF
+ * accounting connection). The rules are the domain's ({@link Invoice}, {@link InvoiceLine}, {@link PaymentTerms}). Issuing, credit notes, PO corrections and a draft's PDF
  * make PDFs and stay in the Node backend for now; stored PDFs of corrections are served here.
  */
 @Service
@@ -30,8 +39,12 @@ public class InvoicingService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final InvoiceStore store;
+    private final OrderChargeStore orderCharges;
 
-    public InvoicingService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public InvoicingService(Db db, UnitOfWork uow, AccessPolicy access, InvoiceStore store, OrderChargeStore orderCharges) {
+        this.store = store;
+        this.orderCharges = orderCharges;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -40,6 +53,9 @@ public class InvoicingService {
     private static boolean truthy(Object v) { return v != null && !"".equals(v) && !Boolean.FALSE.equals(v); }
 
     private static Object orBlank(Object v) { return truthy(v) ? v : ""; }
+
+    /** A text field as the database read it (null and false as blank). */
+    private static String str(Object v) { return truthy(v) ? Js.string(v) : ""; }
 
     /** parseInt(v, 10) in JavaScript: the leading whole number, or null for NaN. */
     static Long parseInt(Object v) {
@@ -243,25 +259,47 @@ public class InvoicingService {
         Object note = truthy(body.get("note")) ? body.get("note") : null;
         List<Object> ids = uow.run(reason(ctx, "Work claimed for invoicing"), d -> {
             Set<Object> all = new LinkedHashSet<>();
-            if (!tests.isEmpty()) all.addAll(list(d.one("SELECT claim_invoice_work(?::uuid[], ?) AS ids", tests, note).get("ids")));
-            if (!charges.isEmpty()) all.addAll(list(d.one("SELECT claim_invoice_charges(?::uuid[], ?) AS ids", charges, note).get("ids")));
+            String why = note == null ? null : Js.string(note);
+            if (!tests.isEmpty()) all.addAll(claimTests(d, tests, why));
+            if (!charges.isEmpty()) all.addAll(claimCharges(d, charges, why));
             return new ArrayList<>(all);
         });
         return Map.of("invoices", ids);
     }
 
-    /** A uuid[] answer: a list, or Postgres array text. */
-    private static List<Object> list(Object v) {
-        if (v instanceof List<?> l) return new ArrayList<>(l);
-        List<Object> out = new ArrayList<>();
-        for (String s : Js.string(v).replaceAll("^\\{|\\}$", "").split(",")) if (!s.isEmpty()) out.add(s);
-        return out;
+    /** Each lab order's tests go onto the claimer's own draft for that order (made if needed): the drafts, in order. */
+    private List<Object> claimTests(Db d, List<Object> tests, String note) {
+        List<Map<String, Object>> ready = store.readyTests(d, tests);
+        for (Map<String, Object> r : ready) store.requirePermission(d, "invoicing.issue", (String) r.get("site_id"));
+        Map<Object, String> drafts = new LinkedHashMap<>();
+        for (Map<String, Object> r : ready) {
+            String inv = drafts.computeIfAbsent(r.get("lab_order_id"), o -> store.draftFor(d, o, note));
+            store.addTestLine(d, inv, r.get("requested_test_id"));
+        }
+        for (String inv : drafts.values()) store.saveTotals(d, inv);
+        return new ArrayList<>(drafts.values());
+    }
+
+    /** Charges ready to invoice go onto the claimer's draft for each order, as tests do. */
+    private List<Object> claimCharges(Db d, List<Object> charges, String note) {
+        List<Map<String, Object>> ready = store.readyCharges(d, charges);
+        for (Map<String, Object> r : ready) store.requirePermission(d, "invoicing.issue", (String) r.get("site_id"));
+        Map<Object, String> drafts = new LinkedHashMap<>();
+        for (Map<String, Object> r : ready) {
+            String inv = drafts.computeIfAbsent(r.get("lab_order_id"), o -> store.draftFor(d, o, note));
+            store.addChargeLine(d, inv, r.get("order_charge_id"));
+        }
+        for (String inv : drafts.values()) store.saveTotals(d, inv);
+        return new ArrayList<>(drafts.values());
     }
 
     public Map<String, Object> update(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> i = invoiceOf(ctx, id);
-        uow.run(reason(ctx, "Draft invoice checked"), d -> d.one("SELECT update_invoice_draft(?::uuid, ?, ?, ?)", i.get("id"),
-            orBlank(body.get("po_number")), orBlank(body.get("note")), orBlank(body.get("internal_note"))));
+        uow.run(reason(ctx, "Draft invoice checked"), d -> {
+            Invoice draft = store.ownDraft(d, i.get("id"), ctx.userId());
+            store.update(d, draft.id(), str(body.get("po_number")), str(body.get("note")), str(body.get("internal_note")));
+            return null;
+        });
         return ok();
     }
 
@@ -269,14 +307,32 @@ public class InvoicingService {
         lineInvoice(ctx, lineId);
         double price = body.containsKey("price") ? Js.toNumber(body.get("price")) : Double.NaN;
         if (Double.isNaN(price) || Double.isInfinite(price)) throw new RuleException("Type the price");
-        uow.run(reason(ctx, "Invoice price corrected"), d -> d.one("SELECT set_invoice_line_price(?::uuid, ?, ?)", lineId, price, orBlank(body.get("note"))));
+        uow.run(reason(ctx, "Invoice price corrected"), d -> {
+            InvoiceLine l = store.line(d, lineId);
+            l.checkChangeable();
+            store.ownDraft(d, l.invoiceId(), ctx.userId());
+            InvoiceLine.Change c = l.reprice(new BigDecimal(Js.number(price)), str(body.get("note")), store.rushTerm(d, l.requestedTestId(), l.rushTierId()));
+            store.saveLine(d, l.id(), c, true);
+            store.saveTotals(d, l.invoiceId());
+            return null;
+        });
         return ok();
     }
 
     public Map<String, Object> lineRush(RequestContext ctx, String lineId, Map<String, Object> body) {
         lineInvoice(ctx, lineId);
-        uow.run(reason(ctx, "Rush billed at the tier met"), d -> d.one("SELECT set_invoice_line_rush(?::uuid, ?::uuid, ?)", lineId,
-            RequestContext.isUuid(body.get("tier_id")) ? body.get("tier_id") : null, orBlank(body.get("note"))));
+        Object tier = RequestContext.isUuid(body.get("tier_id")) ? body.get("tier_id") : null;
+        uow.run(reason(ctx, "Rush billed at the tier met"), d -> {
+            Map<String, Object> row = store.lineRow(d, lineId);
+            InvoiceLine l = store.line(d, lineId);
+            l.checkChangeable();
+            store.ownDraft(d, l.invoiceId(), ctx.userId());
+            InvoiceLine.RushOption opt = store.rushOptions(d, l.requestedTestId(), row.get("completed_on")).stream()
+                .filter(o -> java.util.Objects.equals(o.tierId(), tier == null ? null : tier.toString())).findFirst().orElse(null);
+            store.saveLine(d, l.id(), l.rush(opt, str(body.get("note"))), false);
+            store.saveTotals(d, l.invoiceId());
+            return null;
+        });
         return ok();
     }
 
@@ -286,13 +342,30 @@ public class InvoicingService {
             Map<String, Object> one = db.one("SELECT invoice_id FROM invoice_line WHERE id = ?::uuid", lines.get(0));
             if (one != null) invoiceOf(ctx, one.get("invoice_id"));
         }
-        Object n = uow.run(reason(ctx, "Taken off the draft invoice"), d -> d.one("SELECT remove_invoice_lines(?::uuid[]) AS n", lines).get("n"));
+        if (lines.isEmpty()) throw RuleException.database("Choose the lines to take off");
+        Object n = uow.run(reason(ctx, "Taken off the draft invoice"), d -> {
+            int k = 0;
+            for (String inv : store.invoicesOfLines(d, lines)) {
+                store.ownDraft(d, inv, ctx.userId());
+                k += store.removeLines(d, inv, lines);
+                if (Invoice.emptied(store.lines(d, inv))) store.discard(d, inv);
+                else store.saveTotals(d, inv);
+            }
+            return k;
+        });
         return Map.of("removed", (long) Js.toNumber(n));
     }
 
     public Map<String, Object> release(RequestContext ctx, String id) {
         Map<String, Object> i = invoiceOf(ctx, id);
-        uow.run(reason(ctx, "Draft invoice released"), d -> d.one("SELECT release_invoice_draft(?::uuid)", i.get("id")));
+        RequestContext r = reason(ctx, "Draft invoice released");
+        uow.run(r, d -> {
+            Invoice draft = store.load(d, i.get("id"));
+            if (draft.checkRelease(ctx.userId(), store.has(d, "admin.users", draft.siteId()), r.reason())) store.requirePermission(d, "invoicing.issue", draft.siteId());
+            store.removeLines(d, draft.id(), null);
+            store.discard(d, draft.id());
+            return null;
+        });
         return ok();
     }
 
@@ -306,9 +379,18 @@ public class InvoicingService {
         Long asked = parseInt(body.get("quantity"));
         long q = asked == null || asked == 0 ? 1 : asked;
         Object out = uow.run(reason(ctx, "Charge added at invoicing"), d -> {
-            Object p = price != null ? price : Js.toNumber(d.one("SELECT price FROM charge_item WHERE id = ?::uuid", body.get("charge_item_id")).get("price"));
-            return d.one("SELECT add_invoice_charge(?::uuid, ?::uuid, ?, ?, ?, ?::uuid) AS id", i.get("id"), body.get("charge_item_id"), q, p, orBlank(body.get("note")),
-                RequestContext.isUuid(body.get("sample_id")) ? body.get("sample_id") : null).get("id");
+            Invoice draft = store.ownDraft(d, i.get("id"), ctx.userId());
+            Map<String, Object> item = orderCharges.item(d, body.get("charge_item_id"));
+            Object sample = RequestContext.isUuid(body.get("sample_id")) ? body.get("sample_id") : null;
+            Map<String, Object> s = sample == null ? null : d.one("SELECT lab_order_id FROM sample WHERE id = ?::uuid", sample);
+            BigDecimal p = price != null ? new BigDecimal(Js.number(price)) : item == null ? BigDecimal.ZERO : new BigDecimal(item.get("price").toString());
+            OrderCharge.checkQuantity(q);
+            OrderCharge.checkNew(draft.labOrderId(), draft.siteId(), sample == null ? null : sample.toString(), s == null ? null : (String) s.get("lab_order_id"),
+                item == null ? null : (String) item.get("status"), item == null ? null : (String) item.get("site_id"), p, p, true);
+            Object charge = orderCharges.insert(d, draft.labOrderId(), sample, body.get("charge_item_id"), q, p, Invoice.text(str(body.get("note"))), "Invoice").get("id");
+            store.addChargeLine(d, draft.id(), charge);
+            store.saveTotals(d, draft.id());
+            return charge;
         });
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("order_charge_id", out);
@@ -320,8 +402,17 @@ public class InvoicingService {
         Map<String, Object> i = invoiceOf(ctx, id);
         String d0 = Js.string(body.get("paid_on")).trim();
         if (!d0.isEmpty() && !d0.matches("^\\d{4}-\\d{2}-\\d{2}$")) throw new RuleException("Give the payment date as a date");
-        uow.run(reason(ctx, d0.isEmpty() ? "Payment record cleared" : "Payment recorded"), d -> d.one("SELECT record_invoice_payment(?::uuid, ?::date, ?)", i.get("id"),
-            d0.isEmpty() ? null : d0, orBlank(body.get("paid_note"))));
+        uow.run(reason(ctx, d0.isEmpty() ? "Payment record cleared" : "Payment recorded"), d -> {
+            Invoice inv = store.load(d, i.get("id"));
+            inv.checkPayable();
+            store.requirePermission(d, "invoicing.issue", inv.siteId());
+            LocalDate paidOn;
+            try { paidOn = d0.isEmpty() ? null : LocalDate.parse(d0); }
+            catch (DateTimeParseException e) { throw RuleException.withCode("date/time field value out of range: \"" + d0 + "\"", "22008"); }
+            inv.checkPaidOn(paidOn, store.today(d, inv.siteId()));
+            store.recordPayment(d, inv.id(), paidOn, str(body.get("paid_note")));
+            return null;
+        });
         return ok();
     }
 
@@ -333,8 +424,8 @@ public class InvoicingService {
         uow.run(reason(ctx, "Payment terms changed"), d -> {
             for (Map<String, Object> x : rows) {
                 if (!RequestContext.isUuid(x.get("id"))) continue;
-                Long days = parseInt(x.get("payment_terms_days"));
-                d.one("SELECT set_client_payment_terms(?::uuid, ?::int)", x.get("id"), days == null ? "NaN" : days);   // NaN is refused by the database, as from Node
+                int days = PaymentTerms.check(store.hasHere(d, "invoicing.issue") || store.systemAdmin(d), parseInt(x.get("payment_terms_days")));
+                store.setTerms(d, x.get("id"), days);
             }
             return null;
         });

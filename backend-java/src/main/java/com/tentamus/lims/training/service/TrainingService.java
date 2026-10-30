@@ -11,8 +11,15 @@ import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.files.DocumentStore;
 import com.tentamus.lims.core.signature.SignatureService;
+import com.tentamus.lims.core.time.LabClock;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.training.domain.CompetencyAttempt;
+import com.tentamus.lims.training.domain.KnownValue;
+import com.tentamus.lims.training.domain.Qualification;
+import com.tentamus.lims.training.domain.TrainingRule;
+import com.tentamus.lims.training.repo.TrainingRepository;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -23,7 +30,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Training and competency: qualifications, competency attempts (initial and continuing, by training samples or by
- * record), the rules per department, legacy qualifications. The training report PDF stays in the Node backend for now.
+ * record), the rules per department, legacy qualifications. The rules are the domain's (training/domain, migration 071).
+ * The training report PDF stays in the Node backend for now.
  */
 @Service
 public class TrainingService {
@@ -34,8 +42,12 @@ public class TrainingService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final ObjectMapper json;
+    private final TrainingRepository repo;
+    private final LabClock clock;
 
-    public TrainingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json) {
+    public TrainingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json, TrainingRepository repo, LabClock clock) {
+        this.repo = repo;
+        this.clock = clock;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -167,6 +179,15 @@ public class TrainingService {
     }
 
     // ---------------------------------------------------------------- attempts
+    /** May this person train (evaluate) on the test: training.record, or department trained where the rule lets them train. */
+    private boolean mayTrain(Db d, String user, Map<String, Object> test) {
+        String site = (String) test.get("site_id");
+        Object dept = test.get("department_id");
+        if (access.load(user).can("training.record", site)) return true;
+        TrainingRule r = dept == null ? null : repo.ruleFor(d, site, dept);
+        return TrainingRule.letsTrain(false, dept != null, r, r != null && r.unlockCanTrain() && repo.departmentTrained(d, user, site, dept));
+    }
+
     /** Start an attempt (a trainer): training samples (an internal order is made) or a record. */
     public Map<String, Object> start(RequestContext ctx, Map<String, Object> body) {
         if (!RequestContext.isUuid(body.get("user_id")) || !RequestContext.isUuid(body.get("test_id"))) throw new RuleException("Choose the person and the test");
@@ -178,10 +199,35 @@ public class TrainingService {
         String knownJson;
         try { knownJson = json.writeValueAsString(known); } catch (JsonProcessingException e) { throw new IllegalArgumentException(e); }
         double samples = Js.toNumber(body.get("samples"));
-        Object n = !body.containsKey("samples") || Double.isNaN(samples) || samples == 0 ? null : samples;
-        return uow.run(ctx.orReason("Competency started"), d -> d.one("SELECT start_competency_attempt(?::uuid, ?::uuid, ?, ?, ?, ?::jsonb, ?, ?::date) AS id",
-            body.get("user_id"), body.get("test_id"), Js.truthy(body.get("kind")) ? body.get("kind") : "Initial", Js.truthy(body.get("route")) ? body.get("route") : "Record",
-            n, knownJson, Js.orNull(body.get("description")), Js.orNull(body.get("trained_on"))));
+        Integer n = !body.containsKey("samples") || Double.isNaN(samples) || samples == 0 ? null : (int) samples;
+        String kind = Js.truthy(body.get("kind")) ? Js.string(body.get("kind")) : "Initial";
+        String route = Js.truthy(body.get("route")) ? Js.string(body.get("route")) : "Record";
+        Object trainedOn = Js.orNull(body.get("trained_on"));
+        Object userId = body.get("user_id"), testId = body.get("test_id");
+        return uow.run(ctx.orReason("Competency started"), d -> {
+            Map<String, Object> t = repo.test(d, testId);
+            if (t == null || t.get("site_id") == null) throw RuleException.database("Choose a test of this lab");
+            String site = (String) t.get("site_id");
+            access.checkSite(ctx, site);
+            String testName = (String) t.get("test_name");
+            Map<String, Object> trainee = repo.trainee(d, userId);
+            String qual = repo.activeQualification(d, userId, testId);
+            String version = repo.effectiveVersion(d, testId);
+            String desc = CompetencyAttempt.checkStart(new CompetencyAttempt.Start(ctx.userId(), String.valueOf(userId), kind, route, testName, site, mayTrain(d, ctx.userId(), t),
+                trainee != null, access.load(String.valueOf(userId)).canAccess(site), repo.ruleFor(d, site, t.get("department_id")), qual != null,
+                repo.openAttempt(d, userId, testId), Js.string(Js.orBlank(body.get("description"))), trainedOn == null ? null : LocalDate.parse(trainedOn.toString()),
+                clock.today(site), n, known.size(), version != null));
+            Map<String, Object> a = repo.insertAttempt(d, userId, testId, site, kind, route, "Continuing".equals(kind) ? qual : null, knownJson, desc, trainedOn);
+            if ("Training samples".equals(route)) {
+                List<KnownValue> specs = new ArrayList<>();
+                for (Map<String, Object> k : known) {
+                    if (!repo.analyteOnVersion(d, version, String.valueOf(k.get("analyte_id")))) throw RuleException.database("A known value names an analyte that is not on " + testName);
+                    specs.add(KnownValue.of(k));
+                }
+                repo.makeTrainingSamples(d, (String) a.get("id"), (String) a.get("attempt_code"), testId, testName, site, version, (String) trainee.get("full_name"), n, specs, ctx.userId());
+            }
+            return map("id", a.get("id"));
+        });
     }
 
     public Map<String, Object> addEvidence(RequestContext ctx, String id, Map<String, Object> body) {
@@ -194,6 +240,7 @@ public class TrainingService {
                 try { buf = Base64.getMimeDecoder().decode(Js.string(f.get("base64")).replaceFirst("^data:[^,]*,", "")); } catch (IllegalArgumentException e) { buf = new byte[0]; }
                 if (buf.length == 0) throw new RuleException("A file is empty");
                 if (buf.length > 15 * 1024 * 1024) throw new RuleException("A file is larger than 15 MB");
+                repo.attempt(d, a.get("id")).checkEvidence(ctx.userId(), mayTrain(d, ctx.userId(), repo.test(d, a.get("test_id"))));
                 Object doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, ?, ?, decode(?, 'base64')) RETURNING id",
                     Js.truthy(f.get("file_name")) ? f.get("file_name") : "evidence", Js.truthy(f.get("mime_type")) ? f.get("mime_type") : "application/octet-stream",
                     buf.length, DocumentStore.sha256(buf), Base64.getEncoder().encodeToString(buf)).get("id");
@@ -208,7 +255,14 @@ public class TrainingService {
         Map<String, Object> a = attemptOf(ctx, id);
         return signed(ctx.withReason(Js.string(Js.orBlank(body.get("note")))), body, "Evaluated by",
             "Competency " + a.get("attempt_code") + " of " + a.get("full_name") + " on " + a.get("test_name") + ": " + body.get("evaluation"),
-            d -> { d.one("SELECT evaluate_competency_attempt(?::uuid, ?, ?)", a.get("id"), body.get("evaluation"), Js.orNull(body.get("note"))); return ok(); });
+            d -> {
+                CompetencyAttempt at = repo.attempt(d, a.get("id"));
+                if (at == null) throw RuleException.database("Attempt not found");
+                at.evaluate(ctx.userId(), mayTrain(d, ctx.userId(), repo.test(d, at.testId())), body.get("evaluation") == null ? null : body.get("evaluation").toString(),
+                    noteOf(body), repo.testsWaiting(d, at.id()), repo.hasEvidence(d, at.id()));
+                repo.saveEvaluation(d, at);
+                return ok();
+            });
     }
 
     public Map<String, Object> decide(RequestContext ctx, String id, Map<String, Object> body) {
@@ -216,13 +270,28 @@ public class TrainingService {
         String dec = "Rejected".equals(body.get("decision")) ? "Rejected" : "Approved";
         return signed(ctx.withReason(Js.string(Js.orBlank(body.get("note")))), body, dec.equals("Approved") ? "Approved by" : "Rejected by",
             "Competency " + a.get("attempt_code") + " of " + a.get("full_name") + " on " + a.get("test_name"),
-            d -> d.one("SELECT decide_competency_attempt(?::uuid, ?, ?) AS qualification_id", a.get("id"), dec, Js.orNull(body.get("note"))));
+            d -> {
+                CompetencyAttempt at = repo.attempt(d, a.get("id"));
+                if (at == null) throw RuleException.database("Attempt not found");
+                CompetencyAttempt.Outcome o = at.decide(ctx.userId(), access.load(ctx.userId()).can("training.approve", at.siteId()),
+                    repo.permissionRefusal(d, "training.approve"), dec, noteOf(body));
+                repo.saveDecision(d, at, ctx.userId());
+                String q = o == CompetencyAttempt.Outcome.GRANT ? repo.grantQualification(d, at, ctx.userId())
+                    : o == CompetencyAttempt.Outcome.KEEP_UP ? repo.keepUpQualification(d, at) : null;
+                return map("qualification_id", q);
+            });
     }
 
     public Map<String, Object> withdrawAttempt(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> a = attemptOf(ctx, id);
         if (!Js.truthy(body.get("reason"))) throw new RuleException("Give the reason");
-        return uow.run(ctx, d -> { d.one("SELECT withdraw_competency_attempt(?::uuid, ?)", a.get("id"), body.get("reason")); return ok(); });
+        return uow.run(ctx, d -> {
+            CompetencyAttempt at = repo.attempt(d, a.get("id"));
+            if (at == null) throw RuleException.database("Only an open attempt is withdrawn");
+            at.withdraw(mayTrain(d, ctx.userId(), repo.test(d, at.testId())) || access.load(ctx.userId()).can("training.approve", at.siteId()), Js.string(body.get("reason")));
+            repo.saveWithdrawal(d, at);
+            return ok();
+        });
     }
 
     public Map<String, Object> withdrawQualification(RequestContext ctx, String id, Map<String, Object> body) {
@@ -232,13 +301,27 @@ public class TrainingService {
         access.checkSite(ctx, (String) q.get("site_id"));
         if (!Js.truthy(body.get("reason"))) throw new RuleException("Give the reason");
         return signed(ctx, body, "Withdrawn by", "Qualification of " + q.get("full_name") + " on " + q.get("test_name"),
-            d -> { d.one("SELECT withdraw_qualification(?::uuid, ?)", id, body.get("reason")); return ok(); });
+            d -> {
+                Qualification ql = repo.qualification(d, id);
+                if (ql == null) throw RuleException.database("Qualification not found");
+                ql.withdraw(access.load(ctx.userId()).can("training.approve", ql.siteId()), repo.permissionRefusal(d, "training.approve"), Js.string(body.get("reason")));
+                repo.saveQualification(d, ql);
+                return ok();
+            });
     }
 
     public Map<String, Object> legacy(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
         return signed(ctx.orReason("Legacy qualifications when the lab starts training"), body, "Approved by", "Legacy qualifications (who did a test in the last 12 months)",
-            d -> d.one("SELECT grant_legacy_qualifications(?::uuid) AS granted", site));
+            d -> {
+                if (!access.load(ctx.userId()).can("training.approve", site)) throw RuleException.database(repo.permissionRefusal(d, "training.approve"));
+                return map("granted", repo.grantLegacy(d, site, ctx.userId()));
+            });
+    }
+
+    private static String noteOf(Map<String, Object> body) {
+        Object n = Js.orNull(body.get("note"));
+        return n == null ? null : n.toString();
     }
 
     /** The rules per department (a reason for changes); a department named without the rule's id changes its rule. */
@@ -255,6 +338,11 @@ public class TrainingService {
                 }
                 if (id != null) {
                     if (f.isEmpty()) continue;
+                    Map<String, Object> before = repo.rule(d, id, site);
+                    if (before == null) continue;   // another lab's rule: nothing changes, as before
+                    Map<String, Object> after = new LinkedHashMap<>(before);
+                    after.putAll(f);
+                    TrainingRule.checked(before, after, repo.departmentSite(d, before.get("department_id")));
                     List<String> sets = new ArrayList<>();
                     List<Object> vals = new ArrayList<>();
                     for (Map.Entry<String, Object> e : f.entrySet()) { sets.add(e.getKey() + " = ?"); vals.add(e.getValue()); }
@@ -263,6 +351,10 @@ public class TrainingService {
                     d.update("UPDATE training_rule SET " + String.join(", ", sets) + " WHERE id = ?::uuid AND site_id = ?::uuid", vals.toArray());
                 } else {
                     if (!RequestContext.isUuid(r.get("department_id"))) throw new RuleException("Choose the department the rule is for");
+                    Map<String, Object> after = new LinkedHashMap<>(f);
+                    after.put("site_id", site);
+                    after.put("department_id", r.get("department_id"));
+                    TrainingRule.checked(null, after, repo.departmentSite(d, r.get("department_id")));
                     d.update("""
                         INSERT INTO training_rule (site_id, department_id, dept_trained_after, unlock_any_test, unlock_can_train, continuing_months, due_soon_days, min_runs, min_runs_months,
                             allow_training_samples, allow_records)

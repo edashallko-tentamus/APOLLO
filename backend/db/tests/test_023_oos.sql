@@ -52,6 +52,61 @@ CREATE OR REPLACE FUNCTION pg_temp.ofin(csid text, tests uuid[]) RETURNS uuid LA
 DECLARE d uuid := pg_temp.opdf(csid || ' coa ' || clock_timestamp());
 BEGIN RETURN finalize_sample(pg_temp.smp(csid), tests, pg_temp.ocontent(csid, tests), d, pg_temp.osha(d), '[]', next_finalization_group()); END $$;
 
+-- The OOS steps as Java's OOS service writes them (their rules moved to the Java backend in migration 069: OosRulesTest)
+CREATE OR REPLACE FUNCTION pg_temp.open_oos(p_rt uuid, p_analyte uuid, p_reason text) RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE tr test_result; s sample; o lab_order; v_proc oos_procedure; v_id uuid;
+BEGIN
+  SELECT * INTO tr FROM test_result WHERE requested_test_id = p_rt AND analyte_id = p_analyte AND result_key IS NULL AND status = 'Active' AND stage = 'Final';
+  SELECT s2.* INTO s FROM sample s2 JOIN requested_test r ON r.sample_id = s2.id WHERE r.id = p_rt;
+  SELECT * INTO o FROM lab_order WHERE id = s.lab_order_id;
+  PERFORM set_config('lims.oos_internal', '1', false);
+  v_proc := CASE WHEN sample_is_gmp(s.id) THEN 'Full Phase I (21 CFR 211)' ELSE (SELECT default_oos_procedure FROM lab_site WHERE id = o.site_id) END;
+  INSERT INTO oos_investigation (site_id, sample_id, requested_test_id, analyte_id, batch_id, test_result_id, procedure, is_gmp, reported, value_num, unit, spec_text,
+                                 opened_reason, opened_by, open_signature_id, due_date)
+  VALUES (o.site_id, s.id, p_rt, p_analyte, tr.batch_id, tr.id, v_proc, sample_is_gmp(s.id), tr.reported, tr.value_num, tr.unit,
+          COALESCE(tr.spec_text, concat_ws(' and ', '≥ ' || tr.spec_min::text, '≤ ' || tr.spec_max::text) || COALESCE(' ' || tr.spec_unit, '')), p_reason,
+          current_app_user(), NULLIF(current_setting('lims.signature_id', true), '')::uuid,
+          site_today(o.site_id) + COALESCE((SELECT close_within_days FROM oos_procedure_setting WHERE procedure = v_proc), 30))
+  RETURNING id INTO v_id;
+  PERFORM set_config('lims.oos_internal', '', false);
+  RETURN v_id;
+END $$;
+CREATE OR REPLACE FUNCTION pg_temp.retest(p_id uuid, p_kind text, p_reps integer, p_response uuid) RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE o oos_investigation; v_new uuid; ord lab_order;
+BEGIN
+  SELECT * INTO o FROM oos_investigation WHERE id = p_id;
+  PERFORM set_config('lims.oos_internal', '1', false);
+  IF p_kind = 'Lab investigation' THEN
+    PERFORM set_config('lims.testing_internal', '1', false);
+    UPDATE test_result SET status = 'Superseded', invalidated_oos_id = o.id WHERE requested_test_id = o.requested_test_id AND status = 'Active';
+    PERFORM set_config('lims.testing_internal', '', false);
+  END IF;
+  INSERT INTO requested_test (sample_id, test_id, test_version_id, quoted_line_id, source, special_instructions, retest_of_id, oos_investigation_id, billing_status, retest_replicates)
+  SELECT sample_id, test_id, test_version_id, quoted_line_id, CASE WHEN p_kind = 'Client' THEN 'Client OOS Retest' ELSE 'Lab Investigation Retest' END::test_source,
+         format('Re-prep from the retained sample (%s), %s', o.oos_code, CASE p_reps WHEN 1 THEN 'single' WHEN 2 THEN 'in duplicate' ELSE 'in triplicate' END),
+         id, o.id, CASE WHEN p_kind = 'Client' THEN 'Pending QA determination' ELSE 'Non-billable' END, p_reps
+    FROM requested_test WHERE id = o.requested_test_id RETURNING id INTO v_new;
+  INSERT INTO specification (requested_test_id, analyte_id, min_value, max_value, text_value, unit, source)
+  SELECT v_new, sp.analyte_id, sp.min_value, sp.max_value, sp.text_value, sp.unit, sp.source FROM specification sp WHERE sp.requested_test_id = o.requested_test_id AND sp.status = 'Active';
+  IF p_response IS NOT NULL THEN
+    UPDATE oos_client_response SET retest_requested_test_id = v_new, handled_by = current_app_user(), handled_at = clock_timestamp(),
+           handled_note = COALESCE(handled_note, 'Retest ordered') WHERE id = p_response AND oos_id = o.id;
+  END IF;
+  IF p_kind = 'Client' THEN
+    UPDATE oos_investigation SET phase2_decision = 'Retest ordered', phase2_by = current_app_user(), phase2_at = clock_timestamp(),
+           phase2_note = COALESCE(phase2_note, 'Client re-test ordered') WHERE id = o.id AND phase2_decision IS NULL;
+  END IF;
+  PERFORM set_config('lims.oos_internal', '', false);
+  SELECT lo.* INTO ord FROM lab_order lo JOIN sample s ON s.lab_order_id = lo.id WHERE s.id = o.sample_id;
+  IF ord.status IN ('Reported','Approved') THEN
+    PERFORM set_config('lims.group_sync', '1', false);
+    UPDATE lab_order SET status = 'Received' WHERE id = ord.id;
+    PERFORM set_config('lims.group_sync', '', false);
+    PERFORM refresh_order_status(ord.id);
+  END IF;
+  RETURN v_new;
+END $$;
+
 -- 1. who may do what
 SELECT pg_temp.as_user('akiddle');
 SELECT pg_temp.expect_true('Analysts and Lab Supervisors open OOS investigations; QA concludes Phase I; Intake does neither',
@@ -66,35 +121,41 @@ SELECT pg_temp.expect_true('The OOS checklists are configuration (QA): Phase I h
 SELECT pg_temp.as_user('wd.ana2');
 SELECT pg_temp.expect_error_like('QA keeps the checklists (oos.configure)', $$UPDATE oos_checklist_item SET item_text = 'x' WHERE section = 'Reviewer'$$, 'oos.configure');
 SELECT pg_temp.as_user('wd.int');
-SELECT pg_temp.expect_error_like('Intake cannot open an OOS investigation', $$SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), NULL, 'x')$$, 'oos.open');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.opening): Intake cannot open an OOS investigation (the database permission function stays)
 SELECT pg_temp.user_only('wd.sup');
-SELECT pg_temp.expect_error_like('Opening is signed', $$SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), NULL, 'x')$$, 'electronic signature');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.opening): opening is signed (assert_signed stays in the database)
 SELECT pg_temp.as_user('wd.sup');
-SELECT pg_temp.expect_error_like('Nothing to investigate in a result that conforms', $$SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), (SELECT id FROM analyte WHERE analyte_name = 'WD Cadmium'), NULL, 'x')$$, 'conforms');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.opening): nothing to investigate in a result that conforms
 SELECT pg_temp.expect_error_like('No investigation can be written directly', $$INSERT INTO oos_investigation (site_id, sample_id, requested_test_id, analyte_id, procedure, is_gmp, opened_by)
   SELECT o.site_id, s.id, pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), 'Check and Acknowledge', false, pg_temp.uid('wd.sup') FROM sample s JOIN lab_order o ON o.id = s.lab_order_id WHERE s.id = pg_temp.smp('LOT-A2')$$, 'OOS investigation page');
 
 -- 2. Check and Acknowledge (LOT-A2): open, cancel, open again, conclude "Assignable cause found", the lab retest
-SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), NULL, 'Lead above the client limit');
+SELECT pg_temp.open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), 'Lead above the client limit');
 SELECT pg_temp.expect_true('Opened (signed): Check and Acknowledge (CFL''s default for non-GMP work), on the approved result, due in 10 days',
   (SELECT procedure = 'Check and Acknowledge' AND NOT is_gmp AND test_result_id IS NOT NULL AND status = 'Open' AND open_signature_id IS NOT NULL
      AND due_date = site_today(site_id) + 10 AND reported IS NOT NULL FROM oos_investigation WHERE id = pg_temp.oos('LOT-A2')));
-SELECT pg_temp.expect_error_like('One open investigation per result', $$SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), NULL, 'x')$$, 'already open');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.opening): one open investigation per result
 SELECT pg_temp.as_user('wd.pm');
 SELECT pg_temp.expect_error_like('An open investigation holds the result from release', $$SELECT pg_temp.ofin('LOT-A2', ARRAY[pg_temp.rt('LOT-A2', 'WD Metals')])$$, 'is open');
 SELECT pg_temp.as_user('wd.ana2');
-SELECT pg_temp.expect_error_like('Only QA or whoever opened it cancels an investigation', $$SELECT cancel_oos(pg_temp.oos('LOT-A2'), 'x')$$, 'can cancel');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.cancelling): only QA or whoever opened it cancels an investigation
 SELECT pg_temp.as_user('wd.sup');
-SELECT pg_temp.expect_error_like('Cancelling needs a reason', $$SELECT cancel_oos(pg_temp.oos('LOT-A2'), '')$$, 'Say why');
-SELECT cancel_oos(pg_temp.oos('LOT-A2'), 'Opened before the client confirmed their limit; reopened');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.cancelling): cancelling needs a reason
+SELECT set_config('lims.oos_internal', '1', false);
+UPDATE oos_investigation SET status = 'Cancelled', cancelled_reason = 'Opened before the client confirmed their limit; reopened', cancelled_by = current_app_user(),
+       cancelled_at = clock_timestamp() WHERE id = pg_temp.oos('LOT-A2');
+SELECT set_config('lims.oos_internal', '', false);
 SELECT pg_temp.expect_true('Cancelled (kept, with its reason)', EXISTS (SELECT 1 FROM oos_investigation WHERE sample_id = pg_temp.smp('LOT-A2') AND status = 'Cancelled' AND cancelled_reason LIKE 'Opened before%'));
 SELECT pg_temp.as_user('wd.pm');
 SELECT pg_temp.expect_error_like('An out-of-specification result needs a concluded investigation before release', $$SELECT pg_temp.ofin('LOT-A2', ARRAY[pg_temp.rt('LOT-A2', 'WD Metals')])$$, 'open the OOS investigation');
 SELECT pg_temp.as_user('wd.sup');
-SELECT open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), NULL, 'Lead above the client limit');
-SELECT record_oos_checks(pg_temp.oos('LOT-A2'), '[{"code": "calc", "title": "Result worked out again", "level": "Pass", "detail": "x"}]');
+SELECT pg_temp.open_oos(pg_temp.rt('LOT-A2', 'WD Metals'), pg_temp.pb(), 'Lead above the client limit');
+SELECT set_config('lims.oos_internal', '1', false);
+UPDATE oos_investigation SET auto_checks = '[{"code": "calc", "title": "Result worked out again", "level": "Pass", "detail": "x"}]', auto_checked_at = clock_timestamp()
+ WHERE id = pg_temp.oos('LOT-A2');
+SELECT set_config('lims.oos_internal', '', false);
 SELECT pg_temp.expect_true('The automatic checks are kept on the investigation', (SELECT jsonb_array_length(auto_checks) = 1 AND auto_checked_at IS NOT NULL FROM oos_investigation WHERE id = pg_temp.oos('LOT-A2')));
-SELECT pg_temp.expect_error_like('Check and Acknowledge has no analyst section', $$SELECT sign_oos_analyst(pg_temp.oos('LOT-A2'), '{}', NULL, NULL)$$, 'one reviewer');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.sectionsAndChecks): Check and Acknowledge has no analyst section
 SELECT pg_temp.as_user('wd.ana2');
 SELECT pg_temp.expect_error_like('The reviewer has QC Review rights', $$SELECT pg_temp.conclude('LOT-A2', 'OOS confirmed', NULL)$$, 'testing.review');
 -- independent of the bench work: whoever performed a step of the batch (given review rights for the check) may not conclude
@@ -122,11 +183,11 @@ SELECT pg_temp.expect_error_like('The report must be the stored PDF', $$SELECT c
 SELECT pg_temp.conclude('LOT-A2', 'Assignable cause found', 'Wrong dilution factor entered for the digest (10 instead of 100)');
 SELECT pg_temp.expect_true('Concluded (signed): Assignable cause found, with its report', (SELECT status = 'Closed' AND conclusion = 'Assignable cause found' AND report_document_id IS NOT NULL
   AND conclusion_signature_id IS NOT NULL AND concluded_by = pg_temp.uid('wd.sup') FROM oos_investigation WHERE id = pg_temp.oos('LOT-A2')));
-SELECT pg_temp.expect_error_like('A closed investigation''s checks stay as they were', $$SELECT record_oos_checks(pg_temp.oos('LOT-A2'), '[]')$$, 'kept as they were');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.sectionsAndChecks): a closed investigation's checks stay as they were
 SELECT pg_temp.as_user('wd.pm');
 SELECT pg_temp.expect_error_like('An invalid result is not released: the lab retest replaces it', $$SELECT pg_temp.ofin('LOT-A2', ARRAY[pg_temp.rt('LOT-A2', 'WD Metals')])$$, 'order the lab investigation retest');
-SELECT pg_temp.expect_error_like('A client retest follows a confirmed OOS only', $$SELECT order_oos_retest(pg_temp.oos('LOT-A2'), 'Client', 1, NULL)$$, 'confirmed OOS');
-SELECT order_oos_retest(pg_temp.oos('LOT-A2'), 'Lab investigation', 2, NULL);
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.retests): a client retest follows a confirmed OOS only
+SELECT pg_temp.retest(pg_temp.oos('LOT-A2'), 'Lab investigation', 2, NULL);
 SELECT pg_temp.expect_true('The lab investigation retest is ordered (signed): a re-prep in duplicate, not billed, linked to the test and the investigation, in the backlog with the same specification',
   (SELECT r.source = 'Lab Investigation Retest' AND r.billing_status = 'Non-billable' AND r.price = 0 AND r.retest_replicates = 2 AND r.status = 'In Pool'
      AND r.oos_investigation_id = pg_temp.oos('LOT-A2') AND r.special_instructions LIKE '%in duplicate%'
@@ -137,23 +198,31 @@ SELECT pg_temp.expect_true('The invalid results are kept, Superseded, with the i
   AND EXISTS (SELECT 1 FROM test_result WHERE requested_test_id = pg_temp.rt('LOT-A2', 'WD Metals') AND status = 'Superseded' AND invalidated_oos_id = pg_temp.oos('LOT-A2'))
   AND NOT EXISTS (SELECT 1 FROM finalization_queue_view WHERE requested_test_id = pg_temp.rt('LOT-A2', 'WD Metals'))
   AND test_is_replaced(pg_temp.rt('LOT-A2', 'WD Metals')));
-SELECT pg_temp.expect_error_like('One retest per test', $$SELECT order_oos_retest(pg_temp.oos('LOT-A2'), 'Lab investigation', 1, NULL)$$, 'already ordered');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.retests): one retest per test
 SELECT pg_temp.expect_error_like('A retest''s billing follows QA''s determination', $$UPDATE requested_test SET billing_status = 'Billable' WHERE retest_of_id = pg_temp.rt('LOT-A2', 'WD Metals')$$, 'determination');
 
 -- 3. Full Phase I (LOT-M2, cGMP): analyst, supervisor, QA; release; the client's answer; the client retest
 SELECT pg_temp.as_user('wd.ana2');
-SELECT open_oos(pg_temp.rt('LOT-M2', 'WD Metals'), pg_temp.pb(), NULL, 'Lead above the client limit');
+SELECT pg_temp.open_oos(pg_temp.rt('LOT-M2', 'WD Metals'), pg_temp.pb(), 'Lead above the client limit');
 SELECT pg_temp.expect_true('GMP work follows Full Phase I (30 days)', (SELECT procedure = 'Full Phase I (21 CFR 211)' AND is_gmp AND due_date = site_today(site_id) + 30 FROM oos_investigation WHERE id = pg_temp.oos('LOT-M2')));
 SELECT pg_temp.as_user('wd.qa');
 SELECT pg_temp.expect_error_like('QA concludes only after the analyst and supervisor sections', $$SELECT conclude_oos(pg_temp.oos('LOT-M2'), 'OOS confirmed', NULL, 'x', '{}', pg_temp.opdf('d'), pg_temp.osha(pg_temp.opdf('d')))$$, 'analyst and supervisor sections');
 SELECT pg_temp.as_user('wd.sup');
-SELECT pg_temp.expect_error_like('The supervisor section follows the analyst''s', $$SELECT sign_oos_supervisor(pg_temp.oos('LOT-M2'), pg_temp.answers('Full Phase I (21 CFR 211)', 'Supervisor'), NULL)$$, 'follows the analyst');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.sectionsAndChecks): the supervisor section follows the analyst's
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('The analyst answers every item', $$SELECT sign_oos_analyst(pg_temp.oos('LOT-M2'), '{}', NULL, NULL)$$, 'Answer every item');
-SELECT sign_oos_analyst(pg_temp.oos('LOT-M2'), pg_temp.answers('Full Phase I (21 CFR 211)', 'Analyst'), 'No error found at the bench', 'Re-analysis of the same digest planned: not needed');
-SELECT pg_temp.expect_error_like('The analyst does not sign the supervisor section', $$SELECT sign_oos_supervisor(pg_temp.oos('LOT-M2'), pg_temp.answers('Full Phase I (21 CFR 211)', 'Supervisor'), NULL)$$, 'signed the analyst section');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.sectionsAndChecks): the analyst answers every item
+SELECT set_config('lims.oos_internal', '1', false);
+UPDATE oos_investigation SET analyst_answers = pg_temp.answers('Full Phase I (21 CFR 211)', 'Analyst'), analyst_comment = 'No error found at the bench',
+       hypothesis = 'Re-analysis of the same digest planned: not needed', analyst_by = current_app_user(), analyst_at = clock_timestamp(),
+       analyst_signature_id = NULLIF(current_setting('lims.signature_id', true), '')::uuid, status = 'Analyst signed' WHERE id = pg_temp.oos('LOT-M2');
+SELECT set_config('lims.oos_internal', '', false);
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.sectionsAndChecks): the analyst does not sign the supervisor section
 SELECT pg_temp.as_user('wd.sup');
-SELECT sign_oos_supervisor(pg_temp.oos('LOT-M2'), pg_temp.answers('Full Phase I (21 CFR 211)', 'Supervisor'), 'Method in control');
+SELECT set_config('lims.oos_internal', '1', false);
+UPDATE oos_investigation SET supervisor_answers = pg_temp.answers('Full Phase I (21 CFR 211)', 'Supervisor'), supervisor_comment = 'Method in control',
+       supervisor_by = current_app_user(), supervisor_at = clock_timestamp(), supervisor_signature_id = NULLIF(current_setting('lims.signature_id', true), '')::uuid,
+       status = 'Supervisor signed' WHERE id = pg_temp.oos('LOT-M2');
+SELECT set_config('lims.oos_internal', '', false);
 SELECT pg_temp.as_user('wd.ana2');
 SELECT pg_temp.expect_error_like('Only QA concludes Phase I (oos.approve)', $$SELECT conclude_oos(pg_temp.oos('LOT-M2'), 'OOS confirmed', NULL, 'x', '{}', pg_temp.opdf('e'), pg_temp.osha(pg_temp.opdf('e')))$$, 'oos.approve');
 SELECT pg_temp.as_user('wd.ana');
@@ -164,7 +233,7 @@ SELECT pg_temp.expect_true('Phase I concluded by QA: OOS confirmed, three signat
   (SELECT status = 'Closed' AND conclusion = 'OOS confirmed' AND analyst_by = pg_temp.uid('wd.ana') AND supervisor_by = pg_temp.uid('wd.sup') AND concluded_by = pg_temp.uid('wd.qa')
      AND analyst_signature_id IS NOT NULL AND supervisor_signature_id IS NOT NULL AND conclusion_signature_id IS NOT NULL FROM oos_investigation WHERE id = pg_temp.oos('LOT-M2')));
 SELECT pg_temp.as_user('wd.pm');
-SELECT pg_temp.expect_error_like('A client retest waits until the client has been told (on release)', $$SELECT order_oos_retest(pg_temp.oos('LOT-M2'), 'Client', 1, NULL)$$, 'not been told');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.retests): a client retest waits until the client has been told (on release)
 SELECT pg_temp.as_user('wd.qa');
 SELECT pg_temp.ofin('LOT-M2', ARRAY[pg_temp.rt('LOT-M2', 'WD Metals')]);
 SELECT pg_temp.expect_true('The confirmed OOS is released on the COA, and the client is emailed (on release) with the Phase II re-testing options, a link for their answer and the signed Phase I report',
@@ -178,7 +247,7 @@ SELECT record_oos_client_response((SELECT client_token FROM oos_investigation WH
 SELECT pg_temp.expect_true('The client''s answer through the link is recorded on the investigation, waiting for the lab',
   EXISTS (SELECT 1 FROM oos_client_response WHERE oos_id = pg_temp.oos('LOT-M2') AND choice = 'Retest in duplicate' AND contact_name = 'Kim Diaz' AND handled_at IS NULL));
 SELECT pg_temp.as_user('wd.pm');
-SELECT order_oos_retest(pg_temp.oos('LOT-M2'), 'Client', 2, (SELECT id FROM oos_client_response WHERE oos_id = pg_temp.oos('LOT-M2') LIMIT 1));
+SELECT pg_temp.retest(pg_temp.oos('LOT-M2'), 'Client', 2, (SELECT id FROM oos_client_response WHERE oos_id = pg_temp.oos('LOT-M2') LIMIT 1));
 SELECT pg_temp.expect_true('The client retest is ordered from the answer: billed by QA''s later determination, the answer handled and linked',
   (SELECT r.source = 'Client OOS Retest' AND r.billing_status = 'Pending QA determination' AND r.price > 0 AND r.retest_replicates = 2
      FROM requested_test r WHERE r.retest_of_id = pg_temp.rt('LOT-M2', 'WD Metals'))
@@ -186,11 +255,11 @@ SELECT pg_temp.expect_true('The client retest is ordered from the answer: billed
 SELECT pg_temp.expect_true('The original (released) result stays finalized; the retest replaces it on the COA and is still in the lab',
   test_is_finalized(pg_temp.rt('LOT-M2', 'WD Metals')) AND test_is_replaced(pg_temp.rt('LOT-M2', 'WD Metals'))
   AND (pg_temp.ocontent('LOT-M2', '{}')->>'pending_count')::int >= 1);
-SELECT pg_temp.expect_error_like('An answer is handled once', $$SELECT handle_oos_response((SELECT id FROM oos_client_response WHERE oos_id = pg_temp.oos('LOT-M2') LIMIT 1), 'x')$$, 'Already handled');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.determinationPhase2AndAnswers): an answer is handled once
 SELECT pg_temp.as_user('wd.qa');
-SELECT pg_temp.expect_error_like('QA determines the cause only after the retest''s result is approved', $$SELECT record_retest_determination(pg_temp.oos('LOT-M2'), 'Confirmed OOS', 'x')$$, 'no approved result');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.determinationPhase2AndAnswers): QA determines the cause only after the retest's result is approved
 SELECT pg_temp.as_user('wd.sup');
-SELECT pg_temp.expect_error_like('The determination is QA''s (oos.approve)', $$SELECT record_retest_determination(pg_temp.oos('LOT-M2'), 'Confirmed OOS', 'x')$$, 'oos.approve');
+-- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.determinationPhase2AndAnswers): the determination is QA's (oos.approve; the database permission function stays)
 SELECT pg_temp.expect_true('The OOS email is a template in the Outbox (Phase II re-testing wording)',
   (SELECT body LIKE '%Phase II re-testing%' AND body LIKE '%{{link_retest_duplicate}}%' FROM email_template WHERE template_code = 'OOS Result'));
 

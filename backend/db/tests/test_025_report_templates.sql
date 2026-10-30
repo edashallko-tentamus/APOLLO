@@ -45,11 +45,9 @@ SELECT pg_temp.expect_error_like('A template for every lab needs a system admini
 SELECT pg_temp.expect_ok('QA makes a template for their lab',
   $$INSERT INTO report_template (template_name, layout, site_id, options) VALUES ('RT micro CFL', 'Standard COA', pg_temp.t25site('CFL'), '{"show_loq": false, "title": "MICROBIOLOGY REPORT"}')$$);
 SELECT pg_temp.expect_true('It gets the next RT- code', (SELECT template_code ~ '^RT-\d{3}$' AND template_code <> 'RT-001' FROM report_template WHERE template_name = 'RT micro CFL'));
-SELECT pg_temp.expect_error_like('Only the options the layout knows are accepted',
-  $$UPDATE report_template SET options = '{"font": "Comic"}' WHERE template_name = 'RT micro CFL'$$, 'Unknown template option');
+-- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.reportTemplates): only the options the layout knows are accepted
 SELECT pg_temp.t25as('akiddle');
-SELECT pg_temp.expect_error_like('A template stays with its lab',
-  $$UPDATE report_template SET site_id = pg_temp.t25site('TPS') WHERE template_name = 'RT micro CFL'$$, 'stays with its lab');
+-- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.reportTemplates): a template stays with its lab
 SELECT pg_temp.t25as('p.qa');
 SELECT pg_temp.expect_error_like('Only the layouts that exist', $$INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT bad layout', 'Poster', pg_temp.t25site('CFL'))$$, 'layout');
 SELECT pg_temp.t25as('e.ana');
@@ -59,8 +57,7 @@ SELECT pg_temp.t25as('akiddle');
 INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT TPS only', 'Standard COA', pg_temp.t25site('TPS'));
 
 -- 3. one default per lab; the default is never retired
-SELECT pg_temp.expect_error_like('The default template cannot be retired',
-  $$UPDATE report_template SET status = 'Inactive' WHERE template_code = 'RT-001'$$, 'cannot be retired');
+-- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.reportTemplates): the default template cannot be retired
 SELECT pg_temp.expect_error_like('Two defaults for the same lab are refused',
   $$INSERT INTO report_template (template_name, layout, site_id, is_default) VALUES ('RT second all-labs default', 'Standard COA', NULL, true)$$, 'one_default');
 SELECT pg_temp.expect_true('A lab without its own default uses the every-lab default', default_report_template(pg_temp.t25site('CFL')) = pg_temp.t25rt('Standard Certificate of Analysis'));
@@ -113,13 +110,12 @@ SELECT pg_temp.t25as('e.ana');
 SELECT pg_temp.expect_error_like('An analyst does not upload the lab''s logo',
   $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/png', 1000))$$, 'permission');
 SELECT pg_temp.t25as('akiddle');
-SELECT pg_temp.expect_error_like('Only PNG, JPEG or SVG', $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('application/pdf', 1000))$$, 'PNG, JPEG or SVG');
-SELECT pg_temp.expect_error_like('Up to 2 MB', $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/png', 3000000))$$, '2 MB');
+-- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.labImagesAndSettings): only PNG, JPEG or SVG
+-- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.labImagesAndSettings): up to 2 MB
 SELECT pg_temp.expect_ok('A lab administrator uploads the logo', $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/png', 1000))$$);
 SELECT pg_temp.expect_error_like('One current logo per lab', $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/jpeg', 1000))$$, 'one_per_kind');
 SELECT pg_temp.expect_ok('Several other images are allowed', $$INSERT INTO site_media (site_id, kind, title, document_id) VALUES (pg_temp.t25site('CFL'), 'Other', 'Banner', pg_temp.t25img('image/png', 10)), (pg_temp.t25site('CFL'), 'Other', 'Seal', pg_temp.t25img('image/png', 10))$$);
-SELECT pg_temp.expect_error_like('An uploaded image is never replaced',
-  $$UPDATE site_media SET document_id = pg_temp.t25img('image/png', 20) WHERE kind = 'Logo' AND site_id = pg_temp.t25site('CFL') AND status = 'Active'$$, 'never replaced');
+-- Moved to the Java backend in migration 071 (LabSetupService only retires images): an uploaded image is never replaced
 SELECT pg_temp.expect_ok('It is retired instead, and a new one uploaded',
   $$UPDATE site_media SET status = 'Inactive' WHERE kind = 'Logo' AND site_id = pg_temp.t25site('CFL') AND status = 'Active';
     INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/svg+xml', 500))$$);

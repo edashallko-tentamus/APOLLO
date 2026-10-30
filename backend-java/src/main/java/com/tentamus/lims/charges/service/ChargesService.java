@@ -10,6 +10,7 @@ import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
 import com.tentamus.lims.charges.domain.Charge;
 import com.tentamus.lims.charges.domain.OrderCharge;
+import com.tentamus.lims.charges.repo.OrderChargeStore;
 import com.tentamus.lims.pricing.domain.Amount;
 import com.tentamus.lims.quotes.domain.QuoteVersion;
 import com.tentamus.lims.quotes.repo.ProjectRepository;
@@ -29,8 +30,10 @@ public class ChargesService {
     private final UnitOfWork uow;
     private final AccessPolicy access;
     private final ProjectRepository quotes;
+    private final OrderChargeStore charges;
 
-    public ChargesService(Db db, UnitOfWork uow, AccessPolicy access, ProjectRepository quotes) {
+    public ChargesService(Db db, UnitOfWork uow, AccessPolicy access, ProjectRepository quotes, OrderChargeStore charges) {
+        this.charges = charges;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -284,16 +287,14 @@ public class ChargesService {
         return uow.run(ctx, d -> {
             Object sample = uuidOrNull(body.get("sample_id"));
             Map<String, Object> s = sample == null ? null : d.one("SELECT lab_order_id FROM sample WHERE id = ?::uuid", sample);
-            Map<String, Object> item = d.one("SELECT status::text AS status, site_id, price FROM charge_item WHERE id = ?::uuid", body.get("charge_item_id"));
+            Map<String, Object> item = charges.item(d, body.get("charge_item_id"));
             Double typed = Js.num(body.get("unit_price"));
             OrderCharge.checkQuantity(Js.intOr(body.get("quantity"), 1));
             OrderCharge.checkNew((String) o.get("id"), (String) o.get("site_id"), sample == null ? null : sample.toString(), s == null ? null : (String) s.get("lab_order_id"),
                 item == null ? null : (String) item.get("status"), item == null ? null : (String) item.get("site_id"), item == null ? BigDecimal.ZERO : Amount.of(item.get("price")),
                 typed == null ? null : Amount.of(Js.number(typed)), !ctx.reason().isBlank());
-            return d.one("""
-            INSERT INTO order_charge (lab_order_id, sample_id, charge_item_id, quantity, unit_price, note)
-            VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?::numeric, ?) RETURNING id, charge_no""",
-            o.get("id"), sample, body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1), typed, Js.orNull(body.get("note")));
+            return charges.insert(d, o.get("id"), sample, body.get("charge_item_id"), Js.intOr(body.get("quantity"), 1),
+                typed == null ? null : Amount.of(Js.number(typed)), Js.orNull(body.get("note")), "Order");
         });
     }
 
@@ -304,7 +305,8 @@ public class ChargesService {
         orderOf(ctx, (String) oc.get("lab_order_id"));
         return uow.run(ctx, d -> {
             Map<String, Object> c = d.one("""
-                SELECT id, charge_no, lab_order_id, status, quantity, unit_price, charge_invoice_line(id) IS NOT NULL AS invoiced FROM order_charge WHERE id = ?::uuid""", id);
+                SELECT oc.id, oc.charge_no, oc.lab_order_id, oc.status, oc.quantity, oc.unit_price, ci.kind, charge_invoice_line(oc.id) IS NOT NULL AS invoiced
+                  FROM order_charge oc JOIN charge_item ci ON ci.id = oc.charge_item_id WHERE oc.id = ?::uuid""", id);
             OrderCharge charge = new OrderCharge(id, (String) c.get("charge_no"), (String) c.get("lab_order_id"), (String) c.get("status"), Boolean.TRUE.equals(c.get("invoiced")));
             Long q = Js.parseInt(body.get("quantity"));
             Double price = Js.num(body.get("unit_price"));
@@ -315,7 +317,7 @@ public class ChargesService {
             if (Js.truthy(body.get("cancel"))) d.update("UPDATE order_charge SET status = 'Cancelled' WHERE id = ?::uuid", id);
             else {
                 d.update("UPDATE order_charge SET quantity = COALESCE(?::int, quantity), unit_price = COALESCE(?::numeric, unit_price), note = ? WHERE id = ?::uuid",
-                    q == null || q == 0 ? null : q, Js.num(body.get("unit_price")), Js.orNull(body.get("note")), id);
+                    q == null || q == 0 ? null : q, price == null ? null : OrderCharge.signed((String) c.get("kind"), Amount.of(Js.number(price))), Js.orNull(body.get("note")), id);
             }
             return ok();
         });

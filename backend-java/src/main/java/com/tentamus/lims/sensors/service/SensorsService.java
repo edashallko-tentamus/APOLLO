@@ -9,6 +9,11 @@ import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.sensors.domain.SensorConnection;
+import com.tentamus.lims.sensors.domain.SensorLink;
+import com.tentamus.lims.sensors.repo.SensorRepository;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
@@ -25,8 +30,10 @@ public class SensorsService {
     private final UnitOfWork uow;
     private final AccessPolicy access;
     private final SignatureService signatures;
+    private final SensorRepository sensors;
 
-    public SensorsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures) {
+    public SensorsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, SensorRepository sensors) {
+        this.sensors = sensors;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -53,11 +60,15 @@ public class SensorsService {
         access.requireSystemAdmin(ctx);
         String site = access.currentSite(ctx);
         return uow.run(ctx.withSite(site).orReason("Sensor connection changed"), d -> {
-            d.update("""
-                UPDATE sensor_connection SET mode = COALESCE(?, mode), base_url = ?, enabled = COALESCE(?::boolean, enabled),
-                    read_every_minutes = COALESCE(?::int, read_every_minutes), lookback_hours = COALESCE(?::int, lookback_hours) WHERE site_id = ?::uuid""",
-                Js.orNull(body.get("mode")), Js.orNull(body.get("base_url")), body.get("enabled") instanceof Boolean b ? b : null,
-                numOrNull(body.get("read_every_minutes")), numOrNull(body.get("lookback_hours")), site);
+            SensorConnection c = sensors.connection(d, site);
+            if (c == null) return ok();
+            if (Js.truthy(body.get("mode"))) c.mode = Js.string(body.get("mode"));
+            c.baseUrl = (String) Js.orNull(body.get("base_url"));
+            if (body.get("enabled") instanceof Boolean b) c.enabled = b;
+            if (numOrNull(body.get("read_every_minutes")) instanceof Double n) c.readEveryMinutes = (int) (double) n;
+            if (numOrNull(body.get("lookback_hours")) instanceof Double n) c.lookbackHours = (int) (double) n;
+            c.check();
+            sensors.save(d, site, c);
             return ok();
         });
     }
@@ -66,11 +77,17 @@ public class SensorsService {
     public Map<String, Object> link(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
         String what = "Sensor " + Js.string(body.get("external_id")) + " (" + Js.string(body.get("measures")) + ") linked to a logbook";
-        return signed(ctx.withSite(site).orReason("Sensor linked"), body, "Created by", what, d -> d.one("""
-            INSERT INTO sensor_link (site_id, external_id, sensor_name, measures, equipment_id, logbook_id, field_key, gap_minutes)
-            VALUES (?::uuid, ?, ?, ?, ?::uuid, ?::uuid, ?, COALESCE(?::int, 30)) RETURNING id""",
-            site, Js.string(body.get("external_id")).trim(), Js.orNull(body.get("sensor_name")), body.get("measures"), uuidOrNull(body.get("equipment_id")),
-            uuidOrNull(body.get("logbook_id")), body.get("field_key"), numOrNull(body.get("gap_minutes"))));
+        RequestContext c = ctx.withSite(site).orReason("Sensor linked");
+        return signed(c, body, "Created by", what, d -> {
+            access.require(c, "sensors.configure", "link sensors");
+            SensorLink l = new SensorLink();
+            l.siteId = site; l.externalId = Js.string(body.get("external_id")).trim(); l.sensorName = (String) Js.orNull(body.get("sensor_name"));
+            l.measures = (String) body.get("measures"); l.equipmentId = (String) uuidOrNull(body.get("equipment_id")); l.logbookId = (String) uuidOrNull(body.get("logbook_id"));
+            l.fieldKey = body.get("field_key") == null ? null : Js.string(body.get("field_key"));
+            if (numOrNull(body.get("gap_minutes")) instanceof Double n) l.gapMinutes = (int) (double) n;
+            l.checkNew(sensors.siteOf(d, "logbook", l.logbookId), sensors.siteOf(d, "equipment", l.equipmentId), sensors.problem(d, l));
+            return sensors.insert(d, l);
+        });
     }
 
     /** QA's approval (signed), filling in the sensor's readings from 0 to 168 hours back. */
@@ -80,14 +97,27 @@ public class SensorsService {
         long back = (long) Math.max(0, Math.min(168, Double.isNaN(asked) || !body.containsKey("hours_back") ? 0 : asked));
         return signed(ctx.withSite((String) l.get("site_id")).withReason("Sensor link approved by QA"), body, "Approved by",
             "Sensor " + l.get("external_id") + " (" + l.get("measures") + ") feeding a logbook" + (back != 0 ? ", from " + back + " hours back" : ""),
-            d -> { d.one("SELECT approve_sensor_link(?::uuid, clock_timestamp() - make_interval(hours => ?::int))", l.get("id"), back); return ok(); });
+            d -> {
+                SensorLink s = sensors.link(d, l.get("id"));
+                access.require(ctx.withSite(s.siteId), "logbook.review", "approve sensor links");
+                Instant now = Instant.now();
+                Instant from = s.approve(ctx.userId(), sensors.problem(d, s), now.minus(Duration.ofHours(back)), now);
+                sensors.approved(d, s, ctx.userId(), from);
+                return ok();
+            });
     }
 
     public Map<String, Object> retire(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> l = linkOf(ctx, id);
         String why = Js.string(body.get("why")).trim();
         return signed(ctx.withSite((String) l.get("site_id")).orReason("Sensor link retired"), body, "Changed by", "Retire sensor " + l.get("external_id") + " (" + l.get("measures") + ")",
-            d -> { d.one("SELECT retire_sensor_link(?::uuid, ?)", l.get("id"), why); return ok(); });
+            d -> {
+                SensorLink s = sensors.link(d, l.get("id"));
+                access.require(ctx.withSite(s.siteId), "sensors.configure", "retire sensor links");
+                s.retire(why);
+                sensors.retired(d, s);
+                return ok();
+            });
     }
 
     /** The reason for a sensor entry's excursion or silence (signed when the logbook signs). */

@@ -1,5 +1,11 @@
 package com.tentamus.lims.logbooks.service;
 
+import com.tentamus.lims.inventory.domain.Units;
+import com.tentamus.lims.inventory.repo.UnitRepository;
+import com.tentamus.lims.logbooks.domain.CoveredEquipment;
+import com.tentamus.lims.logbooks.domain.Logbook;
+import com.tentamus.lims.logbooks.domain.LogbookField;
+import com.tentamus.lims.logbooks.repo.LogbookDesignRepository;
 import static com.tentamus.lims.core.web.Answers.*;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -58,8 +64,12 @@ public class LogbooksService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final ObjectMapper json;
+    private final LogbookDesignRepository design;
+    private final UnitRepository units;
 
-    public LogbooksService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json) {
+    public LogbooksService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json, LogbookDesignRepository design, UnitRepository units) {
+        this.design = design;
+        this.units = units;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -215,11 +225,13 @@ public class LogbooksService {
         String site = access.currentSite(ctx);
         Map<String, Object> o = settingsOf(body);
         if (Js.string(o.get("logbook_name")).trim().isEmpty()) throw new RuleException("Name the logbook");
-        List<String> keys = o.keySet().stream().filter(k -> o.get(k) != null && !k.equals("status")).toList();
-        List<Object> vals = new ArrayList<>(List.of(site));
-        for (String k : keys) vals.add(o.get(k));
-        return uow.run(ctx.orReason("New logbook"), d -> d.one("INSERT INTO logbook (site_id" + keys.stream().map(k -> ", " + k).collect(Collectors.joining())
-            + ") VALUES (?::uuid" + ", ?".repeat(keys.size()) + ") RETURNING id, logbook_code", vals.toArray()));
+        o.remove("status");
+        Map<String, Object> cols = Logbook.checked(null, LogbookDesignRepository.after(Map.of("site_id", site), o), o, false, this::lotUnit);
+        return uow.run(ctx.orReason("New logbook"), d -> design.insert(d, "logbook", "site_id", site, cols, "id, logbook_code"));
+    }
+
+    /** The lots' unit in the Units list's spelling (a quantity unit), or refused. */
+    private String lotUnit(String code) { return units.load().canonical(code, Units.QUANTITY, "Unit of the lots it makes");
     }
 
     // ---------------------------------------------------------------- QA: Logbook review
@@ -310,10 +322,9 @@ public class LogbooksService {
         Map<String, Object> l = logbookOf(ctx, id);
         Map<String, Object> o = settingsOf(body);
         if (o.isEmpty()) return ok();
-        List<Object> vals = new ArrayList<>(o.values());
-        vals.add(l.get("id"));
         return uow.run(ctx.orReason("Logbook settings changed"), d -> {
-            d.update("UPDATE logbook SET " + o.keySet().stream().map(k -> k + " = ?").collect(Collectors.joining(", ")) + " WHERE id = ?::uuid", vals.toArray());
+            Map<String, Object> before = design.logbook(d, l.get("id"));
+            design.update(d, "logbook", l.get("id"), Logbook.checked(before, LogbookDesignRepository.after(before, o), o, design.hasEntries(d, l.get("id")), this::lotUnit));
             return ok();
         });
     }
@@ -343,15 +354,12 @@ public class LogbooksService {
                 if (Js.truthy(x.get("id"))) {
                     if (!RequestContext.isUuid(x.get("id"))) throw new RuleException("Unknown field");
                     if (o.isEmpty()) continue;
-                    List<Object> vals = new ArrayList<>(o.values());
-                    vals.add(x.get("id"));
-                    vals.add(draft.get("id"));
-                    d.update("UPDATE logbook_field SET " + o.keySet().stream().map(k -> k + " = ?").collect(Collectors.joining(", ")) + " WHERE id = ?::uuid AND version_id = ?::uuid", vals.toArray());
+                    Map<String, Object> before = design.field(d, x.get("id"), draft.get("id"));
+                    if (before == null) continue;   // not a field of this Draft: nothing to change, as the UPDATE's WHERE had it
+                    design.update(d, "logbook_field", x.get("id"), LogbookField.checked(before, LogbookDesignRepository.after(before, o), o, (String) l.get("subject")));
                 } else {
-                    List<String> keys = o.keySet().stream().filter(k -> o.get(k) != null).toList();
-                    List<Object> vals = new ArrayList<>(List.of(draft.get("id")));
-                    for (String k : keys) vals.add(o.get(k));
-                    d.update("INSERT INTO logbook_field (version_id" + keys.stream().map(k -> ", " + k).collect(Collectors.joining()) + ") VALUES (?::uuid" + ", ?".repeat(keys.size()) + ")", vals.toArray());
+                    Map<String, Object> cols = LogbookField.checked(null, LogbookDesignRepository.after(Map.of("version_id", draft.get("id")), o), o, (String) l.get("subject"));
+                    design.insert(d, "logbook_field", "version_id", draft.get("id"), cols, null);
                 }
             }
             return map("saved", rows.size());
@@ -367,6 +375,13 @@ public class LogbooksService {
             d -> { d.one("SELECT approve_logbook_version(?::uuid)", draft.get("id")); return ok(); });
     }
 
+    private CoveredEquipment covered(Db d, Map<String, Object> l, Object equipmentId, Object limits) {
+        Map<String, Object> e = design.equipment(d, equipmentId);
+        if (e == null) throw RuleException.database("Equipment not found");
+        return new CoveredEquipment((String) l.get("logbook_code"), (String) l.get("subject"), (String) l.get("site_id"), (String) e.get("equipment_code"),
+            (String) e.get("site_id"), Boolean.TRUE.equals(e.get("retired")), json.valueToTree(limits));
+    }
+
     public Map<String, Object> saveEquipment(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> l = logbookOf(ctx, id);
         List<Map<String, Object>> rows = rows(body, "rows");
@@ -376,6 +391,8 @@ public class LogbooksService {
                 String limits = lim instanceof Map<?, ?> || lim instanceof List<?> ? toJson(lim) : null;
                 if (Js.truthy(x.get("id"))) {
                     if (!RequestContext.isUuid(x.get("id"))) throw new RuleException("Unknown row");
+                    Map<String, Object> row = design.covered(d, x.get("id"), l.get("id"));
+                    if (row != null && limits != null) covered(d, l, row.get("equipment_id"), lim).check(false);
                     List<String> sets = new ArrayList<>();
                     List<Object> vals = new ArrayList<>();
                     if (limits != null) { sets.add("limits = ?::jsonb"); vals.add(limits); }
@@ -387,6 +404,7 @@ public class LogbooksService {
                     d.update("UPDATE logbook_equipment SET " + String.join(", ", sets) + " WHERE id = ?::uuid AND logbook_id = ?::uuid", vals.toArray());
                 } else {
                     if (!RequestContext.isUuid(x.get("equipment_id"))) throw new RuleException("Choose the equipment");
+                    covered(d, l, x.get("equipment_id"), limits == null ? Map.of() : lim).check(true);
                     d.update("INSERT INTO logbook_equipment (logbook_id, equipment_id, limits, notes) VALUES (?::uuid, ?::uuid, COALESCE(?::jsonb, '{}'), ?)",
                         l.get("id"), x.get("equipment_id"), limits, Js.orNull(x.get("notes")));
                 }

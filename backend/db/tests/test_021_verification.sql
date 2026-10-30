@@ -85,7 +85,7 @@ SELECT pg_temp.as_user('wd.ana');
 SELECT pg_temp.expect_error_like('A protocol written for another design is refused', $$SELECT pg_temp.protocol('not-the-fingerprint')$$, 'version changed while the protocol');
 SELECT pg_temp.as_user('wd.qa');
 SELECT pg_temp.protocol(test_version_config_hash(pg_temp.tv()));
-SELECT pg_temp.expect_error_like('Its author cannot approve a protocol, even holding methods.verify', $$SELECT approve_verification_protocol(pg_temp.w())$$, 'someone else (QA) must approve');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.approvingTheProtocol): its author cannot approve a protocol, even holding methods.verify
 SELECT pg_temp.as_user('wd.ana');
 SELECT pg_temp.protocol(test_version_config_hash(pg_temp.tv()));
 SELECT pg_temp.expect_true('A new protocol supersedes the version''s earlier one not signed off',
@@ -94,13 +94,17 @@ SELECT pg_temp.expect_true('The protocol is a draft with its design, fingerprint
   (SELECT status = 'Protocol draft' AND config_hash = test_version_config_hash(pg_temp.tv()) AND definition->>'test_name' = 'WD Verify'
           AND prepared_signature_id IS NOT NULL AND verification_code LIKE 'VER-%' FROM workflow_verification WHERE id = pg_temp.w()));
 SELECT pg_temp.expect_error_like('Its requirements and checks change only through the protocol, run and report', $$UPDATE verification_check SET title = 'x' WHERE verification_id = pg_temp.w()$$, 'only through their protocol');
-SELECT pg_temp.expect_error_like('The designer who wrote it cannot approve it either', $$SELECT approve_verification_protocol(pg_temp.w())$$, 'methods.verify');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.approvingTheProtocol): the designer who wrote it cannot approve it either (methods.verify)
 SELECT pg_temp.as_user('wd.sup');
-SELECT pg_temp.expect_error_like('Approving the protocol needs methods.verify (QA)', $$SELECT approve_verification_protocol(pg_temp.w())$$, 'methods.verify');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.approvingTheProtocol): approving the protocol needs methods.verify (QA)
 SELECT pg_temp.as_user('wd.ana');
 SELECT pg_temp.expect_error_like('The run waits for QA''s approval of the protocol', $$SELECT start_verification_run(pg_temp.w(), '[{"key": "S1"}]')$$, 'QA approves the protocol');
 SELECT pg_temp.as_user('wd.qa');
-SELECT approve_verification_protocol(pg_temp.w());
+-- fixture: QA approves the protocol (signed), as the Java service writes it
+SELECT set_verification_internal(true);
+UPDATE workflow_verification SET status = 'Protocol approved', protocol_approved_by = pg_temp.uid('wd.qa'), protocol_approved_at = clock_timestamp(),
+       protocol_signature_id = NULLIF(current_setting('lims.signature_id', true), '')::uuid WHERE id = pg_temp.w();
+SELECT set_verification_internal(false);
 SELECT pg_temp.expect_true('QA approved it (signed)', (SELECT status = 'Protocol approved' AND protocol_approved_by = pg_temp.uid('wd.qa') AND protocol_signature_id IS NOT NULL FROM workflow_verification WHERE id = pg_temp.w()));
 
 -- 3. a change to the design voids the protocol
@@ -165,11 +169,11 @@ SELECT pg_temp.expect_true('Verification samples stay out of the backlog', NOT E
 SELECT pg_temp.as_user('wd.sup');
 SELECT pg_temp.expect_error_like('Without a signed report the version cannot be approved (the lab requires it)', $$SELECT approve_test_version(pg_temp.tv())$$, 'needs a passing workflow verification');
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('Signing the report needs methods.verify (QA)', $$SELECT sign_verification_report(pg_temp.w(), 'Fine', '{}')$$, 'methods.verify');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.signingTheReport): signing the report needs methods.verify (QA)
 SELECT pg_temp.as_user('wd.qa');
-SELECT pg_temp.expect_error_like('Whoever executed the run cannot sign its report, even holding methods.verify', $$SELECT sign_verification_report(pg_temp.w(), 'Fine', '{}')$$, 'someone else (QA) must sign');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.signingTheReport): whoever executed the run cannot sign its report, even holding methods.verify
 SELECT pg_temp.as_user('akiddle');
-SELECT pg_temp.expect_error_like('QA signs the report only once the evidence (screenshots) is captured', $$SELECT sign_verification_report(pg_temp.w(), 'Fine', '{"FRS-02": "x"}')$$, 'Capture the evidence');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.signingTheReport): QA signs the report only once the evidence (screenshots) is captured
 -- 5b. the evidence (WD-6.1, migration 025): stored images, checked against their SHA-256, recorded once and never changed
 SELECT pg_temp.as_user('wd.ana');
 INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content)
@@ -190,11 +194,16 @@ SELECT pg_temp.expect_error_like('The evidence is captured once', format('SELECT
 SELECT pg_temp.expect_error_like('Evidence is kept exactly as captured (no change)', $$UPDATE verification_evidence SET title = 'Other' WHERE verification_id = pg_temp.w()$$, 'exactly as captured');
 SELECT pg_temp.expect_error_like('Evidence is kept exactly as captured (no deletion)', $$DELETE FROM verification_evidence WHERE verification_id = pg_temp.w()$$, '');
 SELECT pg_temp.as_user('akiddle');
-SELECT pg_temp.expect_error_like('QA justifies each requirement not tested', $$SELECT sign_verification_report(pg_temp.w(), 'Fine', '{}')$$, 'FRS-02 was not tested');
-SELECT sign_verification_report(pg_temp.w(), 'The workflow runs as designed', '{"FRS-02": "Covered by the rule tests"}');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.signingTheReport): QA justifies each requirement not tested
+-- fixture: QA signs the report (signed), as the Java service writes it
+SELECT set_verification_internal(true);
+UPDATE verification_requirement SET qa_justification = 'Covered by the rule tests' WHERE verification_id = pg_temp.w() AND req_code = 'FRS-02';
+UPDATE workflow_verification SET status = 'Report signed', report_conclusion = 'The workflow runs as designed', report_signed_by = pg_temp.uid('akiddle'),
+       report_signed_at = clock_timestamp(), report_signature_id = NULLIF(current_setting('lims.signature_id', true), '')::uuid WHERE id = pg_temp.w();
+SELECT set_verification_internal(false);
 SELECT pg_temp.expect_true('QA signed the report with the justification', (SELECT w.status = 'Report signed' AND w.report_signed_by = pg_temp.uid('akiddle') AND r.qa_justification = 'Covered by the rule tests'
   FROM workflow_verification w JOIN verification_requirement r ON r.verification_id = w.id AND r.req_code = 'FRS-02' WHERE w.id = pg_temp.w()));
-SELECT pg_temp.expect_error_like('A signed verification cannot be cancelled', $$SELECT cancel_verification(pg_temp.w())$$, 'cannot be cancelled');
+-- Moved to the Java backend in migration 071 (JUnit: VerificationRulesTest.cancelling): a signed verification cannot be cancelled
 SELECT pg_temp.as_user('wd.ana');
 UPDATE workflow_step SET instructions = 'Changed after the report' WHERE id = pg_temp.st('read');
 SELECT pg_temp.as_user('wd.sup');

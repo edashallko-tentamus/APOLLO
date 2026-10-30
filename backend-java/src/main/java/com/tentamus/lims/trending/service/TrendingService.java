@@ -16,6 +16,9 @@ import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.ApiExceptionHandler;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.trending.domain.SignalReview;
+import com.tentamus.lims.trending.domain.TrendChart;
+import com.tentamus.lims.trending.repo.TrendChartRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,8 +57,10 @@ public class TrendingService {
     private final SignatureService signatures;
     private final TrendEngine engine;
     private final ObjectMapper json;
+    private final TrendChartRepository charts;
 
-    public TrendingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TrendEngine engine, ObjectMapper json) {
+    public TrendingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TrendEngine engine, ObjectMapper json, TrendChartRepository charts) {
+        this.charts = charts;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -267,12 +272,19 @@ public class TrendingService {
             "can_approve", access.has(ctx, "trending.approve"), "can_design", access.has(ctx, "methods.design"), "limits_for_test", "qc".equals(ch.get("source")) ? lim : null);
     }
 
-    /** QA approves the chart and its limits (signed "Approved by"; the database checks who may and who may not). */
+    /** QA approves the chart and its limits (signed "Approved by"; {@link TrendChart#approve} decides who may not). */
     public Map<String, Object> approve(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> ch = chartOf(ctx, id);
         RequestContext c = ctx.withSite((String) ch.get("site_id")).withReason(Js.truthy(body.get("reason")) ? Js.string(body.get("reason")) : "Trend chart and its limits approved");
         return signatures.signed(c, body, new SignatureService.Meaning("Approved by", "Trend chart " + TrendEngine.tpl(ch.get("chart_code")) + " " + TrendEngine.tpl(ch.get("chart_name")) + " and its limits", "Trending"),
-            d -> { d.one("SELECT approve_trend_chart(?::uuid)", ch.get("id")); return ok(); });
+            d -> {
+                TrendChart t = charts.load(d, ch.get("id"));
+                if (t == null) throw RuleException.database("Chart not found");
+                access.require(c, "trending.approve", "approve trend charts");
+                t.approve(c.userId());
+                charts.update(d, t);
+                return ok();
+            });
     }
 
     /** Number(Number(v).toPrecision(4)), kept whole when it is (JSON 100, not 100.0). */
@@ -342,7 +354,12 @@ public class TrendingService {
             d.update("""
                 UPDATE test_version SET change_summary = CASE WHEN change_summary IS NULL OR change_summary = '' THEN ?::text WHEN position(?::text in change_summary) > 0 THEN change_summary
                   ELSE change_summary || '; ' || ?::text END WHERE id = ?::uuid""", note, note, note, v.get("id"));
-            d.one("SELECT record_trend_limits_applied(?::uuid, ?::uuid)", ch.get("id"), v.get("id"));
+            TrendChart t = charts.load(d, ch.get("id"));
+            Map<String, Object> again = d.one("SELECT * FROM trend_limits_for_test(?::uuid)", ch.get("id"));
+            if (again != null && Js.truthy(again.get("problem"))) throw RuleException.database(Js.string(again.get("problem")));
+            access.require(c, "methods.design", "design tests");
+            t.limitsApplied((String) v.get("id"), charts.draftOfTest(d, v.get("id"), x.get("test_id")), c.userId());
+            charts.update(d, t);
             return map("version_id", v.get("id"), "version_no", v.get("version_no"), "created", created, "min", "Range".equals(shape) ? lcl : null, "max", ucl);
         });
     }
@@ -382,18 +399,23 @@ public class TrendingService {
         boolean show = Js.truthy(b.get("show_in_review"));
         Object[] vals = {Js.string(Js.orBlank(b.get("chart_name"))).trim(), Js.orNull(b.get("description")), b.get("source"), toJson(Js.truthy(b.get("params")) ? b.get("params") : Map.of()),
             rulesText, !Boolean.FALSE.equals(b.get("watch")), show, Js.truthy(b.get("qa_review")) || show};
+        List<String> ruleList = rules.stream().map(r -> r == null ? "" : TrendEngine.tpl(r)).toList();
         return uow.run(ctx.withSite(site), reason, d -> {
-            // a chart shown in QC Review is always QA reviewed (the database sets it too)
-            if (RequestContext.isUuid(b.get("id"))) {
-                d.update("UPDATE trend_chart SET chart_name = ?, description = ?, source = ?, params = ?::jsonb, rules = ?::text[], watch = ?::boolean, show_in_review = ?::boolean, qa_review = ?::boolean WHERE id = ?::uuid",
-                    vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7], b.get("id"));
-                return map("id", b.get("id"));
-            }
-            return d.one("""
-                INSERT INTO trend_chart (site_id, chart_name, description, source, params, rules, watch, show_in_review, qa_review)
-                VALUES (?::uuid, ?, ?, ?, ?::jsonb, ?::text[], ?::boolean, ?::boolean, ?::boolean) RETURNING id, chart_code""",
-                site, vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6], vals[7]);
+            boolean update = RequestContext.isUuid(b.get("id"));
+            TrendChart before = update ? charts.load(d, b.get("id")) : null;
+            TrendChart t = before != null ? before.copy() : new TrendChart();
+            if (before == null) t.siteId = site;
+            t.name = (String) vals[0]; t.description = (String) vals[1]; t.source = (String) vals[2]; t.params = charts.node(vals[3]); t.rules = ruleList;
+            t.watch = (Boolean) vals[5]; t.showInReview = (Boolean) vals[6]; t.qaReview = (Boolean) vals[7];
+            save(ctx.withSite(t.siteId), d, before, t);
+            return update ? map("id", b.get("id")) : charts.insert(d, t);
         });
+    }
+
+    /** Checks a chart change with its rules and writes it (taking a chart off QA review needs trending.approve). */
+    private void save(RequestContext c, Db d, TrendChart before, TrendChart t) {
+        if (t.checkSave(before, c.userId())) access.require(c, "trending.approve", "take a chart off QA review");
+        if (before != null) charts.update(d, t);
     }
 
     /** Freeze the limits from a baseline period (the chart's points in it): centre line and sigma. */
@@ -416,8 +438,10 @@ public class TrendingService {
         Map<String, Object> st = (Map<String, Object>) base.get("stats");
         String reason = Js.truthy(b.get("reason")) ? Js.string(b.get("reason")) : "Control limits frozen from a baseline";
         return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> {
-            d.update("UPDATE trend_chart SET frozen_cl = ?::numeric, frozen_sigma = ?::numeric, frozen_from = ?::date, frozen_to = ?::date, frozen_n = ?::int WHERE id = ?::uuid",
-                st.get("cl"), i ? st.get("sigma") : (Object) 0, Js.orNull(b.get("from")), Js.orNull(b.get("to")), pts.size(), ch.get("id"));
+            TrendChart before = charts.load(d, ch.get("id")), t = before.copy();
+            t.frozenCl = Js.toNumber(st.get("cl")); t.frozenSigma = i ? Js.toNumber(st.get("sigma")) : 0.0;
+            t.frozenFrom = (String) Js.orNull(b.get("from")); t.frozenTo = (String) Js.orNull(b.get("to")); t.frozenN = pts.size();
+            save(ctx.withSite(t.siteId), d, before, t);
             Map<String, Object> out = map("cl", st.get("cl"));
             if (st.containsKey("sigma")) out.put("sigma", st.get("sigma"));
             out.put("n", pts.size());
@@ -428,14 +452,21 @@ public class TrendingService {
     public Map<String, Object> unfreeze(RequestContext ctx, String id, Map<String, Object> b) {
         Map<String, Object> ch = chartOf(ctx, id);
         String reason = Js.truthy(b.get("reason")) ? Js.string(b.get("reason")) : "Control limits recalculated from the data";
-        return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> { d.update("UPDATE trend_chart SET frozen_cl = NULL WHERE id = ?::uuid", ch.get("id")); return ok(); });
+        return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> {
+            TrendChart before = charts.load(d, ch.get("id")), t = before.copy();
+            t.frozenCl = null;
+            save(ctx.withSite(t.siteId), d, before, t);
+            return ok();
+        });
     }
 
     public Map<String, Object> retire(RequestContext ctx, String id, Map<String, Object> b) {
         Map<String, Object> ch = chartOf(ctx, id);
         String reason = Js.truthy(b.get("reason")) ? Js.string(b.get("reason")) : "Trend chart retired";
         return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> {
-            d.update("UPDATE trend_chart SET status = 'Inactive', watch = false, show_in_review = false WHERE id = ?::uuid", ch.get("id"));
+            TrendChart before = charts.load(d, ch.get("id")), t = before.copy();
+            t.status = "Inactive"; t.watch = false; t.showInReview = false;
+            save(ctx.withSite(t.siteId), d, before, t);
             return ok();
         });
     }
@@ -446,9 +477,9 @@ public class TrendingService {
         String reason = Js.truthy(b.get("reason")) ? Js.string(b.get("reason")) : "Trend signal reviewed";
         String key = Js.string(Js.orBlank(b.get("point_key")));
         return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> {
-            d.update("UPDATE trend_signal_review SET status = 'Inactive' WHERE chart_id = ?::uuid AND point_key = ? AND rule = ? AND status = 'Active'", ch.get("id"), key, b.get("rule"));
-            return d.one("INSERT INTO trend_signal_review (chart_id, point_key, point_label, rule, outcome, comment) VALUES (?::uuid, ?, ?, ?, ?, ?) RETURNING id",
-                ch.get("id"), key, Js.orNull(b.get("point_label")), b.get("rule"), b.get("outcome"), Js.string(Js.orBlank(b.get("comment"))).trim());
+            String rule = b.get("rule") == null ? null : Js.string(b.get("rule"));
+            String comment = new SignalReview(key, rule, (String) b.get("outcome"), Js.string(Js.orBlank(b.get("comment")))).checkedComment();
+            return charts.review(d, (String) ch.get("id"), key, (String) Js.orNull(b.get("point_label")), rule, (String) b.get("outcome"), comment);
         });
     }
 

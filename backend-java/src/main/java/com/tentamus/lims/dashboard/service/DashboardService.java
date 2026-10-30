@@ -1,5 +1,7 @@
 package com.tentamus.lims.dashboard.service;
 
+import com.tentamus.lims.dashboard.domain.DashboardLayout;
+import com.tentamus.lims.dashboard.domain.FinanceFigure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.access.UserAccess;
@@ -662,12 +664,15 @@ public class DashboardService {
         if (body.get("hidden") instanceof List<?> l)
             for (Object o : l) if (o instanceof String h) hidden.append(hidden.length() > 1 ? "," : "").append('"').append(h.replace("\"", "")).append('"');
         hidden.append('}');
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> widgets = (List<Map<String, Object>>) (List<?>) layout;
+        new DashboardLayout(c.userId(), widgets).check(c.userId());
         String json;
         try { json = JSON.writeValueAsString(layout); } catch (Exception e) { throw new IllegalStateException(e); }
         uow.run(c, "", t -> {
             Sql s = pg("""
                 INSERT INTO user_dashboard_layout (user_id, board, layout, hidden) VALUES ($1, $2, $3::jsonb, $4::text[])
-                  ON CONFLICT (user_id, board) DO UPDATE SET layout = EXCLUDED.layout, hidden = EXCLUDED.hidden""", c.userId(), board, json, hidden.toString());
+                  ON CONFLICT (user_id, board) DO UPDATE SET layout = EXCLUDED.layout, hidden = EXCLUDED.hidden, updated_at = now()""", c.userId(), board, json, hidden.toString());
             return t.update(s.text(), s.params());
         });
         return ok();
@@ -678,7 +683,7 @@ public class DashboardService {
         uow.run(c, "", t -> {
             Sql s = pg("""
                 INSERT INTO user_dashboard_layout (user_id, board, layout, hidden) VALUES ($1, $2, '[]', '{}')
-                  ON CONFLICT (user_id, board) DO UPDATE SET layout = '[]', hidden = '{}'""", c.userId(), board);
+                  ON CONFLICT (user_id, board) DO UPDATE SET layout = '[]', hidden = '{}', updated_at = now()""", c.userId(), board);
             return t.update(s.text(), s.params());
         });
         return ok();
@@ -806,15 +811,21 @@ public class DashboardService {
                 // the LIMS revenue is never taken from the request; only the books' figure (optional), the costs and the note
                 Object b = x.get("books_revenue");
                 Double books = b == null || Js.string(b).trim().isEmpty() ? null : money(b, "Revenue (books)");
+                double costs = money(x.get("costs"), "Costs");
+                new FinanceFigure(weekEnding(x.get("week_ending")), books, costs).check(java.time.LocalDate.now(java.time.ZoneOffset.UTC));
                 Sql s = pg("""
                     INSERT INTO finance_week (site_id, week_ending, revenue, costs, note) VALUES ($1, $2, $3, $4, NULLIF(btrim($5), ''))
                       ON CONFLICT (site_id, week_ending) DO UPDATE SET revenue = EXCLUDED.revenue, costs = EXCLUDED.costs, note = EXCLUDED.note, status = 'Active'""",
-                    site, x.get("week_ending"), books, money(x.get("costs"), "Costs"), Js.orBlank(x.get("note")));
+                    site, x.get("week_ending"), books, costs, Js.orBlank(x.get("note")));
                 t.update(s.text(), s.params());
             }
             return null;
         });
         return ok();
+    }
+
+    private static java.time.LocalDate weekEnding(Object v) {
+        try { return java.time.LocalDate.parse(Js.string(v)); } catch (java.time.format.DateTimeParseException e) { throw new RuleException("Week ending: a date (YYYY-MM-DD)"); }
     }
 
     /** POST /api/finance/plans: the Budget and Monthly forecasts per lab and month. */
@@ -827,10 +838,12 @@ public class DashboardService {
                 String site = siteOf(labs, x);
                 if (!Js.string(Js.orBlank(x.get("month"))).matches("^\\d{4}-\\d{2}$")) throw new RuleException("Month: year and month (YYYY-MM)");
                 if (!(x.get("plan") instanceof String p) || !PLANS.contains(p)) throw new RuleException("Plan: Budget forecast or Monthly forecast");
+                double revenue = money(x.get("revenue"), "Revenue"), costs = money(x.get("costs"), "Costs");
+                new FinanceFigure(null, revenue, costs).check(java.time.LocalDate.now(java.time.ZoneOffset.UTC));
                 Sql s = pg("""
                     INSERT INTO finance_plan (site_id, month, plan, revenue, costs) VALUES ($1, ($2 || '-01')::date, $3, $4, $5)
                       ON CONFLICT (site_id, month, plan) DO UPDATE SET revenue = EXCLUDED.revenue, costs = EXCLUDED.costs, status = 'Active'""",
-                    site, x.get("month"), x.get("plan"), money(x.get("revenue"), "Revenue"), money(x.get("costs"), "Costs"));
+                    site, x.get("month"), x.get("plan"), revenue, costs);
                 t.update(s.text(), s.params());
             }
             return null;

@@ -63,7 +63,10 @@ SELECT approve_logbook_version((SELECT id FROM logbook_version WHERE logbook_id 
 SELECT pg_temp.rj_as('e.sup');
 INSERT INTO sensor_link (site_id, external_id, measures, equipment_id, logbook_id, field_key) VALUES ((SELECT id FROM lab_site WHERE site_code = 'CFL'), 'R602', 'temperature', pg_temp.rj_eq(), pg_temp.rj_lb(), 'temperature');
 SELECT pg_temp.rj_as('e.qa');
-SELECT approve_sensor_link(pg_temp.rj_lnk(), pg_temp.rj_a(-5));
+-- QA's approval of the link, as Java records it since migration 070
+SELECT set_config('lims.sensor_internal', '1', true);
+UPDATE sensor_link SET status = 'Active', approved_by = current_app_user(), approved_at = clock_timestamp(), feeds_from = pg_temp.rj_a(-5) WHERE id = pg_temp.rj_lnk();
+SELECT set_config('lims.sensor_internal', '', true);
 SELECT pg_temp.rj_feed();
 SELECT sensor_add_readings(pg_temp.rj_lnk(), pg_temp.rj_rows());
 SELECT pg_temp.expect_true('(the fixture: the link feeds; 11 hours of readings at 34 °C)', (SELECT count(*) > 130 FROM sensor_reading WHERE link_id = pg_temp.rj_lnk()));

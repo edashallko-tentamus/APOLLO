@@ -9,6 +9,10 @@ import com.tentamus.lims.core.files.DocumentStore;
 import com.tentamus.lims.core.paging.PagedList;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.reports.domain.CoaNote;
+import com.tentamus.lims.reports.domain.FinalizationClaim;
+import com.tentamus.lims.reports.domain.SampleAttachment;
+import com.tentamus.lims.reports.repo.ReportsStore;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -32,11 +36,13 @@ public class ReportsService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final ReportsStore store;
 
-    public ReportsService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public ReportsService(Db db, UnitOfWork uow, AccessPolicy access, ReportsStore store) {
         this.db = db;
         this.uow = uow;
         this.access = access;
+        this.store = store;
     }
 
     /** A sample of a lab the person may see; its lab. */
@@ -90,7 +96,12 @@ public class ReportsService {
         if (tests.isEmpty()) throw new RuleException("Choose the sample tests to claim");
         Object note = truthy(body.get("note")) ? body.get("note") : null;
         return uow.run(ctx, "Finalization claimed", d -> {
-            Object id = d.one("SELECT claim_finalization(?::uuid[], ?) AS id", tests, note).get("id");
+            Map<String, Object> labs = store.labsOf(d, tests);
+            FinalizationClaim.checkChoice(tests.size(), ((Number) labs.get("n")).intValue());
+            String site = (String) labs.get("site");
+            store.requirePermission(d, "reports.finalize", site);
+            FinalizationClaim.checkCandidates(store.candidates(d, tests));
+            Object id = store.insertClaim(d, site, FinalizationClaim.note(note == null ? null : Js.string(note)), tests);
             return d.one("SELECT id, claim_code FROM finalization_claim WHERE id = ?::uuid", id);
         });
     }
@@ -102,7 +113,14 @@ public class ReportsService {
         access.checkSite(ctx, (String) cl.get("site_id"));
         List<Object> tests = uuids(body.get("tests"));
         String reason = truthy(body.get("reason")) ? Js.string(body.get("reason")) : "Finalization released";
-        return uow.run(ctx, reason, d -> d.one("SELECT release_finalization_claim(?::uuid, ?::uuid[]) AS n", id, tests.isEmpty() ? null : tests));
+        return uow.run(ctx, reason, d -> {
+            FinalizationClaim c = store.load(d, id);
+            if (c == null) throw RuleException.database("Claim not found");
+            c.checkRelease(ctx.userId(), store.hasPermission(d, "admin.users", c.siteId()), reason);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("n", store.release(d, c, tests.isEmpty() ? null : tests));
+            return out;
+        });
     }
 
     /** Issued COAs, newest first: a page at a time, or the last N days (90 by default). */
@@ -139,10 +157,15 @@ public class ReportsService {
             text = r == null || r.get("reason_text") == null ? "" : (String) r.get("reason_text");
         }
         String note = text;
-        return uow.run(ctx, d -> d.one("""
+        Object test = uuidOrNull(body.get("requested_test_id")), analyte = uuidOrNull(body.get("analyte_id")), canned = uuidOrNull(body.get("reason_code_id"));
+        return uow.run(ctx, d -> {
+            CoaNote.checkNew(Js.string(body.get("sample_id")), test == null ? null : test.toString(), store.sampleOfTest(d, test), analyte == null ? null : analyte.toString(),
+                canned == null ? null : canned.toString(), store.reasonModule(d, canned), note);
+            return d.one("""
             INSERT INTO coa_note (sample_id, requested_test_id, analyte_id, kind, note_text, reason_code_id) VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?::uuid) RETURNING id""",
             body.get("sample_id"), uuidOrNull(body.get("requested_test_id")), uuidOrNull(body.get("analyte_id")), "Internal".equals(body.get("kind")) ? "Internal" : "COA", note,
-            uuidOrNull(body.get("reason_code_id"))));
+            uuidOrNull(body.get("reason_code_id")));
+        });
     }
 
     public Map<String, Object> removeNote(RequestContext ctx, String id, Map<String, Object> body) {
@@ -196,6 +219,7 @@ public class ReportsService {
         try { bytes = Base64.getMimeDecoder().decode(b64); } catch (IllegalArgumentException e) { bytes = new byte[0]; }
         byte[] content = bytes;
         String name = truthy(body.get("file_name")) ? Js.string(body.get("file_name")) : "attachment";
+        SampleAttachment.checkNew(Js.string(order), truthy(body.get("whole_order")) ? null : sampleId, Js.string(order));
         return uow.run(ctx, reason, d -> {
             Object doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, ?, ?, decode(?, 'base64')) RETURNING id",
                 name.substring(0, Math.min(200, name.length())), truthy(body.get("mime_type")) ? body.get("mime_type") : "application/octet-stream", content.length,

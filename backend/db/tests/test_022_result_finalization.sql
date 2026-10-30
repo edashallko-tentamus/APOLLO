@@ -171,8 +171,7 @@ SELECT pg_temp.as_user('wd.sup');
 INSERT INTO coa_note (sample_id, requested_test_id, analyte_id, kind, note_text)
   SELECT pg_temp.smp('LOT-A2'), pg_temp.rt('LOT-A2', 'WD Micro Screen'), tr.analyte_id, 'COA', 'Tested on 25 g.' FROM test_result tr WHERE tr.requested_test_id = pg_temp.rt('LOT-A2', 'WD Micro Screen') LIMIT 1;
 SELECT pg_temp.expect_true('A Lab Supervisor adds a COA note on one result', EXISTS (SELECT 1 FROM coa_note WHERE sample_id = pg_temp.smp('LOT-A2') AND analyte_id IS NOT NULL AND kind = 'COA'));
-SELECT pg_temp.expect_error_like('A canned note comes from the COA comments list',
-  $$INSERT INTO coa_note (sample_id, kind, note_text, reason_code_id) VALUES (pg_temp.smp('LOT-A2'), 'COA', 'x', (SELECT id FROM reason_code WHERE module <> 'COA comments' LIMIT 1))$$, 'COA comments');
+-- Moved to the Java backend in migration 069 (JUnit: ReportsRulesTest.notesAndAttachments): canned notes come from the COA comments list
 SELECT pg_temp.expect_error_like('Email templates are kept by QA and administrators (outbox.templates)', $$UPDATE email_template SET subject = 'x' WHERE template_code = 'COA Issued'$$, 'outbox.templates');
 SELECT pg_temp.as_user('akiddle');
 -- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): The system's templates are added by migrations only; a template's code cannot change

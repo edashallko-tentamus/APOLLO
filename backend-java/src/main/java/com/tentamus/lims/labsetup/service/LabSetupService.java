@@ -13,6 +13,8 @@ import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.files.DocumentStore;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.labsetup.domain.LabImage;
+import com.tentamus.lims.labsetup.domain.ReportTemplate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -22,7 +24,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Lab setup: the product name, each lab's images (logo, small logo, accreditation mark) and the report templates. The
- * rules are in the database. The public product name (the sign-in page) stays in the Node backend for now.
+ * rules are the domain's (labsetup/domain, migration 071); who may change what is still checked by the database. The public product name (the sign-in page) stays in the Node backend for now.
  */
 @Service
 public class LabSetupService {
@@ -44,6 +46,7 @@ public class LabSetupService {
         String v = Js.string(Js.orBlank(body.get("product_name"))).trim();
         if (v.isEmpty()) throw new RuleException("Type the product name");
         String name = v.substring(0, Math.min(60, v.length()));
+        LabImage.checkSetting(name);
         return uow.run(ctx.orReason("Product name changed"), d -> d.raw("UPDATE system_setting SET setting_value = ? WHERE setting_key = 'product_name'", name));
     }
 
@@ -66,10 +69,12 @@ public class LabSetupService {
         try { buf = Base64.getMimeDecoder().decode(b64); } catch (IllegalArgumentException e) { buf = new byte[0]; }
         byte[] bytes = buf;
         String name = Js.truthy(body.get("file_name")) ? Js.string(body.get("file_name")) : "image";
+        Object mime = Js.truthy(body.get("mime_type")) ? body.get("mime_type") : "application/octet-stream";
+        LabImage.checkUpload(mime.toString(), bytes.length);
         return uow.run(ctx.withSite(siteId).orReason(kind + " uploaded"), d -> {
             if (!"Other".equals(kind)) d.update("UPDATE site_media SET status = 'Inactive' WHERE site_id = ?::uuid AND kind = ? AND status = 'Active'", siteId, kind);
             Object doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, ?, ?, decode(?, 'base64')) RETURNING id",
-                name.substring(0, Math.min(200, name.length())), Js.truthy(body.get("mime_type")) ? body.get("mime_type") : "application/octet-stream", bytes.length,
+                name.substring(0, Math.min(200, name.length())), mime, bytes.length,
                 DocumentStore.sha256(bytes), b64).get("id");
             return d.one("INSERT INTO site_media (site_id, kind, title, document_id) VALUES (?::uuid, ?, ?, ?::uuid) RETURNING id", siteId, kind, Js.orNull(body.get("title")), doc);
         });
@@ -131,9 +136,23 @@ public class LabSetupService {
             for (Map<String, Object> x : list) {
                 Map<String, Object> r = new LinkedHashMap<>(x);
                 if (Js.truthy(r.get("id"))) r.remove("site_id");
+                Map<String, Object> before = Js.truthy(r.get("id")) ? d.one("SELECT * FROM report_template WHERE id = ?::uuid", r.get("id")) : null;
+                Map<String, Object> after = new LinkedHashMap<>(before == null ? Map.of() : before);
+                after.putAll(TEMPLATES.pick(r));
+                after.put("options", parsed(after.get("options")));
+                ReportTemplate.check(before, after);
                 rows.add(r);
             }
             return TEMPLATES.upsert(d, rows, Map.of());
         });
+    }
+
+    /** Template options as plain values (a Map for a JSON object), for the template check; text that is not JSON is left to the database. */
+    private Object parsed(Object options) {
+        try {
+            if (options instanceof String t) return json.readValue(t, Object.class);
+            if (options instanceof com.fasterxml.jackson.databind.JsonNode n) return json.convertValue(n, Object.class);
+        } catch (JsonProcessingException e) { return null; }
+        return options;
     }
 }

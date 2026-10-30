@@ -1,5 +1,10 @@
 package com.tentamus.lims.stability.service;
 
+import com.tentamus.lims.stability.domain.ExcursionAssessment;
+import com.tentamus.lims.stability.domain.StabilityDesign;
+import com.tentamus.lims.stability.repo.ExcursionRepository;
+import com.tentamus.lims.stability.domain.StabilitySetup;
+import com.tentamus.lims.stability.repo.StabilityDesignRepository;
 import static com.tentamus.lims.core.web.Answers.*;
 import static com.tentamus.lims.stability.service.StabilityData.jsNum;
 import static com.tentamus.lims.stability.service.StabilityData.num;
@@ -46,8 +51,13 @@ public class StabilityService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final ObjectMapper json;
+    private final StabilityDesignRepository facts;
+    private final ExcursionRepository excursions;
 
-    public StabilityService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json) {
+    public StabilityService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json, StabilityDesignRepository facts,
+                            ExcursionRepository excursions) {
+        this.facts = facts;
+        this.excursions = excursions;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -123,17 +133,54 @@ public class StabilityService {
             else r.put("site_id", "all".equals(x.get("site_id")) ? null : site);
             rows.add(r);
         }
-        return uow.run(ctx.withSite(site).orReason("Stability conditions changed"), d -> CONDITIONS.upsert(d, rows, Map.of()));
+        return uow.run(ctx.withSite(site).orReason("Stability conditions changed"), d -> upsert(d, CONDITIONS, "stability_condition", rows, Map.of(), (before, after) ->
+            StabilitySetup.checkCondition(before, after, before != null && facts.onQuote(d, before.get("id")))));
     }
 
     public Object saveChambers(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
-        return uow.run(ctx.withSite(site).orReason("Stability chambers changed"), d -> CHAMBERS.upsert(d, rows(body, "rows"), Map.of("site_id", site)));
+        return uow.run(ctx.withSite(site).orReason("Stability chambers changed"), d -> upsert(d, CHAMBERS, "stability_chamber", rows(body, "rows"), Map.of("site_id", site), (before, after) -> {
+            Map<String, Object> eq = facts.equipment(d, after.get("equipment_id"));
+            if (eq == null) throw RuleException.database("Equipment not found");
+            Map<String, Object> cond = facts.condition(d, after.get("condition_id"));
+            StabilitySetup.checkChamber(before, after, (String) eq.get("equipment_code"), (String) eq.get("site_id"), Boolean.TRUE.equals(eq.get("retired")),
+                cond == null ? null : (String) cond.get("site_id"), before != null && facts.chamberHoldsMaterial(d, before.get("id")));
+            after.put("site_id", eq.get("site_id"));   // the equipment decides the chamber's lab
+        }));
     }
 
     public Object saveRacks(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
-        return uow.run(ctx.withSite(site).orReason("Stability racks changed"), d -> RACKS.upsert(d, rows(body, "rows"), Map.of()));
+        return uow.run(ctx.withSite(site).orReason("Stability racks changed"), d -> upsert(d, RACKS, "stability_rack", rows(body, "rows"), Map.of(), (before, after) ->
+            StabilitySetup.checkRack(before, after, before != null && facts.rackHoldsMaterial(d, before.get("id")))));
+    }
+
+    /**
+     * RecordWriter.upsert with the setup rules: each row checked against what is stored before it is written (the check
+     * may add derived values to the row, e.g. a chamber's lab).
+     */
+    private List<Map<String, Object>> upsert(Db d, RecordWriter w, String table, List<Map<String, Object>> rows, Map<String, Object> fixed,
+                                             java.util.function.BiConsumer<Map<String, Object>, Map<String, Object>> rule) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> vals = w.pick(row);
+            if (row.get("id") != null) {
+                if (vals.isEmpty()) continue;
+                Map<String, Object> before = facts.row(d, table, row.get("id"));
+                if (before == null) { out.add(null); continue; }
+                Map<String, Object> after = new LinkedHashMap<>(before);
+                after.putAll(vals);
+                rule.accept(before, after);
+                if (table.equals("stability_chamber")) vals.put("site_id", after.get("site_id"));
+                out.add(w.update(d, row.get("id").toString(), vals));
+            } else {
+                Map<String, Object> all = new LinkedHashMap<>(vals);
+                all.putAll(fixed);
+                rule.accept(null, all);
+                out.add(w.insert(d, all, "id"));
+            }
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------- stability quotes
@@ -223,9 +270,11 @@ public class StabilityService {
             Map<String, Object> v = t.one("SELECT pv.status::text AS status FROM project_version pv JOIN project p ON p.id = pv.project_id WHERE pv.id = ?::uuid AND p.kind = 'Stability'", vid);
             if (v == null) throw new RuleException("Version not found");
             if (!EDITABLE.contains(v.get("status"))) throw new RuleException("The design is locked once the quote is issued: start a new version to change it");
+            StabilityDesign design = facts.design(t, vid);
             // the plan
             if (Js.truthy(b.get("plan")) && b.get("plan") instanceof Map<?, ?> pm) {
                 Map<String, Object> pl = (Map<String, Object>) pm;
+                design.checkPlan(null, (Double) numOrNull(pl.get("escalation_pct")), (Double) numOrNull(pl.get("reserve_pct")));
                 t.update("""
                     UPDATE stability_plan SET product = ?, lot = ?, protocol_ref = ?, unit_name = COALESCE(NULLIF(btrim(?), ''), 'units'),
                       planned_placement = ?::date, escalation_pct = COALESCE(?::numeric, 0), reserve_pct = ?::numeric, notes = ? WHERE project_version_id = ?::uuid""",
@@ -241,6 +290,8 @@ public class StabilityService {
                 for (Object id : want) {
                     i += 1;
                     Map<String, Object> has = t.one("SELECT id FROM stability_version_condition WHERE project_version_id = ?::uuid AND condition_id = ?::uuid AND status = 'Active'", vid, id);
+                    Map<String, Object> cond = facts.condition(t, id);
+                    design.checkCondition(cond != null, cond != null && Boolean.TRUE.equals(cond.get("active")), has == null, cond == null ? null : (String) cond.get("site_id"));
                     if (has != null) t.update("UPDATE stability_version_condition SET sort_order = ? WHERE id = ?::uuid AND sort_order <> ?", i, has.get("id"), i);
                     else t.update("INSERT INTO stability_version_condition (project_version_id, condition_id, sort_order) VALUES (?::uuid, ?::uuid, ?)", vid, id, i);
                 }
@@ -256,6 +307,13 @@ public class StabilityService {
                     Object early = x.get("days_early") != null ? x.get("days_early") : 7;
                     Object late = x.get("days_late") != null ? x.get("days_late") : early;
                     Object[] vals = { label, interval, Js.truthy(x.get("interval_unit")) ? x.get("interval_unit") : "Months", Js.toNumber(early), Js.toNumber(late) };
+                    StabilityDesign.checkTimepointValues(label, interval, (double) vals[3], (double) vals[4]);
+                    Map<String, Object> tp = RequestContext.isUuid(x.get("id")) ? facts.timepoint(t, x.get("id")) : null;
+                    if (tp != null && Objects.equals(tp.get("project_version_id"), vid)) {
+                        boolean changed = num(tp.get("interval_value")) != interval || !Objects.equals(tp.get("interval_unit"), vals[2]);
+                        design.checkTimepointAmendment(label, (int) num(tp.get("interval_value")), changed, tp.get("carried_from_id") != null,
+                            facts.timepointUsed(t, design.studyId(), tp.get("carried_from_id"), null), interval, "Active".equals(tp.get("status")));
+                    } else if (!RequestContext.isUuid(x.get("id"))) design.checkTimepointAmendment(label, null, false, false, false, interval, true);
                     if (RequestContext.isUuid(x.get("id"))) {
                         t.update("UPDATE stability_timepoint SET label = ?, interval_value = ?, interval_unit = ?, days_early = ?, days_late = ? WHERE id = ?::uuid AND project_version_id = ?::uuid",
                             vals[0], vals[1], vals[2], vals[3], vals[4], x.get("id"), vid);
@@ -275,7 +333,7 @@ public class StabilityService {
                     UPDATE stability_cell c SET status = 'Removed' FROM quoted_test_configuration q WHERE q.id = c.line_id AND c.project_version_id = ?::uuid AND c.status = 'Active'
                        AND NOT (q.test_id = ANY(?::uuid[]))""", vid, ids);
                 t.update("UPDATE quoted_test_configuration SET status = 'Removed' WHERE project_version_id = ?::uuid AND status = 'Active' AND NOT (test_id = ANY(?::uuid[]))", vid, ids);
-                List<Map<String, Object>> tps = t.rows("SELECT id, label, interval_value FROM stability_timepoint WHERE project_version_id = ?::uuid AND status = 'Active'", vid);
+                List<Map<String, Object>> tps = t.rows("SELECT id, label, interval_value, carried_from_id FROM stability_timepoint WHERE project_version_id = ?::uuid AND status = 'Active'", vid);
                 Map<String, Object> t0 = tps.stream().filter(y -> num(y.get("interval_value")) == 0).findFirst().orElse(null);
                 List<Object> conds = t.rows("SELECT condition_id FROM stability_version_condition WHERE project_version_id = ?::uuid AND status = 'Active'", vid)
                     .stream().map(y -> y.get("condition_id")).toList();
@@ -298,14 +356,23 @@ public class StabilityService {
                             if (tp != null) wantCells.add(new Object[] { tp.get("id"), m.get("condition_id") });
                         }
                     }
+                    Map<String, Object> lf = facts.line(t, line.get("id"));
+                    java.util.function.BiConsumer<Object[], Boolean> cell = (w, isNew) -> {
+                        Map<String, Object> tp = tps.stream().filter(y -> Objects.equals(y.get("id"), w[0])).findFirst().orElse(null);
+                        if (tp == null) return;   // a timepoint no longer on the design: its cells were just removed
+                        Map<String, Object> cn = w[1] == null ? null : facts.condition(t, w[1]);
+                        design.checkCell(true, (int) num(tp.get("interval_value")), (String) w[1], conds.contains(w[1]), (String) lf.get("test_site"), (String) lf.get("test_name"),
+                            (String) lf.get("site_code"), isNew, tp.get("carried_from_id") != null, facts.timepointUsed(t, design.studyId(), tp.get("carried_from_id"), w[1]),
+                            (String) tp.get("label"), cn == null ? null : (String) cn.get("condition_name"), units);
+                    };
                     List<Map<String, Object>> have = t.rows("SELECT id, timepoint_id, condition_id, units_required FROM stability_cell WHERE line_id = ?::uuid AND status = 'Active'", line.get("id"));
                     for (Map<String, Object> h : have) {
                         if (wantCells.stream().noneMatch(w -> Objects.equals(w[0], h.get("timepoint_id")) && Objects.equals(w[1], h.get("condition_id"))))
                             t.update("UPDATE stability_cell SET status = 'Removed' WHERE id = ?::uuid", h.get("id"));
-                        else if (num(h.get("units_required")) != units) t.update("UPDATE stability_cell SET units_required = ? WHERE id = ?::uuid", units, h.get("id"));
+                        else if (num(h.get("units_required")) != units && cellCheck(cell, h)) t.update("UPDATE stability_cell SET units_required = ? WHERE id = ?::uuid", units, h.get("id"));
                     }
                     for (Object[] w : wantCells) {
-                        if (have.stream().noneMatch(h -> Objects.equals(h.get("timepoint_id"), w[0]) && Objects.equals(h.get("condition_id"), w[1])))
+                        if (have.stream().noneMatch(h -> Objects.equals(h.get("timepoint_id"), w[0]) && Objects.equals(h.get("condition_id"), w[1])) && cellCheck(cell, w))
                             t.update("INSERT INTO stability_cell (project_version_id, line_id, timepoint_id, condition_id, units_required) VALUES (?::uuid, ?::uuid, ?::uuid, ?::uuid, ?)",
                                 vid, line.get("id"), w[0], w[1], units);
                     }
@@ -313,6 +380,13 @@ public class StabilityService {
             }
             return ok();
         });
+    }
+
+    /** Runs the cell rule (true, to write) for a stored cell or a wanted one. */
+    private static boolean cellCheck(java.util.function.BiConsumer<Object[], Boolean> cell, Object c) {
+        if (c instanceof Map<?, ?> h) cell.accept(new Object[] { h.get("timepoint_id"), h.get("condition_id") }, false);
+        else cell.accept((Object[]) c, true);
+        return true;
     }
 
     public Map<String, Object> newVersion(RequestContext ctx, String id) {
@@ -476,8 +550,13 @@ public class StabilityService {
         Map<String, Object> st = studyOf(ctx, id);
         return signatures.signed(ctx.withSite((String) st.get("site_id")).orReason("Chamber excursion assessed"), b,
             new SignatureService.Meaning("Assessed by", "Excursion assessed for " + st.get("study_code") + ": " + Js.string(Js.orBlank(b.get("decision"))), "Stability"),
-            t -> map("id", t.one("SELECT assess_stability_excursion(?::uuid, ?::uuid, ?, ?) AS id", st.get("id"), uuidOrNull(entry), Js.orNull(b.get("decision")),
-                Js.orBlank(b.get("justification"))).get("id")));
+            t -> {
+                access.require(ctx.withSite((String) st.get("site_id")), "stability.assess", "assess chamber excursions");
+                Object decision = Js.orNull(b.get("decision"));
+                String why = new ExcursionAssessment((String) st.get("study_code"), excursions.isExcursion(t, st.get("id"), uuidOrNull(entry)),
+                    decision == null ? null : Js.string(decision), Js.string(Js.orBlank(b.get("justification")))).check();
+                return map("id", excursions.record(t, st.get("id"), uuidOrNull(entry), Js.string(decision), why).get("id"));
+            });
     }
 
     /** Report Finalization > Stability reports: the lab's studies that have, or will have, a report to issue. */

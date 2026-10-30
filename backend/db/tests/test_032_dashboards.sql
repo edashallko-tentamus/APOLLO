@@ -74,8 +74,8 @@ SELECT pg_temp.expect_true('An analyst still does not see the quotes widget (it 
 -- 3. each person's layout
 SELECT pg_temp.db_as('wd.ana2', false);
 SELECT pg_temp.expect_ok('A person saves their own arrangement', $$INSERT INTO user_dashboard_layout (user_id, board, layout) VALUES (pg_temp.dbu('wd.ana2'), 'home', '[{"code":"backlog","w":8,"h":3}]')$$);
-SELECT pg_temp.expect_error_like('Nobody arranges someone else''s dashboard', $$INSERT INTO user_dashboard_layout (user_id, board, layout) VALUES (pg_temp.dbu('db.gm'), 'home', '[]')$$, 'only their own');
-SELECT pg_temp.expect_error_like('Widget sizes are 2 to 12 columns and 1 to 6 rows', $$UPDATE user_dashboard_layout SET layout = '[{"code":"backlog","w":14,"h":3}]' WHERE user_id = pg_temp.dbu('wd.ana2')$$, '2 to 12 columns');
+-- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): nobody arranges someone else's dashboard
+-- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): widget sizes are 2 to 12 columns and 1 to 6 rows
 
 -- 4. turnaround and on time (the client's On Hold days do not count)
 SELECT pg_temp.expect_true('Reported tests have their three segments (login, lab, QA) and an on-time verdict',
@@ -130,8 +130,8 @@ SELECT pg_temp.expect_error_like('A GM does not type the finance figures', $$INS
 SELECT pg_temp.db_as('db.fin', false);
 SELECT pg_temp.expect_ok('The Finance group types a week for any lab', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbtps(), current_date - 3, 52000, 41000)$$);
 SELECT pg_temp.expect_ok('and a forecast', $$INSERT INTO finance_plan (site_id, month, plan, revenue, costs) VALUES (pg_temp.dbcfl(), date_trunc('month', current_date)::date, 'Budget forecast', 230000, 185000)$$);
-SELECT pg_temp.expect_error_like('Not a week far in the future', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbcfl(), current_date + 30, 1, 1)$$, 'more than a week');
-SELECT pg_temp.expect_error_like('Not negative', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbcfl(), current_date - 10, -1, 1)$$, 'not negative');
+-- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): not a week far in the future
+-- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): revenue and costs are not negative
 SELECT pg_temp.expect_error_like('A forecast month is the first of the month', $$INSERT INTO finance_plan (site_id, month, plan, revenue, costs) VALUES (pg_temp.dbcfl(), date_trunc('month', current_date)::date + 3, 'Monthly forecast', 1, 1)$$, 'check');
 SELECT pg_temp.expect_true('The figures are in the audit trail', EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'finance_week' AND changed_by = pg_temp.dbu('db.fin')));
 

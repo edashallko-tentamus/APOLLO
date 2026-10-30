@@ -51,14 +51,14 @@ INSERT INTO group_member (group_id, user_id) SELECT g.id, u.id FROM lab_group g,
 -------------------------------------------------------------------------------
 -- 1. HANDWRITTEN SIGNATURES
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('rf.ana');
-SELECT pg_temp.expect_error_like('Only a lab administrator records someone''s signature', $$SELECT set_user_signature(pg_temp.uid('rf.pm'), pg_temp.rf_png(), 'Project Manager')$$, 'lab administrator');
-SELECT pg_temp.user_only('akiddle');
-SELECT pg_temp.expect_error_like('Recording a signature is signed', $$SELECT set_user_signature(pg_temp.uid('rf.pm'), pg_temp.rf_png(), 'Project Manager')$$, 'electronic signature');
+-- Moved to the Java backend in migration 071 (JUnit: HandwrittenSignatureTest): only a lab administrator records someone's signature; the title is
+--   required; the signature is a PNG or JPEG image (up to 1 MB). Recording it is signed by the Java service (SignatureService).
+-- fixture: akiddle records the two Project Managers' signatures, as the Java service writes them (the app_user trigger audits it)
 SELECT pg_temp.as_user('akiddle');
-SELECT pg_temp.expect_error_like('The title is printed under the signature: it is required', $$SELECT set_user_signature(pg_temp.uid('rf.pm'), pg_temp.rf_png(), ' ')$$, 'title');
-SELECT pg_temp.expect_error_like('The signature is an image', $$SELECT set_user_signature(pg_temp.uid('rf.pm'), pg_temp.rf_pdf('not an image'), 'Project Manager')$$, 'PNG or JPEG');
-SELECT set_user_signature(pg_temp.uid(u), pg_temp.rf_png(), 'Project Manager') FROM unnest(ARRAY['rf.pm', 'rf.pm2']) u;
+SELECT set_config('lims.group_sync', '1', false);
+UPDATE app_user SET title = 'Project Manager', signature_document_id = pg_temp.rf_png(), signature_set_at = clock_timestamp(), signature_set_by = pg_temp.uid('akiddle')
+ WHERE username IN ('rf.pm', 'rf.pm2');
+SELECT set_config('lims.group_sync', '', false);
 SELECT pg_temp.expect_true('Recorded (signed, audited): the image, the title, who and when',
   (SELECT signature_document_id IS NOT NULL AND title = 'Project Manager' AND signature_set_by = pg_temp.uid('akiddle') AND signature_set_at IS NOT NULL FROM app_user WHERE username = 'rf.pm')
   AND EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'app_user' AND record_id = pg_temp.uid('rf.pm') AND changed_fields ? 'signature_document_id'));
@@ -71,26 +71,32 @@ SELECT pg_temp.expect_error_like('A COA is not issued by someone without a handw
 -------------------------------------------------------------------------------
 -- 2. CLAIMING FINALIZATION WORK
 -------------------------------------------------------------------------------
-SELECT pg_temp.as_user('rf.ana');
-SELECT pg_temp.expect_error_like('Claiming needs Result Finalization rights', $$SELECT claim_finalization(ARRAY[pg_temp.rf_rt('WD-STAB-1', 'WD Stability')])$$, 'reports.finalize');
+-- Moved to the Java backend in migration 069 (JUnit: ReportsRulesTest.claiming): claiming needs Result Finalization rights (the database
+-- permission function stays), one lab at a time, only work waiting for finalization, nobody claims what someone else holds.
 SELECT pg_temp.as_user('rf.pm');
-SELECT claim_finalization(ARRAY[pg_temp.rf_rt('WD-STAB-1', 'WD Stability')], 'Checking a lot number with the lab');
+-- the claim as Java's claim writes it (marked as Report Finalization's own: the database guard stays)
+SELECT set_config('lims.claims_internal', '1', false);
+INSERT INTO finalization_claim (site_id, claimed_by, note)
+  SELECT o.site_id, pg_temp.uid('rf.pm'), 'Checking a lot number with the lab' FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id
+   WHERE rt.id = pg_temp.rf_rt('WD-STAB-1', 'WD Stability');
+INSERT INTO finalization_claim_test (claim_id, requested_test_id)
+  SELECT id, pg_temp.rf_rt('WD-STAB-1', 'WD Stability') FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active';
+SELECT set_config('lims.claims_internal', '', false);
 SELECT pg_temp.expect_true('Claimed (FB-...): the test is held by its claimer, no signature needed',
   finalization_holder(pg_temp.rf_rt('WD-STAB-1', 'WD Stability')) = pg_temp.uid('rf.pm')
   AND EXISTS (SELECT 1 FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active' AND claim_code LIKE 'FB-%' AND note LIKE 'Checking%'));
-SELECT pg_temp.as_user('rf.nosig');
-SELECT pg_temp.expect_error_like('Nobody else claims it', $$SELECT claim_finalization(ARRAY[pg_temp.rf_rt('WD-STAB-1', 'WD Stability')])$$, 'already claimed by RF Project Manager');
-SELECT pg_temp.expect_error_like('Nobody else releases it (only the claimer or a lab administrator)',
-  $$SELECT release_finalization_claim((SELECT id FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active'))$$, 'only they, or a lab administrator');
+-- Moved to the Java backend in migration 069 (JUnit: ReportsRulesTest.releasing): nobody else releases it (only the claimer or a lab administrator)
 SELECT pg_temp.as_user('rf.pm2');
 SELECT pg_temp.expect_error_like('Nobody else finalizes it while it is claimed', $$SELECT pg_temp.rf_fin('WD-STAB-1', ARRAY[pg_temp.rf_rt('WD-STAB-1', 'WD Stability')])$$, 'claimed by RF Project Manager');
-SELECT pg_temp.expect_error_like('Only work waiting for finalization is claimed', $$SELECT claim_finalization(ARRAY[gen_random_uuid()])$$, 'one lab');
+-- Moved to the Java backend in migration 069 (JUnit: ReportsRulesTest.releasing): a lab administrator releasing someone else's claim says why
 SELECT pg_temp.as_user('akiddle');
-SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('A lab administrator releasing someone else''s claim says why',
-  $$SELECT release_finalization_claim((SELECT id FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active'))$$, 'Say why');
 SELECT set_config('lims.reason', 'RF Project Manager is away today; the client is waiting', false);
-SELECT release_finalization_claim((SELECT id FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active'));
+-- the release as Java's release writes it
+SELECT set_config('lims.claims_internal', '1', false);
+UPDATE finalization_claim_test SET status = 'Released'
+ WHERE status = 'Active' AND claim_id = (SELECT id FROM finalization_claim WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active');
+UPDATE finalization_claim SET status = 'Released', closed_at = clock_timestamp() WHERE claimed_by = pg_temp.uid('rf.pm') AND status = 'Active';
+SELECT set_config('lims.claims_internal', '', false);
 SELECT set_config('lims.reason', 'Rule test', false);
 SELECT pg_temp.expect_true('Released by the lab administrator (with the reason): nobody holds the test now',
   finalization_holder(pg_temp.rf_rt('WD-STAB-1', 'WD Stability')) IS NULL

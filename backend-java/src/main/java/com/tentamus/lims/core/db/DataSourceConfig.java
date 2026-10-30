@@ -27,8 +27,7 @@ public class DataSourceConfig {
                                  @Value("${lims.db.pool-size}") int poolSize,
                                  @Value("${lims.db.statement-timeout}") String statementTimeout) {
         if (databaseUrl == null || databaseUrl.isBlank()) {
-            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db). The Java backend needs a PostgreSQL server; "
-                + "the embedded PGlite database works only inside the Node backend.");
+            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in .env: the PostgreSQL database to connect to (see .env.example).");
         }
         HikariConfig c = new HikariConfig();
         Jdbc j = Jdbc.from(databaseUrl);

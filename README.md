@@ -19,14 +19,20 @@ Every business rule lives in the database (PostgreSQL constraints, triggers and 
 
 ## Run it
 
-Needs Node.js 18 or later. No other software: the database is embedded (PGlite).
+Needs Node.js 20.12 or later and a PostgreSQL 16 server. The app connects to databases that already exist; it never creates a database. At every start its migrations make whatever tables, rules and demo data are missing.
 
-```
-npm install      # the embedded database package
-npm test         # builds a fresh database and runs every rule test
-npm start        # starts the backend and the front end; then open http://localhost:3000
-npm run reset    # deletes the local database; the next start rebuilds it with demo data
-```
+1. Create the account and the two databases once, as the `postgres` superuser:
+   ```
+   psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql
+   ```
+   This makes `lims3` (the app's data) and `lims3_test` (emptied by every `npm test` run), both empty.
+2. Copy `.env.example` to `.env` (never committed) and put the same password in `DATABASE_URL` and `LIMS_TEST_DATABASE_URL`. Every command reads `.env`.
+3. Then:
+   ```
+   npm test         # empties lims3_test, applies every migration there and runs every rule test
+   npm start        # starts the backend and the front end; then open http://localhost:3000
+   npm run reset    # empties lims3 (every record is lost); the next start rebuilds it with demo data
+   ```
 
 The app runs as two programs, started together by `npm start` (`start.js`); stopping one stops the other:
 
@@ -35,35 +41,20 @@ The app runs as two programs, started together by `npm start` (`start.js`); stop
 
 When starting them separately, set `LIMS_TRUST_PROXY=1` on the backend (so its rate limits see each person's computer, not the front end's), and keep `PORT` on the backend equal to the front end's port (links in emails and PDFs, and the verification screenshots, use it).
 
-On first start the system administrator sets their own password. To use a PostgreSQL server instead, set `DATABASE_URL`. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a fresh database.
+On first start the system administrator sets their own password. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a freshly reset database.
 
-### Local PostgreSQL (optional)
+No PostgreSQL server yet? With Docker: `docker run -d --name apollo-pg --restart unless-stopped -e POSTGRES_PASSWORD=<choose one> -p 127.0.0.1:5432:5432 -v apollo-pgdata:/var/lib/postgresql/data postgres:16`, then step 1 with that password for `postgres`.
 
-On a PostgreSQL 16 server you already have, create the account and database once with `psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql`, then put `DATABASE_URL` in `.env` (step 1 below). The app makes the tables at its first start.
-
-Or run one with Docker:
-
-1. Create `.env` in this folder (it is never committed):
-   ```
-   POSTGRES_PASSWORD=<choose one>
-   DATABASE_URL=postgres://lims:<same password>@localhost:5432/lims3?sslmode=disable
-   ```
-2. Start the server once (the data stays in the `apollo-pgdata` volume across restarts):
-   ```
-   docker run -d --name apollo-pg --restart unless-stopped --env-file .env -e POSTGRES_USER=lims -e POSTGRES_DB=lims3 -p 127.0.0.1:5432:5432 -v apollo-pgdata:/var/lib/postgresql/data postgres:16
-   ```
-3. `npm run start:pg` runs the app on it (database `lims3`); `npm run test:pg` runs the rule tests in a separate `lims3_test` database, dropped and rebuilt each run.
+For a server holding GxP data use `backend/db/roles_setup.sql` instead (separate owner and app accounts, `LIMS_MIGRATE_URL`).
 
 ### The Java backend
 
-The rules moved out of the database run in the Java backend (`backend-java`), which needs the PostgreSQL server above. Copy `.env.example` to `.env` and fill it in, then use two terminals:
+The rules moved out of the database run in the Java backend (`backend-java`). In a second terminal:
 
-1. `npm run start:java` starts the Java backend (port 3002, `LIMS_JAVA_PORT`).
-2. `npm run start:pg` starts the Node backend and the front end; the front end sends the routes Java has taken over to `LIMS_JAVA_URL`.
+1. `npm start` first (its migrations make the tables).
+2. `npm run start:java` starts the Java backend (port 3002, `LIMS_JAVA_PORT`); the front end sends the routes Java has taken over to `LIMS_JAVA_URL`.
 
 Without `LIMS_JAVA_URL` everything goes to the Node backend, which no longer checks the rules that moved to Java.
-
-`npm run reset` only clears the embedded database. To start the PostgreSQL one again: `docker rm -f apollo-pg` and `docker volume rm apollo-pgdata`, then step 2.
 
 On a Windows laptop the simplest way is the Claude desktop app's Code tab: open this folder and ask Claude to read `CLAUDE.md`, set up, start the app and run the tests.
 
@@ -75,7 +66,6 @@ On a Windows laptop the simplest way is the Claude desktop app's Code tab: open 
 | `backend/db/seed*.sql` | Fictional demo data |
 | `backend/db/tests/` | Database rule tests |
 | `backend/server/` | The backend: plain Node (no framework), the JSON API, PDFs, Excel, the sensor feed |
-| `backend/data/` | The embedded database (not in Git) |
 | `frontend/public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
 | `frontend/server.js` | The front-end server: the screens, and `/api` forwarded to the backend |
 | `start.js` | Starts both |

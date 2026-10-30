@@ -1,7 +1,5 @@
-// Database access. Two interchangeable engines:
-//  - PGlite (default): real PostgreSQL embedded in Node, stored in ./data/pgdata.
-//    No database server or admin rights needed. Requires: npm install
-//  - PostgreSQL server: set DATABASE_URL=postgres://user:pass@host:port/db
+// Database access: connects to an existing PostgreSQL database named by DATABASE_URL (postgres://user:pass@host:port/db).
+// Nothing here creates a database; migrate() creates the tables that are missing. Settings come from .env (see .env.example).
 // All access is serialized (single connection), and every write runs in a
 // transaction that sets the user and Reason for Change the audit trail needs.
 'use strict';
@@ -9,32 +7,17 @@ const fs = require('fs');
 const path = require('path');
 const { PgWireClient } = require('./pgwire');
 
-const NUMERIC_OIDS = new Set([20, 21, 23, 700, 701, 1700]);
+try { process.loadEnvFile(path.join(__dirname, '..', '..', '.env')); } catch { /* no .env: use the environment as it is */ }
 
 class Database {
   constructor() { this.engine = null; this.queue = Promise.resolve(); }
 
-  async open({ dataDir, url, memory } = {}) {
+  async open({ url } = {}) {
     url = url || process.env.DATABASE_URL;
-    if (url) {
-      const c = new PgWireClient(url);
-      await c.connect();
-      this.engine = { kind: 'postgres', exec: (s) => c.exec(s), query: (s, p) => c.query(s, p), close: () => c.close() };
-    } else {
-      let PGlite;
-      try { ({ PGlite } = await import('@electric-sql/pglite')); }
-      catch (e) { throw new Error('The embedded database is not installed. Run "npm install" in this folder first.'); }
-      let pg;
-      if (memory) pg = new PGlite();
-      else { fs.mkdirSync(dataDir, { recursive: true }); pg = new PGlite(dataDir); }
-      await pg.waitReady;
-      this.engine = {
-        kind: 'pglite',
-        exec: async (s) => normalizeAll(await pg.exec(s)),
-        query: async (s, p) => normalize(await pg.query(s, p)),
-        close: () => pg.close(),
-      };
-    }
+    if (!url) throw new Error('DATABASE_URL is not set. Copy .env.example to .env and point it at your PostgreSQL database.');
+    const c = new PgWireClient(url);
+    await c.connect();
+    this.engine = { kind: 'postgres', exec: (s) => c.exec(s), query: (s, p) => c.query(s, p), close: () => c.close() };
     await this.engine.exec('SET search_path = lims, public');
     return this;
   }
@@ -77,23 +60,10 @@ class Database {
   close() { if (this.engine) this.engine.close(); }
 }
 
-// PGlite returns typed JS values; align them with the wire client (numbers, ISO strings)
-function normalize(res) {
-  const numericFields = new Set((res.fields || []).filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
-  const dateFields = new Set((res.fields || []).filter((f) => f.dataTypeID === 1082).map((f) => f.name)); // plain dates
-  const rows = (res.rows || []).map((r) => {
-    const o = {};
-    for (const [k, v] of Object.entries(r)) {
-      if (v instanceof Date) o[k] = dateFields.has(k) ? v.toISOString().slice(0, 10) : v.toISOString();
-      else if (numericFields.has(k) && v !== null && typeof v !== 'number') o[k] = Number(v);
-      else if (typeof v === 'bigint') o[k] = Number(v);
-      else o[k] = v;
-    }
-    return o;
-  });
-  return { fields: res.fields || [], rows };
+// Empties the database (every table, rule and row; the database itself stays) so migrate() rebuilds it.
+async function wipe(db) {
+  await db.exec('DROP SCHEMA IF EXISTS lims CASCADE; DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
 }
-function normalizeAll(results) { return (results || []).map(normalize); }
 
 // Apply migrations (and the demo seed) that have not run yet
 async function migrate(db, { seed = true, root = path.join(__dirname, '..', 'db'), grantTo = null } = {}) {
@@ -126,4 +96,4 @@ async function migrate(db, { seed = true, root = path.join(__dirname, '..', 'db'
   return applied;
 }
 
-module.exports = { Database, migrate };
+module.exports = { Database, migrate, wipe };

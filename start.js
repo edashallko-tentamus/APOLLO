@@ -4,6 +4,9 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+// .env (see .env.example): the database, and the Java backend's address for the front end
+try { process.loadEnvFile(path.join(__dirname, '.env')); } catch { /* no .env: use the environment as it is */ }
+
 const parts = [
   // the backend trusts the front end's X-Forwarded-For (the person's computer, for the rate limits); it listens on 127.0.0.1 only
   ['backend', path.join(__dirname, 'backend', 'server', 'server.js'), { LIMS_TRUST_PROXY: '1' }],

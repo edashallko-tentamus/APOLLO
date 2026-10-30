@@ -1,21 +1,17 @@
-// npm test: builds a fresh, empty database, applies every migration, then runs the
-// rule tests in db/tests (each prints PASS/FAIL lines). Exit code 1 on any failure.
+// npm test: empties the test database (LIMS_TEST_DATABASE_URL, an existing database kept for tests only), applies
+// every migration, then runs the rule tests in db/tests (each prints PASS/FAIL lines). Exit code 1 on any failure.
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { Database, migrate } = require('./db');
-const { PgWireClient } = require('./pgwire');
+const { Database, migrate, wipe } = require('./db');
 
 (async () => {
-  let db;
-  if (process.env.DATABASE_URL) {
-    const admin = new PgWireClient(process.env.DATABASE_URL); await admin.connect();
-    await admin.exec('DROP DATABASE IF EXISTS lims3_test'); await admin.exec('CREATE DATABASE lims3_test'); admin.close();
-    const u = new URL(process.env.DATABASE_URL); u.pathname = '/lims3_test';
-    db = await new Database().open({ url: u.toString() });
-  } else {
-    db = await new Database().open({ memory: true }); // PGlite in memory
-  }
+  const url = process.env.LIMS_TEST_DATABASE_URL;
+  if (!url) throw new Error('LIMS_TEST_DATABASE_URL is not set: name a database kept for tests only (see .env.example).');
+  // the run empties it first, so never the app's own database
+  if (url === process.env.DATABASE_URL) throw new Error('LIMS_TEST_DATABASE_URL must not be the app database (DATABASE_URL).');
+  const db = await new Database().open({ url });
+  await wipe(db);
   await migrate(db, { seed: false });
   const dir = path.join(__dirname, '..', 'db', 'tests');
   let pass = 0; let fail = 0;

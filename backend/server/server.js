@@ -2,7 +2,6 @@
 // Start both: npm start (then open http://localhost:3000). The backend alone: npm run start:backend (LIMS_API_PORT, 3001).
 'use strict';
 const http = require('http');
-const path = require('path');
 const { Database, migrate } = require('./db');
 const routes = require('./routes');
 const { sessionUser } = require('./auth');
@@ -82,13 +81,13 @@ async function start() {
     const owner = await new Database().open({ url: process.env.LIMS_MIGRATE_URL });
     try { applied = await migrate(owner, { grantTo: appRole }); } finally { owner.close(); }
   }
-  const db = await new Database().open({ dataDir: path.join(__dirname, '..', 'data', 'pgdata') });
+  const db = await new Database().open();
   if (!applied) applied = await migrate(db);
   if (applied.length) console.log('Applied:', applied.join(', '));
   try {
     const p = await db.one('SELECT database_account_problems() AS p');
     const list = p && p.p ? (Array.isArray(p.p) ? p.p : String(p.p).replace(/^\{|\}$/g, '').split(',').map((x) => x.replace(/^"|"$/g, ''))) : [];
-    if (list.length && db.engine.kind === 'postgres') console.log('Database account: ' + list.join('; ') + '.\n  Fine for the Sandbox; not for GxP data (see db/roles_setup.sql).');
+    if (list.length) console.log('Database account: ' + list.join('; ') + '.\n  Fine for the Sandbox; not for GxP data (see db/roles_setup.sql).');
   } catch (_) { /* older database */ }
 
   const server = http.createServer(async (req, res) => {

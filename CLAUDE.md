@@ -29,14 +29,14 @@ The project was split into two folders and two programs (asked by Edashall Konah
 
 ## How to run it (do this for Alex)
 
-1. `npm install` (installs the embedded PostgreSQL, PGlite; no admin rights or database server needed)
-2. `npm test` (builds a fresh in-memory database and runs every rule test; all must pass)
-3. `npm start` (backend and front end together), then open http://localhost:3000 in the Browser pane
-4. `npm run reset` deletes the local database (`backend/data/pgdata`) so the next start rebuilds it with demo data. Use it after changing migrations or the seed.
+**Since 2026-10-30 (Edashall): the app connects to an existing PostgreSQL database; nothing creates a database any more.** The embedded PGlite engine and its npm package are gone. Every command reads `.env` (copy `.env.example`).
 
-Alternative engine: set `DATABASE_URL=postgres://user:pass@host:port/db` to use a real PostgreSQL server instead of PGlite. Both engines are supported by `server/db.js`.
+1. Once per server, as `postgres`: `psql -h localhost -U postgres -v pw='...' -f backend/db/create_database.sql` (makes the `lims` account and the empty databases `lims3` and `lims3_test`). Put the password in `.env` (`DATABASE_URL`, `LIMS_TEST_DATABASE_URL`).
+2. `npm test` empties `lims3_test` (`wipe()` in `backend/server/db.js`: drops the `lims` and `public` schemas), applies every migration and runs every rule test; all must pass. It refuses to run on `DATABASE_URL`.
+3. `npm start` (backend and front end; the migrations make any missing tables, rules and demo data), then open http://localhost:3000 in the Browser pane. `npm run start:java` starts the Java backend in a second terminal.
+4. `npm run reset` empties `lims3` the same way so the next start rebuilds it with demo data.
 
-**First run on a new machine:** this slice was built and tested against PostgreSQL 16 through the wire-protocol client. The PGlite path (`server/db.js`, the `pglite` engine) was written but could not be exercised where it was built. If `npm test` or `npm start` fails on PGlite, fix the adapter in `server/db.js` (result normalization, numeric types, dates) rather than changing the SQL. Then run `npm test` and `npm run test:browser` (needs Playwright: `npx playwright install chromium` if missing) until both pass.
+GxP server: `backend/db/roles_setup.sql` and `LIMS_MIGRATE_URL` as before. Older notes below about PGlite, `data/pgdata` and `backend/data` describe the history, not how it runs now.
 
 ## Architecture (keep it this simple)
 

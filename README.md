@@ -15,7 +15,7 @@
 | Lab supplies | Inventory (lots, mixtures, QA testing before use, waste classifications), purchasing and receiving, vendor approvals (local and corporate), equipment (calibration, tag-out, release), electronic logbooks, the sensor feed (iMonnit) |
 | Oversight | Invoicing (QuickBooks Online queue, credit notes, payment status), dashboards (Home, GM, Executive, finance figures, performance report to Excel), trending and control charts, the audit trail, permissions through lab groups, electronic signatures |
 
-Every business rule lives in the database (PostgreSQL constraints, triggers and functions), so no screen, script or integration can bypass it. Every regulated table has an append-only audit trail; changes need a reason, and signed actions need the user's password.
+The business rules live in the Java backend (`backend/`); the database keeps the structure and the GxP backstop. See `backend/README.md` and `frontend/README.md`. Every regulated table has an append-only audit trail; changes need a reason, and signed actions need the user's password.
 
 ## Run it
 

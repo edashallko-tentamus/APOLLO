@@ -39,7 +39,9 @@ On first start the system administrator sets their own password. To use a Postgr
 
 ### Local PostgreSQL (optional)
 
-To keep the data in a real PostgreSQL 16 server instead of the embedded one, with Docker:
+On a PostgreSQL 16 server you already have, create the account and database once with `psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql`, then put `DATABASE_URL` in `.env` (step 1 below). The app makes the tables at its first start.
+
+Or run one with Docker:
 
 1. Create `.env` in this folder (it is never committed):
    ```

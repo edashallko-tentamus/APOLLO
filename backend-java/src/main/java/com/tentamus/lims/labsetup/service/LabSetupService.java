@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Lab setup: the product name, each lab's images (logo, small logo, accreditation mark) and the report templates. The
- * rules are the domain's (labsetup/domain, migration 071); who may change what is checked here (migration 072). The public product name (the sign-in page) stays in the Node backend for now.
+ * rules are the domain's (labsetup/domain, migration 071); who may change what is checked here (migration 072). The public product name is read by the sign-in page (publicSettings).
  */
 @Service
 public class LabSetupService {
@@ -39,6 +39,17 @@ public class LabSetupService {
         this.uow = uow;
         this.access = access;
         this.json = json;
+    }
+
+    /** The settings the sign-in page shows before anyone signs in (the product name); none when they cannot be read. */
+    public Map<String, Object> publicSettings() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        try {
+            for (Map<String, Object> r : db.rows("SELECT setting_key, setting_value FROM system_setting WHERE setting_key IN ('product_name')")) out.put((String) r.get("setting_key"), r.get("setting_value"));
+        } catch (RuntimeException e) {
+            // as in Node: an older database without the table answers {}
+        }
+        return out;
     }
 
     public Map<String, Object> setProductName(RequestContext ctx, Map<String, Object> body) {

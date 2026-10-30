@@ -31,11 +31,12 @@ import org.springframework.stereotype.Service;
 /**
  * Test packages in the catalogue, on quotes and on orders (cancelling one of its tests takes off only that test's
  * share), and price changes from an effective date. The rules are the domain's ({@link TestPackage},
- * {@link QuotedPackage}, {@link PriceChange}). The hourly job that applies scheduled changes stays in the Node backend
- * (with the database's apply_catalog_price_change); a change starting today is applied here by Java.
+ * {@link QuotedPackage}, {@link PriceChange}). A change starting today is applied when it is made; later ones by the
+ * hourly job (applyDue).
  */
 @Service
 public class PackagesService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PackagesService.class);
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
@@ -312,6 +313,33 @@ public class PackagesService {
             Object applied = LocalDate.parse(on).isAfter(today) ? null : apply(d, packages.priceChange(d, pc.get("id")), today);
             return map("id", pc.get("id"), "change_code", pc.get("change_code"), "applied", applied);
         });
+    }
+
+    /**
+     * The hourly job: applies every scheduled change whose day has come, each as the person who scheduled it, in its own
+     * transaction. A change that cannot be applied keeps its reason in last_error (written as System). Returns how many applied.
+     */
+    public int applyDue() {
+        int n = 0;
+        for (Map<String, Object> due : db.rows("SELECT * FROM catalog_price_change_due")) {
+            String site = (String) due.get("site_id");
+            RequestContext as = new RequestContext((String) due.get("created_by"), site, site, "Scheduled price change " + due.get("change_code"), "127.0.0.1");
+            try {
+                uow.run(as, d -> apply(d, packages.priceChange(d, due.get("id")), clock.today(site)));
+                n++;
+            } catch (RuntimeException e) {
+                log.error("Price change {} could not be applied: {}", due.get("change_code"), e.getMessage());
+                try {
+                    Object system = db.one("SELECT id FROM app_user WHERE username = 'system'").get("id");
+                    String msg = String.valueOf(e.getMessage());
+                    uow.run(new RequestContext((String) system, site, site, "The scheduled price change could not be applied", "127.0.0.1"),
+                        d -> d.update("UPDATE catalog_price_change SET last_error = ? WHERE id = ?::uuid", msg.length() > 500 ? msg.substring(0, 500) : msg, due.get("id")));
+                } catch (RuntimeException ignored) {
+                    // as in Node: recording the error never stops the other changes
+                }
+            }
+        }
+        return n;
     }
 
     /** Java's own apply_catalog_price_change: the lab's tests, their analyte prices and their prices in packages. */

@@ -14,16 +14,16 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SignatureService {
-    public static final int MAX_ATTEMPTS = 5;
-    static final String LOCKED = "This account is locked after too many wrong passwords. Ask an administrator to unlock it.";
     private final Db db;
     private final UnitOfWork uow;
     private final FailureLimiter limiter;
+    private final AuthEvents events;
 
-    public SignatureService(Db db, UnitOfWork uow, FailureLimiter limiter) {
+    public SignatureService(Db db, UnitOfWork uow, FailureLimiter limiter, AuthEvents events) {
         this.db = db;
         this.uow = uow;
         this.limiter = limiter;
+        this.events = events;
     }
 
     /** What is signed: the meaning ("Changed by"), the action, the module (for the signature record). */
@@ -44,35 +44,18 @@ public class SignatureService {
         limiter.check(ctx.ip());
         Map<String, Object> u = db.one("SELECT id, username, password_hash, locked_at, failed_attempts FROM app_user WHERE id = ?", ctx.userId());
         if (u == null) throw new RuleException("Sign in first");
-        if (u.get("locked_at") != null) throw new RuleException(LOCKED);
+        if (u.get("locked_at") != null) throw new RuleException(AuthEvents.LOCKED);
         Object name = sig.get("username"), pw = sig.get("password");
         if (blank(name) || blank(pw)) throw new RuleException("An electronic signature is required: enter your user ID and password.");
         String username = (String) u.get("username");
         if (!name.toString().trim().equalsIgnoreCase(username)) {
-            log(u, "Signature failed", "signed with user ID \"" + left(name.toString(), 40) + "\"");
+            events.log(u.get("id"), username, "Signature failed", "signed with user ID \"" + left(name.toString(), 40) + "\"", null);
             throw new RuleException("Sign with your own user ID (you are signed in as " + username + ").");
         }
         if (!new PasswordHash((String) u.get("password_hash")).matches(pw.toString())) {
-            throw new RuleException(wrongPassword(u, ctx.ip()) ? LOCKED : "The user ID or password is not correct. The signature was not applied.");
+            throw new RuleException(events.wrongPassword(u, "Signature failed", ctx.ip()) ? AuthEvents.LOCKED : "The user ID or password is not correct. The signature was not applied.");
         }
         if (((Number) u.getOrDefault("failed_attempts", 0)).intValue() != 0) db.update("UPDATE app_user SET failed_attempts = 0 WHERE id = ?::uuid", u.get("id"));
-    }
-
-    /** Counts a wrong password; true when the account is now locked. */
-    private boolean wrongPassword(Map<String, Object> u, String ip) {
-        limiter.note(ip);
-        Object f = u.get("failed_attempts");
-        int n = (f == null ? 0 : ((Number) f).intValue()) + 1;
-        db.update("UPDATE app_user SET failed_attempts = ?::int, locked_at = CASE WHEN ?::int >= ?::int THEN clock_timestamp() ELSE locked_at END WHERE id = ?::uuid",
-            n, n, MAX_ATTEMPTS, u.get("id"));
-        log(u, "Signature failed", "attempt " + n + " of " + MAX_ATTEMPTS);
-        if (n < MAX_ATTEMPTS) return false;
-        log(u, "Account locked", MAX_ATTEMPTS + " wrong passwords");
-        return true;
-    }
-
-    private void log(Map<String, Object> u, String event, String detail) {
-        db.update("INSERT INTO auth_event (user_id, username, event, detail) VALUES (?::uuid, ?, ?, ?)", u.get("id"), u.get("username"), event, detail);
     }
 
     private static boolean blank(Object v) { return v == null || v.toString().isEmpty() || Boolean.FALSE.equals(v); }

@@ -17,6 +17,9 @@ public class LabSetupController {
 
     public LabSetupController(LabSetupService setup) { this.setup = setup; }
 
+    @GetMapping("/api/public/settings")
+    public Object publicSettings() { return setup.publicSettings(); }
+
     @PostMapping("/api/settings")
     public Object productName(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) { return setup.setProductName(ctx(req, b), body(b)); }
 

@@ -15,6 +15,10 @@ import java.util.regex.Pattern;
  */
 public record RequestContext(String userId, String siteId, String rawSite, String reason, String ip) {
     public static final String USER_ATTRIBUTE = "lims.userId";
+    /** The session token behind the request (sign out ends it). */
+    public static final String TOKEN_ATTRIBUTE = "lims.sessionToken";
+    /** Set when the request's session had just timed out (the sign-in page says so). */
+    public static final String EXPIRED_ATTRIBUTE = "lims.sessionExpired";
     private static final Pattern UUID = Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", Pattern.CASE_INSENSITIVE);
 
     public static RequestContext of(HttpServletRequest req, Map<String, Object> body) {

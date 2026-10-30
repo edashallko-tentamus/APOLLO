@@ -15,7 +15,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * The connection pool, built from DATABASE_URL (the variable the Node backend reads), so both backends use one database.
+ * The connection pool, built from DATABASE_URL, made once the database has been migrated (Migrations: the tables and demo
+ * data that are missing, before anything else reads it).
  * Parameters are sent untyped (stringtype=unspecified), as the Node client does, so PostgreSQL infers uuid, enum, date
  * and array types from the column exactly as it does for the existing SQL.
  */
@@ -25,10 +26,13 @@ public class DataSourceConfig {
     @Bean
     public DataSource dataSource(@Value("${lims.database-url}") String databaseUrl,
                                  @Value("${lims.db.pool-size}") int poolSize,
-                                 @Value("${lims.db.statement-timeout}") String statementTimeout) {
+                                 @Value("${lims.db.statement-timeout}") String statementTimeout,
+                                 @Value("${lims.migrate-url}") String migrateUrl,
+                                 @Value("${lims.db-root}") String dbRoot) {
         if (databaseUrl == null || databaseUrl.isBlank()) {
             throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in .env: the PostgreSQL database to connect to (see .env.example).");
         }
+        Migrations.atStart(databaseUrl, migrateUrl, dbRoot);
         HikariConfig c = new HikariConfig();
         Jdbc j = Jdbc.from(databaseUrl);
         c.setJdbcUrl(j.url());
@@ -37,14 +41,20 @@ public class DataSourceConfig {
         c.setMaximumPoolSize(poolSize);
         c.setPoolName("lims");
         long ms = DurationStyle.detectAndParse(statementTimeout).toMillis();
-        // The JDBC driver always sends the computer's time zone; the Node backend's connections use the database server's default
-        // (UTC on the Docker and cloud servers). Timestamps turned into text and "today" in SQL depend on it, so it is set here
-        // (LIMS_DB_TIMEZONE when the server's default is not UTC).
-        String zone = System.getenv().getOrDefault("LIMS_DB_TIMEZONE", "UTC");
-        if (!zone.matches("[A-Za-z0-9/_+-]+")) throw new IllegalStateException("LIMS_DB_TIMEZONE is not a time zone name: " + zone);
-        c.setConnectionInitSql("SET search_path = lims, public; SET statement_timeout = " + ms + "; SET TIME ZONE '" + zone + "'");
+        c.setConnectionInitSql("SET search_path = lims, public; SET statement_timeout = " + ms + "; SET TIME ZONE '" + timeZone() + "'");
         c.setConnectionTimeout(Duration.ofSeconds(10).toMillis());
         return new HikariDataSource(c);
+    }
+
+    /**
+     * The session time zone. The JDBC driver always sends the computer's; the Node backend's connections used the database
+     * server's default (UTC on the Docker and cloud servers). Timestamps turned into text and "today" in SQL depend on it
+     * (LIMS_DB_TIMEZONE when the server's default is not UTC).
+     */
+    static String timeZone() {
+        String zone = System.getenv().getOrDefault("LIMS_DB_TIMEZONE", "UTC");
+        if (!zone.matches("[A-Za-z0-9/_+-]+")) throw new IllegalStateException("LIMS_DB_TIMEZONE is not a time zone name: " + zone);
+        return zone;
     }
 
     /** postgres://user:pass@host:port/db?sslmode=x  ->  jdbc:postgresql://host:port/db?stringtype=unspecified&sslmode=x */

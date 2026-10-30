@@ -708,13 +708,16 @@ public class DashboardService {
         return map("groups", groups, "widgets", widgets, "on", on, "can_edit", RequestContext.isUuid(c.userId()) && access.load(c.userId()).can("admin.groups", site));
     }
 
-    /** POST /api/admin/dashboard-widgets: switch widgets on or off per group (the database checks admin.groups). */
+    /** POST /api/admin/dashboard-widgets: switch widgets on or off per group (admin.groups at the group's lab). */
     public Map<String, Object> saveGroupWidgets(RequestContext c, Map<String, Object> body) {
         access.currentSite(c);
         List<?> rows = body.get("rows") instanceof List<?> l ? l : List.of();
         uow.run(c.orReason("Group dashboard widgets changed"), t -> {
             for (Object o : rows) {
                 if (!(o instanceof Map<?, ?> x) || !RequestContext.isUuid(x.get("group_id")) || !(x.get("widget_code") instanceof String)) continue;
+                Map<String, Object> g = one("SELECT site_id FROM lab_group WHERE id = $1", x.get("group_id"));
+                if (g != null && g.get("site_id") == null) access.requireSystemAdmin(c, "Only a system administrator sets an all-labs group's widgets");
+                else if (g != null) access.requireAt(c, "admin.groups", (String) g.get("site_id"));
                 Sql s = pg("""
                     INSERT INTO group_widget (group_id, widget_code, status) VALUES ($1, $2, $3::record_status)
                       ON CONFLICT (group_id, widget_code) DO UPDATE SET status = EXCLUDED.status WHERE group_widget.status <> EXCLUDED.status""",

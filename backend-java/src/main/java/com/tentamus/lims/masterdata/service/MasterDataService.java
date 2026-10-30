@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 /**
  * Master data: labs and their holidays, compliance categories, analytes and unit conversions (the plain lists go straight
  * through {@link ControlledListService}). Each list's rules are checked by its domain record
- * (masterdata/domain); who may change each list is still checked by the database's permission triggers.
+ * (masterdata/domain); who may change each list is its keeper (ControlledList, migration 072; analytes and units still by the database).
  */
 @Service
 public class MasterDataService {

@@ -1,5 +1,6 @@
 package com.tentamus.lims.methods.domain;
 
+import com.tentamus.lims.core.calc.Formula;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.ArrayList;

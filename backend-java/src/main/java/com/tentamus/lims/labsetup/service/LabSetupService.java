@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Lab setup: the product name, each lab's images (logo, small logo, accreditation mark) and the report templates. The
- * rules are the domain's (labsetup/domain, migration 071); who may change what is still checked by the database. The public product name (the sign-in page) stays in the Node backend for now.
+ * rules are the domain's (labsetup/domain, migration 071); who may change what is checked here (migration 072). The public product name (the sign-in page) stays in the Node backend for now.
  */
 @Service
 public class LabSetupService {
@@ -71,6 +71,7 @@ public class LabSetupService {
         String name = Js.truthy(body.get("file_name")) ? Js.string(body.get("file_name")) : "image";
         Object mime = Js.truthy(body.get("mime_type")) ? body.get("mime_type") : "application/octet-stream";
         LabImage.checkUpload(mime.toString(), bytes.length);
+        access.requireAt(ctx, "admin.lab", siteId);
         return uow.run(ctx.withSite(siteId).orReason(kind + " uploaded"), d -> {
             if (!"Other".equals(kind)) d.update("UPDATE site_media SET status = 'Inactive' WHERE site_id = ?::uuid AND kind = ? AND status = 'Active'", siteId, kind);
             Object doc = d.one("INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES (?, ?, ?, ?, decode(?, 'base64')) RETURNING id",
@@ -83,6 +84,7 @@ public class LabSetupService {
     public Map<String, Object> retire(RequestContext ctx, String mediaId) {
         Map<String, Object> m = db.one("SELECT site_id FROM site_media WHERE id = ?::uuid", mediaId);
         if (m == null) throw new RuleException("Image not found");
+        access.requireAt(ctx, "admin.lab", (String) m.get("site_id"));
         return uow.run(ctx.withSite((String) m.get("site_id")).orReason("Image retired"), d -> d.raw("UPDATE site_media SET status = 'Inactive' WHERE id = ?::uuid", mediaId));
     }
 
@@ -127,6 +129,12 @@ public class LabSetupService {
         }
         return uow.run(ctx.orReason("Report templates changed"), d -> {
             for (Map<String, Object> x : list) {
+                if (!Js.truthy(x.get("id")) || !TEMPLATES.pick(x).isEmpty()) {
+                    Map<String, Object> stored = Js.truthy(x.get("id")) ? d.one("SELECT site_id FROM report_template WHERE id = ?::uuid", x.get("id")) : null;
+                    if (stored != null || !Js.truthy(x.get("id"))) mayKeepTemplates(ctx, stored != null ? stored.get("site_id") : Js.orNull(x.get("site_id")));
+                }
+            }
+            for (Map<String, Object> x : list) {
                 if (!(Boolean.TRUE.equals(x.get("is_default")) || "true".equals(x.get("is_default")))) continue;
                 Object site = Js.truthy(x.get("id")) ? d.one("SELECT site_id FROM report_template WHERE id = ?::uuid", x.get("id")).get("site_id") : Js.orNull(x.get("site_id"));
                 d.update("UPDATE report_template SET is_default = false WHERE is_default AND site_id IS NOT DISTINCT FROM ?::uuid AND (?::uuid IS NULL OR id <> ?::uuid)",
@@ -145,6 +153,12 @@ public class LabSetupService {
             }
             return TEMPLATES.upsert(d, rows, Map.of());
         });
+    }
+
+    /** Templates for every lab are a system administrator's, a lab's need reports.templates there (report_template_rules until 072). */
+    private void mayKeepTemplates(RequestContext ctx, Object site) {
+        if (site == null) access.requireSystemAdmin(ctx, "Templates for every lab are kept by a system administrator; make one for your lab instead");
+        else access.requireAt(ctx, "reports.templates", site.toString());
     }
 
     /** Template options as plain values (a Map for a JSON object), for the template check; text that is not JSON is left to the database. */

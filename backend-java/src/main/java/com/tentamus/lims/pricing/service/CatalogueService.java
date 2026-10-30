@@ -1,5 +1,6 @@
 package com.tentamus.lims.pricing.service;
 
+import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.RequestContext;
@@ -24,22 +25,30 @@ import org.springframework.stereotype.Service;
 public class CatalogueService {
     private final CatalogueRepository repo;
     private final UnitOfWork uow;
+    private final AccessPolicy access;
 
-    public CatalogueService(CatalogueRepository repo, UnitOfWork uow) {
+    public CatalogueService(CatalogueRepository repo, UnitOfWork uow, AccessPolicy access) {
         this.repo = repo;
         this.uow = uow;
+        this.access = access;
     }
 
     public List<Map<String, Object>> rushSchedules() { return repo.rushSchedules(); }
 
     public List<Map<String, Object>> saveSchedules(RequestContext ctx, List<Map<String, Object>> rows) {
         for (Map<String, Object> r : rows) RushFeeSchedule.checkSchedule(CatalogueRepository.SCHEDULES.pick(r), r.get("id") == null);
-        return uow.run(ctx, d -> CatalogueRepository.SCHEDULES.upsert(d, rows, Map.of()));
+        return uow.run(ctx, d -> {
+            if (CatalogueRepository.SCHEDULES.writesAny(rows)) access.requireToChange(ctx, "rush_fee_schedule", "catalog.edit");
+            return CatalogueRepository.SCHEDULES.upsert(d, rows, Map.of());
+        });
     }
 
     public List<Map<String, Object>> saveTiers(RequestContext ctx, String scheduleId, List<Map<String, Object>> rows) {
         for (Map<String, Object> r : rows) RushFeeSchedule.checkTier(CatalogueRepository.TIERS.pick(r), r.get("id") == null);
-        return uow.run(ctx, d -> CatalogueRepository.TIERS.upsert(d, rows, Map.of("schedule_id", scheduleId)));
+        return uow.run(ctx, d -> {
+            if (CatalogueRepository.TIERS.writesAny(rows)) access.requireToChange(ctx, "rush_fee_tier", "catalog.edit");
+            return CatalogueRepository.TIERS.upsert(d, rows, Map.of("schedule_id", scheduleId));
+        });
     }
 
     public List<Map<String, Object>> catalogue() { return repo.catalogue(); }

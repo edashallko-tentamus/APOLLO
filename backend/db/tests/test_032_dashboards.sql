@@ -61,8 +61,7 @@ SELECT pg_temp.expect_true('A GM gets the revenue widgets on Home; an analyst ge
   AND NOT EXISTS (SELECT 1 FROM my_home_widgets(pg_temp.dbcfl(), pg_temp.dbu('wd.ana2')) WHERE code IN ('revenue','wip','projection')));
 SELECT pg_temp.expect_true('The GM and executive widgets never appear on Home', NOT EXISTS (SELECT 1 FROM my_home_widgets(pg_temp.dbcfl(), pg_temp.dbu('db.gm')) WHERE code IN ('network','finance')));
 SELECT pg_temp.db_as('wd.ana2', false);
-SELECT pg_temp.expect_error_like('Only a lab administrator (admin.groups) sets a group''s widgets',
-  $$INSERT INTO group_widget (group_id, widget_code) VALUES (pg_temp.dbg('Analyst'), 'revenue')$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): only admin.groups sets a group's widgets (DashboardService.saveGroupWidgets)
 SELECT pg_temp.db_as('akiddle', false);
 SELECT pg_temp.expect_ok('A lab administrator gives the Analyst group a widget', $$INSERT INTO group_widget (group_id, widget_code) VALUES (pg_temp.dbg('Analyst'), 'quotes')$$);
 SELECT pg_temp.expect_true('The change is in the audit trail with its reason',
@@ -126,7 +125,7 @@ SELECT pg_temp.expect_error_like('An item''s department must be one of its lab''
 
 -- 7. the finance figures
 SELECT pg_temp.db_as('db.gm', false);
-SELECT pg_temp.expect_error_like('A GM does not type the finance figures', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbcfl(), current_date - 3, 1000, 800)$$, 'finance.enter');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): a GM does not type the finance figures, finance.enter (DashboardService.saveWeeks)
 SELECT pg_temp.db_as('db.fin', false);
 SELECT pg_temp.expect_ok('The Finance group types a week for any lab', $$INSERT INTO finance_week (site_id, week_ending, revenue, costs) VALUES (pg_temp.dbtps(), current_date - 3, 52000, 41000)$$);
 SELECT pg_temp.expect_ok('and a forecast', $$INSERT INTO finance_plan (site_id, month, plan, revenue, costs) VALUES (pg_temp.dbcfl(), date_trunc('month', current_date)::date, 'Budget forecast', 230000, 185000)$$);

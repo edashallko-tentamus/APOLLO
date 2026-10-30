@@ -73,7 +73,7 @@ INSERT INTO quoted_test_configuration (project_version_id, test_id, quantity, fi
 SELECT pg_temp.expect_true('Five service lines are seeded, each with its types',
   (SELECT count(*) FROM service_line) = 5 AND NOT EXISTS (SELECT 1 FROM service_line sl WHERE NOT EXISTS (SELECT 1 FROM service_line_type t WHERE t.service_line_id = sl.id)));
 SELECT pg_temp.as_user('ch.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot add a service line', $$INSERT INTO service_line (line_name) VALUES ('Hemp')$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot add a service line, catalog.edit (ChargesService.saveLines)
 SELECT pg_temp.as_user('ch.gm');
 SELECT pg_temp.m_reason('Rule test: service lines');
 INSERT INTO service_line (line_name, sort_order) VALUES ('Hemp', 60);
@@ -140,8 +140,7 @@ SELECT pg_temp.expect_true('A test on the client''s accepted quote is ordered fr
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('ch.gm');
 SELECT pg_temp.m_reason('Rule test: charges');
-SELECT pg_temp.expect_error_like('Charges for every lab are kept by system administrators',
-  $$INSERT INTO charge_item (charge_name, kind, price) VALUES ('Courier', 'Shipping', 30)$$, 'system administrators');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): charges for every lab are kept by system administrators (ChargesService.saveItems)
 INSERT INTO charge_item (charge_name, kind, price, site_id) VALUES ('Courier pickup', 'Shipping', 30, pg_temp.m_site('CFL'));
 SELECT pg_temp.expect_true('A lab''s General Manager adds charges; they are numbered CHG-',
   (SELECT bool_and(charge_code LIKE 'CHG-%') FROM charge_item));

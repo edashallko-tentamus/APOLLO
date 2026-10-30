@@ -31,7 +31,7 @@ SELECT set_config('lims.reason', '', false);
 
 -- Job roles and who maintains the lists
 SELECT pg_temp.as_user('inv.tech');
-SELECT pg_temp.expect_error('Analyst cannot add to the Chemical list', $$INSERT INTO chemical (chemical_name) VALUES ('Toluene')$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot add to the Chemical list (InventoryListsService.saveChemicals)
 SELECT set_config('lims.reason', 'Promote myself', false);
 SELECT pg_temp.expect_error('Only an administrator can change a job role', $$UPDATE app_user SET job_role = 'QA' WHERE username = 'inv.tech'$$);
 SELECT pg_temp.as_user('akiddle');

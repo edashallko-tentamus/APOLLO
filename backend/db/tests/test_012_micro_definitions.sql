@@ -30,7 +30,7 @@ CREATE OR REPLACE FUNCTION pg_temp.cfg(k text, c jsonb) RETURNS void LANGUAGE sq
 
 SELECT pg_temp.expect_true('Product categories are seeded (Cosmetic, Dietary Supplement, Food, Raw Material)', (SELECT count(*) FROM product_category) >= 4);
 SELECT pg_temp.as_user('wd.int');
-SELECT pg_temp.expect_error('Product categories need master.matrices', $$INSERT INTO product_category (category_name) VALUES ('Pet food')$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): product categories need master.matrices (MasterLists.PRODUCT_CATEGORIES keeper)
 SELECT pg_temp.as_user('akiddle');
 INSERT INTO matrix (matrix_name, product_category_id) VALUES ('WD Lotion', pg_temp.cat('Cosmetic')::uuid);
 SELECT pg_temp.expect_true('A matrix belongs to a product category', (SELECT product_category_id IS NOT NULL FROM matrix WHERE matrix_name = 'WD Lotion'));

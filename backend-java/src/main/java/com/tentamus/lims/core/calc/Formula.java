@@ -1,4 +1,4 @@
-package com.tentamus.lims.testing.domain.calc;
+package com.tentamus.lims.core.calc;
 
 import com.tentamus.lims.core.web.RuleException;
 import java.math.BigDecimal;
@@ -14,11 +14,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * A test's calculation: numbers, {step.field} tokens, + - * / ^ ( ) and the functions log10 ln exp sqrt abs min max power.
- * Java's own copy of the database functions formula_lex, formula_tokens, formula_check and formula_eval, which stay in the
- * database because the bench's live results (batch_results), logbooks, the workflow verification and the designer's
- * try-out still call them. It evaluates as PostgreSQL does (a sign binds tighter than ^, and ^ is left associative), so
- * Java's result agrees with the database's.
+ * A formula: numbers, {step.field} tokens, + - * / ^ ( ) and the functions log10 ln exp sqrt abs min max power. The one
+ * Java copy of the database functions formula_lex, formula_tokens, formula_check and formula_eval, used by the designer
+ * (problem, tokens) and the bench and QC Review (evaluate). The database keeps its own copy because the bench's live
+ * results (batch_results), logbooks, the workflow verification and the designer's try-out still call it. It evaluates as
+ * PostgreSQL does (a sign binds tighter than ^, and ^ is left associative), so Java's result agrees with the database's.
  */
 public final class Formula {
     public static final MathContext MC = new MathContext(34, RoundingMode.HALF_EVEN);
@@ -45,25 +45,25 @@ public final class Formula {
         return out;
     }
 
-    /** The {step.field} tokens it uses, sorted and without braces (formula_tokens). */
-    public Set<String> tokens() {
+    /** The {step.field} tokens it uses, without braces, each once, sorted (formula_tokens). */
+    public List<String> tokens() {
         Set<String> out = new TreeSet<>();
         for (String t : tokens) if (t.startsWith("{")) out.add(t.substring(1, t.length() - 1));
-        return out;
+        return new ArrayList<>(out);
     }
 
     /** Null when the formula is well formed, else what is wrong with it (formula_check). */
     public String problem() {
-        if (text == null || text.isBlank()) return "The formula is empty";
+        if (text == null || text.strip().isEmpty()) return "The formula is empty";
         boolean expectOperand = true;
         List<Character> stack = new ArrayList<>();
         String prev = "";
         for (String t : tokens) {
             if (expectOperand) {
-                if (Character.isDigit(t.charAt(0)) || t.charAt(0) == '.' || t.startsWith("{")) expectOperand = false;
+                if (t.matches("^[0-9.].*") || t.startsWith("{")) expectOperand = false;
                 else if (t.equals("(")) stack.add("__func".equals(prev) ? 'f' : 'p');
                 else if (t.equals("-") || t.equals("+")) { /* a sign */ }
-                else if (Character.isLetter(t.charAt(0)) || t.charAt(0) == '_') {
+                else if (t.matches("^[A-Za-z_].*")) {
                     if (!FUNCTIONS.contains(t.toLowerCase(Locale.ROOT)))
                         return "\"" + t + "\" is not a step token or a known function (use {step.field}, or " + String.join(", ", FUNCTIONS) + ")";
                     prev = "__func";
@@ -164,7 +164,7 @@ public final class Formula {
                 if (v == null) throw RuleException.database("No numeric value for " + t);
                 return v;
             }
-            if (Character.isDigit(t.charAt(0)) || t.charAt(0) == '.') return new BigDecimal(t);
+            if (t.matches("^[0-9.].*")) return new BigDecimal(t);
             if (t.equals("(")) {
                 BigDecimal v = expr();
                 i++;   // the ")"

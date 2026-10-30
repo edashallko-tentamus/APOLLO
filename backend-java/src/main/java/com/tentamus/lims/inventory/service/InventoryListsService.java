@@ -84,7 +84,10 @@ public class InventoryListsService {
     }
 
     public List<Map<String, Object>> saveChemicals(RequestContext ctx, List<Map<String, Object>> rows) {
-        return uow.run(ctx, d -> CHEMICALS.upsert(d, rows, Map.of()));
+        return uow.run(ctx, d -> {
+            if (CHEMICALS.writesAny(rows)) access.requireToChange(ctx, "chemical", "inventory.lists");
+            return CHEMICALS.upsert(d, rows, Map.of());
+        });
     }
 
     public List<Map<String, Object>> suppliers() {
@@ -166,11 +169,14 @@ public class InventoryListsService {
         uow.run(ctx, d -> {
             for (Map<String, Object> row : rows) {
                 if (!RequestContext.isUuid(row.get("id"))) continue;
-                Map<String, Object> stored = d.one("SELECT site_id, chemical_type::text AS chemical_type FROM qa_testing_default WHERE id = ?::uuid", row.get("id"));
+                Map<String, Object> stored = d.one("SELECT site_id, chemical_type::text AS chemical_type, required, COALESCE(note, '') AS note_text FROM qa_testing_default WHERE id = ?::uuid", row.get("id"));
                 if (stored == null) continue;
                 Map<String, Object> ch = new LinkedHashMap<>();
                 for (String k : List.of("site_id", "chemical_type", "note")) if (row.containsKey(k)) ch.put(k, row.get(k));
                 Object note = com.tentamus.lims.inventory.domain.QaTestingDefault.checked(stored, ch).get("note");
+                boolean changes = site.equals(stored.get("site_id"))
+                    && (truthy(row.get("required")) != Boolean.TRUE.equals(stored.get("required")) || !(note == null ? "" : note.toString()).equals(stored.get("note_text")));
+                if (changes) access.requireAt(ctx, "inventory.qa_configure", site);   // qa_testing_default_rules until 072
                 d.update("""
                     UPDATE qa_testing_default SET required = ?::boolean, note = ? WHERE id = ?::uuid AND site_id = ?::uuid
                        AND (required, COALESCE(note, '')) IS DISTINCT FROM (?::boolean, COALESCE(?::text, ''))""",

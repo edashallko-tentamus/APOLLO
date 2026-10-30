@@ -64,6 +64,7 @@ public class ChargesService {
 
     public Map<String, Object> saveLines(RequestContext ctx, Map<String, Object> body) {
         uow.run(ctx.orReason("Service lines changed"), d -> {
+            if (rows(body, "rows").stream().anyMatch(x -> !trimmed(x.get("line_name")).isEmpty())) access.requireToChange(ctx, "service_line", "catalog.edit");
             for (Map<String, Object> x : rows(body, "rows")) {
                 if (trimmed(x.get("line_name")).isEmpty()) continue;
                 if (RequestContext.isUuid(x.get("id"))) d.update("UPDATE service_line SET line_name = ?, sort_order = ?, status = ? WHERE id = ?::uuid",
@@ -77,6 +78,7 @@ public class ChargesService {
 
     public Map<String, Object> saveTypes(RequestContext ctx, Map<String, Object> body) {
         uow.run(ctx.orReason("Service line types changed"), d -> {
+            if (rows(body, "rows").stream().anyMatch(x -> !trimmed(x.get("type_name")).isEmpty())) access.requireToChange(ctx, "service_line_type", "catalog.edit");
             for (Map<String, Object> x : rows(body, "rows")) {
                 if (trimmed(x.get("type_name")).isEmpty()) continue;
                 if (RequestContext.isUuid(x.get("id"))) d.update("UPDATE service_line_type SET type_name = ?, sort_order = ?, status = ? WHERE id = ?::uuid",
@@ -126,6 +128,9 @@ public class ChargesService {
         if (!RequestContext.isUuid(clientId)) throw new RuleException("Client not found");
         List<Object> ids = uuids(body.get("ids"));
         uow.run(ctx.orReason("Client service lines changed"), d -> {
+            if (!ids.isEmpty() || d.one("""
+                SELECT 1 FROM client_service_line WHERE client_id = ?::uuid AND status = 'Active' AND NOT (service_line_id = ANY (?::uuid[])) LIMIT 1""", clientId, ids) != null)
+                access.requireToChange(ctx, "client_service_line", "master.clients");
             d.update("UPDATE client_service_line SET status = 'Inactive' WHERE client_id = ?::uuid AND status = 'Active' AND NOT (service_line_id = ANY (?::uuid[]))", clientId, ids);
             for (Object id : ids) d.update("""
                 INSERT INTO client_service_line (client_id, service_line_id) VALUES (?::uuid, ?::uuid)
@@ -206,6 +211,10 @@ public class ChargesService {
                 Charge.checkItem(trimmed(x.get("charge_name")), price == null ? null : Amount.of(Js.number(price)));
                 Object[] v = { trimmed(x.get("charge_name")), Js.truthy(x.get("kind")) ? x.get("kind") : "Other", Js.orNull(x.get("description")), price == null ? 0 : price,
                     uuidOrNull(x.get("service_line_id")), status(x.get("status")) };
+                if (RequestContext.isUuid(x.get("id"))) {
+                    Map<String, Object> stored = d.one("SELECT site_id FROM charge_item WHERE id = ?::uuid", x.get("id"));
+                    if (stored != null) mayKeepCharges(ctx, (String) stored.get("site_id"));
+                } else mayKeepCharges(ctx, "Every lab".equals(x.get("scope")) ? null : site);
                 if (RequestContext.isUuid(x.get("id"))) d.update("UPDATE charge_item SET charge_name = ?, kind = ?, description = ?, price = ?, service_line_id = ?::uuid, status = ? WHERE id = ?::uuid",
                     v[0], v[1], v[2], v[3], v[4], v[5], x.get("id"));
                 else d.update("INSERT INTO charge_item (charge_name, kind, description, price, service_line_id, status, site_id) VALUES (?, ?, ?, ?, ?::uuid, ?, ?::uuid)",
@@ -214,6 +223,12 @@ public class ChargesService {
             return null;
         });
         return ok();
+    }
+
+    /** Charges for every lab are kept by system administrators, a lab's by catalog.edit there (charge_item_rules until 072). */
+    private void mayKeepCharges(RequestContext ctx, String site) {
+        if (site == null) access.requireSystemAdmin(ctx, "Charges for every lab are kept by system administrators; choose your lab");
+        else access.requireAt(ctx, "catalog.edit", site);
     }
 
     // ---------------------------------------------------------------- charges on a quote or project version

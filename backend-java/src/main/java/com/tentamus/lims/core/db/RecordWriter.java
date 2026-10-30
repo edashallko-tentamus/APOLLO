@@ -33,6 +33,11 @@ public final class RecordWriter {
         return out;
     }
 
+    /** Whether saving these rows writes anything (an insert, or an update of a listed column): what a row trigger would see. */
+    public boolean writesAny(List<Map<String, Object>> rows) {
+        return rows.stream().anyMatch(r -> r.get("id") == null || !pick(r).isEmpty());
+    }
+
     /**
      * Saves grid rows. Returns one {id} per row written, null for an update whose row was not found, and nothing for an
      * update that changes no listed column.

@@ -317,7 +317,10 @@ public class PurchasingService {
         Object over = v.get("second_approval_over");
         PurchasingSetting.checkSecondApprovalOver(decimal(over));
         return sign(ctx, body, "Changed by", "Purchasing settings: second approval over " + (over == null ? "no amount" : Js.string(over)),
-            d -> d.raw("UPDATE purchasing_setting SET second_approval_over = ? WHERE site_id = ?::uuid", number(over), site));
+            d -> {
+                access.requireAt(ctx, "admin.lab", site);
+                return d.raw("UPDATE purchasing_setting SET second_approval_over = ? WHERE site_id = ?::uuid", number(over), site);
+            });
     }
 
     // ---------------------------------------------------------------- helpers

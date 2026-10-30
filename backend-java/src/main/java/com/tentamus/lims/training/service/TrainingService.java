@@ -343,6 +343,7 @@ public class TrainingService {
                     Map<String, Object> after = new LinkedHashMap<>(before);
                     after.putAll(f);
                     TrainingRule.checked(before, after, repo.departmentSite(d, before.get("department_id")));
+                    access.requireAt(ctx, "training.configure", site);
                     List<String> sets = new ArrayList<>();
                     List<Object> vals = new ArrayList<>();
                     for (Map.Entry<String, Object> e : f.entrySet()) { sets.add(e.getKey() + " = ?"); vals.add(e.getValue()); }
@@ -355,6 +356,7 @@ public class TrainingService {
                     after.put("site_id", site);
                     after.put("department_id", r.get("department_id"));
                     TrainingRule.checked(null, after, repo.departmentSite(d, r.get("department_id")));
+                    access.requireAt(ctx, "training.configure", site);
                     d.update("""
                         INSERT INTO training_rule (site_id, department_id, dept_trained_after, unlock_any_test, unlock_can_train, continuing_months, due_soon_days, min_runs, min_runs_months,
                             allow_training_samples, allow_records)

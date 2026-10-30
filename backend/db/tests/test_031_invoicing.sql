@@ -337,8 +337,7 @@ SELECT pg_temp.expect_true('Run again, it invoices nothing twice', invoice_catch
 
 -- 12. the accounting connection is kept by system administrators
 SELECT pg_temp.iv_as('inv.acc', false);
-SELECT pg_temp.expect_error_like('Only a system administrator connects a lab to its accounting company',
-  $$UPDATE accounting_connection SET company_id = '123' WHERE site_id = pg_temp.ivcfl()$$, 'system administrator');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): only a system administrator connects a lab to its accounting company (InvoicingService.saveConnection)
 SELECT pg_temp.expect_true('Every lab has its QuickBooks Online connection, not connected yet',
   NOT EXISTS (SELECT 1 FROM lab_site s WHERE NOT EXISTS (SELECT 1 FROM accounting_connection c WHERE c.site_id = s.id AND c.provider = 'QuickBooks Online' AND c.status = 'Not connected')));
 

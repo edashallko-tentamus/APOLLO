@@ -178,6 +178,7 @@ public class CustodyService {
                 Js.truthy(p.get("file_name")) ? p.get("file_name") : "photo-" + (i + 1)));
         }
         return uow.run(ctx.orReason("Sample photos at receipt"), d -> {
+            access.requireAt(ctx, "orders.edit", (String) s.get("site_id"));   // sample_photo_rules until 072
             List<Object> ids = new ArrayList<>();
             for (Photo p : prepared) {
                 if (p.slot() != null) d.update("UPDATE sample_photo SET report_slot = NULL WHERE sample_id = ?::uuid AND report_slot = ? AND status = ?", s.get("id"), p.slot(), "Active");
@@ -209,6 +210,7 @@ public class CustodyService {
         Integer newSlot = now.slot();
         Object caption = body.containsKey("caption") ? Js.orNull(body.get("caption")) : p.get("caption");
         return uow.run(ctx.orReason("Photo details"), d -> {
+            access.requireAt(ctx, "orders.edit", (String) p.get("site_id"));
             if (newSlot != null && !Objects.equals(newSlot, current == null ? null : ((Number) current).intValue()))
                 d.update("UPDATE sample_photo SET report_slot = NULL WHERE sample_id = ?::uuid AND report_slot = ? AND status = ? AND id <> ?::uuid", p.get("sample_id"), newSlot, "Active", p.get("id"));
             d.update("UPDATE sample_photo SET caption = ?, report_slot = ?::int, status = ? WHERE id = ?::uuid", caption, newSlot, status, p.get("id"));

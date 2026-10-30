@@ -133,8 +133,12 @@ public class StabilityService {
             else r.put("site_id", "all".equals(x.get("site_id")) ? null : site);
             rows.add(r);
         }
-        return uow.run(ctx.withSite(site).orReason("Stability conditions changed"), d -> upsert(d, CONDITIONS, "stability_condition", rows, Map.of(), (before, after) ->
-            StabilitySetup.checkCondition(before, after, before != null && facts.onQuote(d, before.get("id")))));
+        return uow.run(ctx.withSite(site).orReason("Stability conditions changed"), d -> upsert(d, CONDITIONS, "stability_condition", rows, Map.of(), (before, after) -> {
+            StabilitySetup.checkCondition(before, after, before != null && facts.onQuote(d, before.get("id")));
+            if (after.get("site_id") == null || (before != null && before.get("site_id") == null))
+                access.requireSystemAdmin(ctx, "Conditions for every lab are kept by a system administrator; add one for your lab instead");
+            else access.requireAt(ctx, "stability.configure", after.get("site_id").toString());
+        }));
     }
 
     public Object saveChambers(RequestContext ctx, Map<String, Object> body) {
@@ -146,13 +150,17 @@ public class StabilityService {
             StabilitySetup.checkChamber(before, after, (String) eq.get("equipment_code"), (String) eq.get("site_id"), Boolean.TRUE.equals(eq.get("retired")),
                 cond == null ? null : (String) cond.get("site_id"), before != null && facts.chamberHoldsMaterial(d, before.get("id")));
             after.put("site_id", eq.get("site_id"));   // the equipment decides the chamber's lab
+            access.requireAt(ctx, "stability.configure", (String) eq.get("site_id"));
         }));
     }
 
     public Object saveRacks(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
-        return uow.run(ctx.withSite(site).orReason("Stability racks changed"), d -> upsert(d, RACKS, "stability_rack", rows(body, "rows"), Map.of(), (before, after) ->
-            StabilitySetup.checkRack(before, after, before != null && facts.rackHoldsMaterial(d, before.get("id")))));
+        return uow.run(ctx.withSite(site).orReason("Stability racks changed"), d -> upsert(d, RACKS, "stability_rack", rows(body, "rows"), Map.of(), (before, after) -> {
+            StabilitySetup.checkRack(before, after, before != null && facts.rackHoldsMaterial(d, before.get("id")));
+            Map<String, Object> chamber = facts.row(d, "stability_chamber", after.get("chamber_id"));
+            access.requireAt(ctx, "stability.configure", chamber == null ? null : (String) chamber.get("site_id"));
+        }));
     }
 
     /**

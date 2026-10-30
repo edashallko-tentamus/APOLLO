@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  * A report template: a name, a layout and the options that layout honours, for one lab or every lab, one default per
  * lab. Replaces the rule part of report_template_rules and the name check (migration 071); who may keep which
- * templates (system administrators for every lab, reports.templates for a lab) is still checked by the database.
+ * templates (system administrators for every lab, reports.templates for a lab) is checked by LabSetupService (migration 072).
  */
 public final class ReportTemplate {
     /** The options the layouts know. */

@@ -1,10 +1,10 @@
 package com.tentamus.lims.testing.domain;
 
+import com.tentamus.lims.core.calc.Formula;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.tentamus.lims.core.web.RuleException;
 import com.tentamus.lims.testing.domain.calc.AnalyteReporting;
-import com.tentamus.lims.testing.domain.calc.Formula;
 import com.tentamus.lims.testing.domain.calc.QcVerdict;
 import com.tentamus.lims.testing.domain.calc.Rounding;
 import com.tentamus.lims.testing.domain.calc.Serving;
@@ -54,7 +54,7 @@ class ReviewRulesTest {
         assertTrue(Formula.of("2 3").problem().contains("out of place"));
         assertTrue(Formula.of("1, 2").problem().contains("comma"));
         assertNotNull(Formula.of("").problem());
-        assertEquals(Set.of("read.reading", "weigh.weight"), Formula.of("{read.reading} / {weigh.weight}").tokens());
+        assertEquals(List.of("read.reading", "weigh.weight"), Formula.of("{read.reading} / {weigh.weight}").tokens());
         assertEquals(0, d("12.5").compareTo(Formula.of("{read.reading} * {dil.factor} * {digest.v} / 1000 / {weigh.weight}")
             .evaluate(Map.of("read.reading", d("25"), "dil.factor", d("5"), "digest.v", d("50"), "weigh.weight", d("0.5")))));
         assertEquals(0, d("16").compareTo(Formula.of("log10(1000) + max(2, {a.b}) - power(2, 3) * -1").evaluate(Map.of("a.b", d("5")))));

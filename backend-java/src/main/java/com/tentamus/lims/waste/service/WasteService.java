@@ -102,6 +102,7 @@ public class WasteService {
                         after.putAll(f);
                         WasteClassification before = waste.find(d, r.get("id"));
                         f = WasteClassification.checked(before, after, f, waste.sameList(d, before.siteId()), ChemicalTypes.ORDER);
+                        mayKeep(ctx, (String) after.get("site_id"));
                     }
                     List<String> sets = new ArrayList<>();
                     List<Object> vals = new ArrayList<>();
@@ -122,6 +123,7 @@ public class WasteService {
                     after.putIfAbsent("hazard_classes", List.of());
                     after.putIfAbsent("default_for", List.of());
                     f = WasteClassification.checked(null, after, f, waste.sameList(d, every ? null : site), ChemicalTypes.ORDER);
+                    mayKeep(ctx, every ? null : site);
                     @SuppressWarnings("unchecked") List<String> hz = (List<String>) f.get("hazard_classes");
                     @SuppressWarnings("unchecked") List<String> df = (List<String>) f.get("default_for");
                     double sort = Js.toNumber(f.get("sort_order"));
@@ -135,5 +137,11 @@ public class WasteService {
             }
             return map("ids", ids);
         });
+    }
+
+    /** Classifications for every lab are a system administrator's, a lab's need inventory.lists there (waste_classification_rules until 072). */
+    private void mayKeep(RequestContext ctx, String site) {
+        if (site == null) access.requireSystemAdmin(ctx, "Waste classifications for every lab are kept by a system administrator; add one for your lab instead");
+        else access.requireAt(ctx, "inventory.lists", site);
     }
 }

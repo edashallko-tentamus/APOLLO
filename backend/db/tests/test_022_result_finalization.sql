@@ -172,7 +172,7 @@ INSERT INTO coa_note (sample_id, requested_test_id, analyte_id, kind, note_text)
   SELECT pg_temp.smp('LOT-A2'), pg_temp.rt('LOT-A2', 'WD Micro Screen'), tr.analyte_id, 'COA', 'Tested on 25 g.' FROM test_result tr WHERE tr.requested_test_id = pg_temp.rt('LOT-A2', 'WD Micro Screen') LIMIT 1;
 SELECT pg_temp.expect_true('A Lab Supervisor adds a COA note on one result', EXISTS (SELECT 1 FROM coa_note WHERE sample_id = pg_temp.smp('LOT-A2') AND analyte_id IS NOT NULL AND kind = 'COA'));
 -- Moved to the Java backend in migration 069 (JUnit: ReportsRulesTest.notesAndAttachments): canned notes come from the COA comments list
-SELECT pg_temp.expect_error_like('Email templates are kept by QA and administrators (outbox.templates)', $$UPDATE email_template SET subject = 'x' WHERE template_code = 'COA Issued'$$, 'outbox.templates');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): email templates are kept by outbox.templates (IntakeService.saveTemplates)
 SELECT pg_temp.as_user('akiddle');
 -- Moved to the Java backend in migration 063 (JUnit: OrderRulesTest): The system's templates are added by migrations only; a template's code cannot change
 SELECT pg_temp.expect_true('Templates fill in their {{names}}', fill_template('Dear {{first_name}}, {{x}}', '{"first_name": "Sam"}') = 'Dear Sam, {{x}}');

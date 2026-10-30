@@ -58,7 +58,7 @@ SELECT pg_temp.expect_ok('Canned reasons can be kept for the Trending module', $
 
 -- 1. saved charts
 SELECT pg_temp.tras('tr.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot save a chart', $$INSERT INTO trend_chart (site_id, chart_name, source, params) VALUES (pg_temp.trcfl(), 'TR fridge', 'logbook', '{}')$$, 'trending.manage');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot save a chart, trending.manage (TrendingService)
 SELECT pg_temp.tras('tr.sup');
 SELECT pg_temp.expect_ok('The Lab Supervisor saves a chart', $$INSERT INTO trend_chart (site_id, chart_name, source, params) VALUES (pg_temp.trcfl(), 'TR fridge', 'logbook', '{"logbook_id":"x","field_key":"temperature"}')$$);
 SELECT pg_temp.expect_true('It is numbered TC-, watched, with every rule, made by the supervisor',
@@ -78,7 +78,7 @@ SELECT pg_temp.expect_ok('Limits frozen from a baseline of 25 points', $$UPDATE 
 -- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): while frozen, the chart cannot chart something else
 SELECT pg_temp.expect_ok('Its name and rules can still change', $$UPDATE trend_chart SET chart_name = 'TR fridge 1', rules = '{R1,LIM}' WHERE id = (pg_temp.trc('TR fridge')).id$$);
 SELECT pg_temp.tras('tr.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot unfreeze them', $$UPDATE trend_chart SET frozen_cl = NULL WHERE id = (pg_temp.trc('TR fridge 1')).id$$, 'trending.manage');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot unfreeze limits (TrendingService)
 SELECT pg_temp.tras('tr.sup');
 SELECT pg_temp.expect_ok('The supervisor unfreezes them (limits from the data again)', $$UPDATE trend_chart SET frozen_cl = NULL WHERE id = (pg_temp.trc('TR fridge 1')).id$$);
 -- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): unfreezing clears the whole baseline
@@ -86,8 +86,7 @@ SELECT pg_temp.expect_ok('Then it can chart something else', $$UPDATE trend_char
 
 -- 3. signal reviews
 SELECT pg_temp.tras('tr.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot review a signal', $$INSERT INTO trend_signal_review (chart_id, point_key, point_label, rule, outcome, comment)
-  VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'LBE-000001', 'R1', 'Action taken', 'Door open')$$, 'trending.manage');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot review a signal (TrendingService.reviewSignal)
 SELECT pg_temp.tras('tr.sup');
 -- Moved to the Java backend in migration 070 (JUnit: TrendChartRulesTest): a review needs a comment
 SELECT pg_temp.expect_error_like('and one of the outcomes', $$INSERT INTO trend_signal_review (chart_id, point_key, rule, outcome, comment) VALUES ((pg_temp.trc('TR fridge 1')).id, 'entry-1', 'R1', 'Ignored', 'x')$$, 'check');

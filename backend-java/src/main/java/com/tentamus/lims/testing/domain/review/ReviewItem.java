@@ -1,8 +1,8 @@
 package com.tentamus.lims.testing.domain.review;
 
+import com.tentamus.lims.core.calc.Formula;
 import com.tentamus.lims.core.web.RuleException;
 import com.tentamus.lims.testing.domain.calc.AnalyteReporting;
-import com.tentamus.lims.testing.domain.calc.Formula;
 import com.tentamus.lims.testing.domain.calc.Specification;
 import java.math.BigDecimal;
 import java.util.ArrayList;

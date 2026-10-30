@@ -88,7 +88,7 @@ SELECT set_config('lims.site_id', pg_temp.site('CFL')::text, false);
 SELECT pg_temp.expect_error('QA cannot create a lab order (no orders.edit)',
   $$INSERT INTO lab_order (client_id, site_id, ordering_contact_id) SELECT c.id, pg_temp.site('CFL'), ct.id FROM client c, contact ct
     WHERE c.legal_name = 'Acme Irvine Site' AND ct.email = 'maria@consult.com'$$);
-SELECT pg_temp.expect_error('QA cannot change a client (no master.clients)', $$UPDATE client SET display_name = 'x' WHERE legal_name = 'Acme Irvine Site'$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): QA cannot change a client without master.clients (ClientService)
 SELECT pg_temp.expect_error('QA cannot change the test catalogue (no catalog.edit)', $$UPDATE test SET test_name = 'Moisture X' WHERE test_name = 'Moisture'$$);
 SELECT pg_temp.user_only('p.multi');
 SELECT set_config('lims.reason', 'Permission test', false);

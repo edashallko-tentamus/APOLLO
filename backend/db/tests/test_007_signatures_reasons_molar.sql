@@ -24,8 +24,7 @@ CREATE OR REPLACE FUNCTION pg_temp.item(n text) RETURNS uuid LANGUAGE sql AS $$ 
 -- Signatures are required in the Inventory module (except routine usage)
 SELECT pg_temp.expect_error('An inventory item cannot be created without a signature',
   $$INSERT INTO inventory_lot (site_id, item_name, chemical_types, manufacturer_lot, quantity_received, unit) VALUES (pg_temp.cfl(), 'Unsigned acid', '{Reagent}', 'U1', 1, 'L')$$);
-SELECT pg_temp.expect_error('A storage location cannot be changed without a signature',
-  $$UPDATE storage_location SET location_name = location_name || ' x' WHERE location_code = (SELECT min(location_code) FROM storage_location)$$);
+-- Moved to the Java backend in migration 072 (JUnit: SignatureRulesTest): a storage location is changed only signed (InventoryListsService.saveLocations, bulk upload)
 INSERT INTO inventory_transaction (lot_id, txn_type, quantity_change, reference) VALUES (pg_temp.item('DI Water Diluent'), 'Usage', 0.01, 'unsigned routine usage');
 SELECT pg_temp.expect_true('Routine usage needs no signature (still attributed and audited)',
   EXISTS (SELECT 1 FROM audit_log a WHERE a.table_name = 'inventory_transaction' AND a.new_row->>'reference' = 'unsigned routine usage' AND a.signature_id IS NULL));
@@ -54,15 +53,14 @@ SELECT pg_temp.expect_true('Nobody can sign in someone else''s name (stored as t
   (SELECT user_id = (SELECT id FROM app_user WHERE username = 'akiddle') AND full_name = 'Alex Kiddle' FROM signature_event WHERE action = 'test'));
 SELECT set_config('lims.reason', 'Moved', false);
 SELECT set_config('lims.signature_id', '', false);
-SELECT pg_temp.expect_error('Changing where a sample is stored needs a signature',
-  $$UPDATE sample SET retained_quantity = 1 WHERE id = (SELECT id FROM sample WHERE logged_at IS NOT NULL LIMIT 1)$$);
+-- Moved to the Java backend in migration 072 (JUnit: SignatureRulesTest): where a sample is stored is changed only signed (InventoryListsService.saveSampleStorage)
 SELECT set_config('lims.reason', '', false);
 INSERT INTO auth_event (username, event) VALUES ('akiddle', 'Login failed');
 SELECT pg_temp.expect_error('The login log cannot be changed', $$UPDATE auth_event SET event = 'Logged in'$$);
 
 -- Canned reasons
 SELECT pg_temp.user_only('inv.tech');
-SELECT pg_temp.expect_error('An analyst cannot add a canned reason', $$INSERT INTO reason_code (module, reason_text) VALUES ('Inventory', 'Spilled')$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot add a canned reason (AdminService REASONS keeper)
 SELECT pg_temp.user_only('qa.units');
 INSERT INTO reason_code (module, reason_text) VALUES ('Inventory', 'Spill or breakage');
 SELECT pg_temp.expect_true('QA can add a canned reason', EXISTS (SELECT 1 FROM reason_code WHERE reason_text = 'Spill or breakage'));

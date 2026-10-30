@@ -40,8 +40,7 @@ SELECT pg_temp.expect_true('QA and Administrators hold reports.templates; an ana
 
 -- 2. who keeps templates
 SELECT pg_temp.t25as('p.qa');
-SELECT pg_temp.expect_error_like('A template for every lab needs a system administrator',
-  $$INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT every lab by QA', 'Standard COA', NULL)$$, 'system administrator');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): a template for every lab needs a system administrator (LabSetupService.saveTemplates)
 SELECT pg_temp.expect_ok('QA makes a template for their lab',
   $$INSERT INTO report_template (template_name, layout, site_id, options) VALUES ('RT micro CFL', 'Standard COA', pg_temp.t25site('CFL'), '{"show_loq": false, "title": "MICROBIOLOGY REPORT"}')$$);
 SELECT pg_temp.expect_true('It gets the next RT- code', (SELECT template_code ~ '^RT-\d{3}$' AND template_code <> 'RT-001' FROM report_template WHERE template_name = 'RT micro CFL'));
@@ -51,8 +50,7 @@ SELECT pg_temp.t25as('akiddle');
 SELECT pg_temp.t25as('p.qa');
 SELECT pg_temp.expect_error_like('Only the layouts that exist', $$INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT bad layout', 'Poster', pg_temp.t25site('CFL'))$$, 'layout');
 SELECT pg_temp.t25as('e.ana');
-SELECT pg_temp.expect_error_like('An analyst does not make templates',
-  $$INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT by analyst', 'Standard COA', pg_temp.t25site('CFL'))$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst does not make templates, reports.templates (LabSetupService.saveTemplates)
 SELECT pg_temp.t25as('akiddle');
 INSERT INTO report_template (template_name, layout, site_id) VALUES ('RT TPS only', 'Standard COA', pg_temp.t25site('TPS'));
 
@@ -107,8 +105,7 @@ SELECT pg_temp.expect_true('coa_version carries the column and the trigger', EXI
 
 -- 7. lab images
 SELECT pg_temp.t25as('e.ana');
-SELECT pg_temp.expect_error_like('An analyst does not upload the lab''s logo',
-  $$INSERT INTO site_media (site_id, kind, document_id) VALUES (pg_temp.t25site('CFL'), 'Logo', pg_temp.t25img('image/png', 1000))$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst does not upload the lab logo, admin.lab (LabSetupService.upload)
 SELECT pg_temp.t25as('akiddle');
 -- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.labImagesAndSettings): only PNG, JPEG or SVG
 -- Moved to the Java backend in migration 071 (JUnit: LabSetupRulesTest.labImagesAndSettings): up to 2 MB
@@ -129,7 +126,7 @@ SELECT pg_temp.expect_ok('The lab keeps an accreditation body, certificate and s
   $$UPDATE lab_site SET accreditation_body = 'A2LA', accreditation_certificate = '0000.01', accreditation_statement = 'Placeholder statement' WHERE site_code = 'CFL'$$);
 SELECT pg_temp.expect_true('The product name is one setting, LIMS3 to start', (SELECT setting_value FROM system_setting WHERE setting_key = 'product_name') = 'LIMS3');
 SELECT pg_temp.t25as('p.qa');
-SELECT pg_temp.expect_error_like('Only a system administrator renames the product', $$UPDATE system_setting SET setting_value = 'Other' WHERE setting_key = 'product_name'$$, 'system administrator');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): only a system administrator renames the product (LabSetupService.setProductName)
 SELECT pg_temp.t25as('akiddle');
 SELECT pg_temp.expect_ok('A system administrator renames it', $$UPDATE system_setting SET setting_value = 'Renamed' WHERE setting_key = 'product_name'$$);
 UPDATE system_setting SET setting_value = 'LIMS3' WHERE setting_key = 'product_name';

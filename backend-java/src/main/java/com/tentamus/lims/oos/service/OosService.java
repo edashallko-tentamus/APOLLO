@@ -366,10 +366,17 @@ public class OosService {
     }
 
     public List<Map<String, Object>> saveItems(RequestContext ctx, Map<String, Object> body) {
-        return uow.run(ctx, d -> ITEMS.upsert(d, rows(body), Map.of()));
+        return uow.run(ctx, d -> {
+            if (ITEMS.writesAny(rows(body))) access.requireToChange(ctx, "oos_checklist_item", "oos.configure");
+            return ITEMS.upsert(d, rows(body), Map.of());
+        });
     }
 
     public List<Map<String, Object>> saveSettings(RequestContext ctx, Map<String, Object> body) {
-        return uow.run(ctx, d -> SETTINGS.upsert(d, rows(body).stream().filter(x -> truthy(x.get("id"))).toList(), Map.of()));
+        List<Map<String, Object>> rows = rows(body).stream().filter(x -> truthy(x.get("id"))).toList();
+        return uow.run(ctx, d -> {
+            if (SETTINGS.writesAny(rows)) access.requireToChange(ctx, "oos_procedure_setting", "oos.configure");
+            return SETTINGS.upsert(d, rows, Map.of());
+        });
     }
 }

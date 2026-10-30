@@ -65,7 +65,7 @@ SELECT pg_temp.expect_true('Every lab starts with its lab-wide rule: department 
   (SELECT bool_and(dept_trained_after = 4 AND unlock_any_test AND unlock_can_train AND continuing_months = 12) FROM training_rule WHERE department_id IS NULL)
   AND (SELECT count(*) FROM training_rule WHERE department_id IS NULL) = (SELECT count(*) FROM lab_site));
 SELECT pg_temp.as_user('tc.ana');
-SELECT pg_temp.expect_error('An Analyst cannot change the rules', $$UPDATE training_rule SET dept_trained_after = 2 WHERE site_id = pg_temp.tr_site('CFL') AND department_id IS NULL$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot change the training rules, training.configure (TrainingService.saveRules)
 SELECT pg_temp.as_user('tc.sup');
 -- since 055 every department already has its own rule (made from the lab's): the department sets its count
 SELECT pg_temp.expect_true('The department already has its own rule, made from the lab''s (4 tests)',

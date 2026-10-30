@@ -1,12 +1,12 @@
 package com.tentamus.lims.testing.repo;
 
+import com.tentamus.lims.core.calc.Formula;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.masterdata.domain.UnitGraph;
 import com.tentamus.lims.masterdata.repo.MasterDataRepository;
 import com.tentamus.lims.testing.domain.calc.AnalyteReporting;
-import com.tentamus.lims.testing.domain.calc.Formula;
 import com.tentamus.lims.testing.domain.calc.QcVerdict;
 import com.tentamus.lims.testing.domain.calc.Rounding;
 import com.tentamus.lims.testing.domain.calc.Serving;

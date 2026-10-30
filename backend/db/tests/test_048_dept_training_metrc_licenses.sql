@@ -59,8 +59,7 @@ INSERT INTO app_user (username, full_name) VALUES ('lc.ana', 'LC Analyst');
 INSERT INTO group_member (group_id, user_id)
   SELECT g.id, (SELECT id FROM app_user WHERE username = 'lc.ana') FROM lab_group g WHERE g.site_id = pg_temp.lc_site('CFL') AND g.group_name = 'Analyst';
 SELECT pg_temp.lc_user('lc.ana');
-SELECT pg_temp.expect_error_like('Someone without master.clients cannot add a license',
-  $$INSERT INTO client_license (client_id, license_type, license_number) SELECT id, 'Cannabis distributor', 'C11-0000001' FROM client WHERE display_name = 'LicTest'$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): someone without master.clients cannot add a license (LicenseService)
 SELECT pg_temp.lc_user('akiddle');
 INSERT INTO client_license (client_id, license_type, license_number, issuing_authority, issued_on, expires_on)
   SELECT id, 'Cannabis distributor', 'C11-0000001', 'California DCC', current_date - 300, current_date + 65 FROM client WHERE display_name = 'LicTest';

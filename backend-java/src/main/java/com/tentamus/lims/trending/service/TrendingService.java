@@ -282,6 +282,7 @@ public class TrendingService {
                 if (t == null) throw RuleException.database("Chart not found");
                 access.require(c, "trending.approve", "approve trend charts");
                 t.approve(c.userId());
+                manage(c, t.siteId);
                 charts.update(d, t);
                 return ok();
             });
@@ -359,6 +360,7 @@ public class TrendingService {
             if (again != null && Js.truthy(again.get("problem"))) throw RuleException.database(Js.string(again.get("problem")));
             access.require(c, "methods.design", "design tests");
             t.limitsApplied((String) v.get("id"), charts.draftOfTest(d, v.get("id"), x.get("test_id")), c.userId());
+            manage(c, t.siteId);
             charts.update(d, t);
             return map("version_id", v.get("id"), "version_no", v.get("version_no"), "created", created, "min", "Range".equals(shape) ? lcl : null, "max", ucl);
         });
@@ -412,9 +414,13 @@ public class TrendingService {
         });
     }
 
+    /** Every change to a chart or its signal reviews needs trending.manage at the chart's lab (trend_rules until 072). */
+    private void manage(RequestContext c, String site) { access.requireAt(c, "trending.manage", site); }
+
     /** Checks a chart change with its rules and writes it (taking a chart off QA review needs trending.approve). */
     private void save(RequestContext c, Db d, TrendChart before, TrendChart t) {
         if (t.checkSave(before, c.userId())) access.require(c, "trending.approve", "take a chart off QA review");
+        manage(c, t.siteId);
         if (before != null) charts.update(d, t);
     }
 
@@ -479,6 +485,7 @@ public class TrendingService {
         return uow.run(ctx.withSite((String) ch.get("site_id")), reason, d -> {
             String rule = b.get("rule") == null ? null : Js.string(b.get("rule"));
             String comment = new SignalReview(key, rule, (String) b.get("outcome"), Js.string(Js.orBlank(b.get("comment")))).checkedComment();
+            manage(ctx, (String) ch.get("site_id"));
             return charts.review(d, (String) ch.get("id"), key, (String) Js.orNull(b.get("point_label")), rule, (String) b.get("outcome"), comment);
         });
     }

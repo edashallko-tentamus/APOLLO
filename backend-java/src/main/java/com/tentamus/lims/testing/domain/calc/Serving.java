@@ -1,5 +1,6 @@
 package com.tentamus.lims.testing.domain.calc;
 
+import com.tentamus.lims.core.calc.Formula;
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.regex.Matcher;

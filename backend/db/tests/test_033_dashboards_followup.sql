@@ -77,7 +77,7 @@ SELECT pg_temp.expect_ok('Finance types a week''s costs without the books'' reve
 SELECT pg_temp.expect_true('...stored with no books'' revenue', (SELECT revenue IS NULL FROM finance_week WHERE site_id = pg_temp.dbcfl() AND week_ending = current_date - 17));
 -- Moved to the Java backend in migration 070 (JUnit: DashboardRulesTest): the books' revenue, when typed, is still not negative
 SELECT pg_temp.db_as('db.gm', false);
-SELECT pg_temp.expect_error_like('A GM still does not type the finance figures', $$INSERT INTO finance_week (site_id, week_ending, costs) VALUES (pg_temp.dbcfl(), current_date - 31, 1)$$, 'finance.enter');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): a GM still does not type the finance figures (DashboardService.saveWeeks)
 
 -- 4. the widgets
 SELECT pg_temp.expect_true('On time (tests) and On time (samples) are on Home, the GM and the executive dashboards; Lab finance on the GM dashboard only',

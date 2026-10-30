@@ -1,5 +1,6 @@
 package com.tentamus.lims.methods.domain;
 
+import com.tentamus.lims.core.calc.Formula;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.JsonNode;

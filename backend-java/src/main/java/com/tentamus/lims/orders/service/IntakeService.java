@@ -80,6 +80,10 @@ public class IntakeService {
             Object testId = vals.get("requested_test_id");
             RushDecision decision = new RushDecision(str(vals.get("decision")), tests.tier(vals.get("requested_tier_id")), tests.tier(vals.get("replacement_tier_id")),
                 str(vals.get("reason")));
+            Map<String, Object> lab = d.one("""
+                SELECT o.site_id FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id
+                 WHERE rt.id::text = ?""", String.valueOf(testId));
+            access.requireAt(ctx, "intake.rush", lab == null ? null : (String) lab.get("site_id"));
             Map<String, Object> saved = tests.insertDecision(vals);
             Map<String, Object> before = tests.rushFacts(testId);
             if (before == null) throw RuleException.database("There is no open rush request for that tier on this test");
@@ -124,6 +128,7 @@ public class IntakeService {
         List<Map<String, Object>> existing = rows.stream().filter(r -> r.get("id") != null && !"".equals(r.get("id"))).toList();
         return uow.run(ctx, d -> {
             for (Map<String, Object> r : existing) EmailTemplate.checkChange(outbox.codeOf(r.get("id")), r);
+            if (OutboxRepository.TEMPLATES.writesAny(existing)) access.requireToChange(ctx, "email_template", "outbox.templates");
             return OutboxRepository.TEMPLATES.upsert(d, existing, Map.of());
         });
     }

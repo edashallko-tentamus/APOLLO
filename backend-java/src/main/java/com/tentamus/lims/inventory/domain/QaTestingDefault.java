@@ -7,7 +7,7 @@ import java.util.Objects;
 
 /**
  * A lab's QA testing default for one item type (Media on by default). Replaces the rule part of the database trigger
- * qa_testing_default_rules (migration 062 keeps only its permission check).
+ * qa_testing_default_rules (its permission check moved to InventoryListsService in migration 072).
  */
 public final class QaTestingDefault {
     private QaTestingDefault() {}

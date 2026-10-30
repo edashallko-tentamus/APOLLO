@@ -36,7 +36,8 @@ public class AdminService {
     private static final List<String> ENUMS = List.of("account_status", "report_delivery", "analyte_class", "master_status", "record_status", "tat_unit", "surcharge_type",
         "pricing_mode", "project_version_status", "line_status", "submission_channel", "oos_procedure");
     private static final ControlledList REASONS = ControlledList.of("reason_code", "SELECT * FROM reason_code ORDER BY module, sort_order, reason_text",
-        List.of("module", "reason_text", "sort_order", "status")).checkedBy(ReasonCode::new);
+        List.of("module", "reason_text", "sort_order", "status")).checkedBy(ReasonCode::new)
+        .keptBy("master.reasons", "You do not have permission to change the canned reasons (master.reasons). Ask your lab administrator.");
     private static final RecordWriter QUOTE_LINE = new RecordWriter("quoted_test_configuration", List.of("test_id", "quantity", "special_instructions"));
     private final Db db;
     private final UnitOfWork uow;
@@ -112,8 +113,9 @@ public class AdminService {
 
     /** A new test of this lab (the designer's first step). */
     public Map<String, Object> createTest(RequestContext ctx, Map<String, Object> body) {
-        String site = access.currentSite(ctx);
-        return uow.run(ctx, d -> d.one("SELECT create_test(?::uuid, ?) AS id", site, body.get("test_name")));
+        access.currentSite(ctx);
+        // a lab's test is created signed, through the designer; this unsigned route is refused as the database refused it until 072
+        throw RuleException.database("An electronic signature (your user ID and password) is required to create a test");
     }
 
     // ---------------------------------------------------------------- Users and lab access

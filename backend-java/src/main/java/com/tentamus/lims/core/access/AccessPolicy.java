@@ -46,7 +46,24 @@ public class AccessPolicy {
     }
 
     public void requireSystemAdmin(RequestContext ctx) {
-        if (!load(ctx.userId()).systemAdmin()) throw new RuleException("Only a system administrator can do this.");
+        requireSystemAdmin(ctx, null);
+    }
+
+    /** As requireSystemAdmin, with the refusal a database rule gave (null: the general one). */
+    public void requireSystemAdmin(RequestContext ctx, String refusal) {
+        if (load(ctx.userId()).systemAdmin()) return;
+        throw refusal == null ? new RuleException("Only a system administrator can do this.") : RuleException.database(refusal);
+    }
+
+    /**
+     * Refuses a change to a record of a lab without the permission at that lab, with the message of the database's
+     * require_permission_at (the permission triggers moved here in migration 072).
+     */
+    public void requireAt(RequestContext ctx, String permission, String siteId) {
+        if (load(ctx.userId()).can(permission, siteId)) return;
+        Map<String, Object> p = db.one("SELECT lower(description) AS d FROM permission WHERE code = ?", permission);
+        throw RuleException.database("You do not have permission to do this: " + (p == null ? "" : p.get("d")) + " (" + permission
+            + "). Ask your lab administrator to add you to a group that has it.");
     }
 
     /** The lab chosen in the header, which the person must be able to open: the Node backend's currentSite. */

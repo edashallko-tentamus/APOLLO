@@ -1,5 +1,6 @@
 package com.tentamus.lims.methods.service;
 
+import com.tentamus.lims.core.calc.Formula;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.access.AccessPolicy;

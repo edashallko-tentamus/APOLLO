@@ -119,7 +119,7 @@ SELECT pg_temp.expect_true('The OOS checklists are configuration (QA): Phase I h
   (SELECT count(*) FROM oos_checklist_item WHERE procedure = 'Full Phase I (21 CFR 211)' AND section = 'Analyst') >= 5
   AND (SELECT count(*) FROM oos_checklist_item WHERE procedure = 'Check and Acknowledge' AND section = 'Reviewer') >= 3);
 SELECT pg_temp.as_user('wd.ana2');
-SELECT pg_temp.expect_error_like('QA keeps the checklists (oos.configure)', $$UPDATE oos_checklist_item SET item_text = 'x' WHERE section = 'Reviewer'$$, 'oos.configure');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): QA keeps the OOS checklists, oos.configure (OosService.saveItems)
 SELECT pg_temp.as_user('wd.int');
 -- Moved to the Java backend in migration 069 (JUnit: OosRulesTest.opening): Intake cannot open an OOS investigation (the database permission function stays)
 SELECT pg_temp.user_only('wd.sup');

@@ -20,10 +20,10 @@ INSERT INTO app_user (username, full_name) VALUES ('tech.test', 'Test Technician
 -- Administrators only: sites, holidays, matrices and lab assignments
 SELECT pg_temp.as_user('tech.test');
 SELECT set_config('lims.reason', 'Testing permissions', false);
-SELECT pg_temp.expect_error('Non-administrator cannot add a matrix', $$INSERT INTO matrix (matrix_name) VALUES ('Capsule')$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): a non-administrator cannot add a matrix (MasterLists.MATRICES keeper)
 SELECT pg_temp.expect_error('Non-administrator cannot assign labs',
   $$INSERT INTO user_site_access (user_id, site_id) SELECT u.id, s.id FROM app_user u, lab_site s WHERE u.username = 'tech.test' AND s.site_code = 'CFL'$$);
-SELECT pg_temp.expect_error('Non-administrator cannot change a site', $$UPDATE lab_site SET address = 'Somewhere' WHERE site_code = 'CFL'$$);
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): only a system administrator changes a site (MasterDataService.saveSites)
 
 -- Lab access
 SELECT pg_temp.expect_error('User not assigned to CFL cannot create an order there',

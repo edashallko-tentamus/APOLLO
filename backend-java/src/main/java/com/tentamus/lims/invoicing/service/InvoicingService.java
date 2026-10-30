@@ -434,6 +434,7 @@ public class InvoicingService {
 
     public Map<String, Object> saveConnection(RequestContext ctx, Map<String, Object> body) {
         String site = access.currentSite(ctx);
+        access.requireSystemAdmin(ctx, "Only a system administrator connects a lab to its accounting company");   // accounting_connection_rules until 072
         uow.run(reason(ctx, "Accounting connection changed"), d -> {
             d.update("""
                 UPDATE accounting_connection SET provider = COALESCE(?, provider), company_name = NULLIF(btrim(?), ''), company_id = NULLIF(btrim(?), ''),

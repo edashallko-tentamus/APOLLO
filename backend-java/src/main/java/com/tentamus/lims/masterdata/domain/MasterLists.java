@@ -7,13 +7,13 @@ public final class MasterLists {
     private MasterLists() {}
 
     public static final ControlledList MATRICES = ControlledList.of("matrix", "SELECT * FROM matrix ORDER BY lower(matrix_name)",
-        List.of("matrix_name", "description", "product_category_id", "status")).checkedBy(Matrix::new);
+        List.of("matrix_name", "description", "product_category_id", "status")).checkedBy(Matrix::new).keptBy("master.matrices");
 
     public static final ControlledList PRODUCT_CATEGORIES = ControlledList.of("product_category",
-        "SELECT * FROM product_category ORDER BY sort_order, lower(category_name)", List.of("category_name", "description", "sort_order", "status")).checkedBy(Category::new);
+        "SELECT * FROM product_category ORDER BY sort_order, lower(category_name)", List.of("category_name", "description", "sort_order", "status")).checkedBy(Category::new).keptBy("master.matrices");
 
     public static final ControlledList COMPLIANCE_CATEGORIES = ControlledList.of("compliance_category",
-        "SELECT * FROM compliance_category ORDER BY sort_order, category_name", List.of("category_name", "is_gmp", "description", "sort_order", "status")).checkedBy(Category::new);
+        "SELECT * FROM compliance_category ORDER BY sort_order, category_name", List.of("category_name", "is_gmp", "description", "sort_order", "status")).checkedBy(Category::new).keptBy("master.compliance");
 
     /** Molar mass changes are signed (the screen sends a signature then); other analyte changes are not. */
     public static final ControlledList ANALYTES = ControlledList.of("analyte", "SELECT * FROM analyte ORDER BY analyte_class, analyte_name",
@@ -38,5 +38,5 @@ public final class MasterLists {
             "stability_reserve_pct", "custody_signature_required", "require_training", "status")).checkedBy(LabSite::new);
 
     public static final ControlledList HOLIDAYS = ControlledList.of("site_holiday", "SELECT * FROM site_holiday WHERE site_id = ? ORDER BY holiday_date",
-        List.of("holiday_date", "description", "status"));
+        List.of("holiday_date", "description", "status")).keptAtLabBy("admin.lab");
 }

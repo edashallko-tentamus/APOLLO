@@ -8,7 +8,7 @@ import java.time.temporal.ChronoUnit;
  * A photo of a sample taken at receipt: a JPEG or PNG, 4:3 (within 3 %), at least 400 x 300, never taken in the future.
  * The photo itself never changes: its caption and its place on the report (Report photo 1 or 2) may; it may be retired,
  * which takes it off the report, and a retired photo stays retired. Replaces the rule part of the trigger
- * sample_photo_rules and the checks on its size and shape (migration 063); the permission check stays in the database.
+ * sample_photo_rules and the checks on its size and shape (migration 063); the permission check is CustodyService's (migration 072).
  *
  * @param slot   its place on the report (1, 2) or null
  * @param status Active or Inactive

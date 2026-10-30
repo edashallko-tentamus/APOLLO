@@ -65,8 +65,7 @@ SELECT pg_temp.expect_true('QA holds the new permission inventory.qa_configure (
   AND user_has_permission_at((SELECT id FROM app_user WHERE username = 'wd.qa'), 'inventory.qa_configure', pg_temp.cfl())
   AND NOT user_has_permission_at((SELECT id FROM app_user WHERE username = 'wd.ana'), 'inventory.qa_configure', pg_temp.cfl()));
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('An analyst cannot change which item types need QA testing',
-  $$UPDATE qa_testing_default SET required = true WHERE site_id = pg_temp.cfl() AND chemical_type = 'Reagent'$$, 'inventory.qa_configure');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): an analyst cannot change which item types need QA testing (InventoryListsService.saveQaDefaults)
 SELECT pg_temp.as_user('wd.qa');
 SELECT set_config('lims.reason', 'Reagents are tested before use (QA decision)', false);
 SELECT pg_temp.expect_ok('QA sets Reagent to need QA testing at CFL (with a reason)',

@@ -48,8 +48,7 @@ SELECT pg_temp.expect_true('Shared defaults: Media and strains biohazardous, sol
   AND (SELECT waste_name FROM waste_classification WHERE id = waste_default_for(pg_temp.wc_site('CFL'), '{Consumable}')) = 'Non-hazardous solid waste'
   AND (SELECT needs_review FROM waste_classification WHERE id = waste_default_for(pg_temp.wc_site('CFL'), '{Reagent}')));
 SELECT pg_temp.as_user('wc.sup');
-SELECT pg_temp.expect_error_like('Shared classifications are kept by system administrators',
-  $$UPDATE waste_classification SET container = 'x' WHERE waste_name = 'Sharps' AND site_id IS NULL$$, 'system administrator');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): shared waste classifications are kept by system administrators (WasteService.save)
 INSERT INTO waste_classification (site_id, waste_name, hazard_classes, epa_codes, waste_stream, default_for)
   VALUES (pg_temp.wc_site('CFL'), 'CFL acetonitrile waste', '{Ignitable,Toxic}', 'D001, U003', 'Acetonitrile (HPLC)', '{Solvent}');
 SELECT pg_temp.expect_true('A Lab Supervisor (inventory.lists) adds the lab''s own, with its own default for Solvent',

@@ -40,8 +40,7 @@ SELECT set_config('lims.site_id', pg_temp.t26site('CFL')::text, false);
 SELECT pg_temp.expect_true('The ICH conditions are preset for every lab (25/60, 30/65, 30/75, 40/75, 5 °C, -20 °C)',
   (SELECT count(*) FROM stability_condition WHERE site_id IS NULL) = 6 AND pg_temp.t26cond('40 °C / 75% RH') IS NOT NULL);
 SELECT pg_temp.t26as('p.qa');
-SELECT pg_temp.expect_error_like('A condition for every lab needs a system administrator',
-  $$INSERT INTO stability_condition (site_id, condition_name, condition_type, temperature_c) VALUES (NULL, '35 °C', 'Other', 35)$$, 'system administrator');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): a condition for every lab needs a system administrator (StabilityService.saveConditions)
 SELECT pg_temp.expect_ok('QA adds a condition for their lab', $$INSERT INTO stability_condition (site_id, condition_name, condition_type, temperature_c, humidity_pct) VALUES (pg_temp.t26site('CFL'), '35 °C / 50% RH', 'Other', 35, 50)$$);
 SELECT pg_temp.expect_ok('QA sets up chambers and racks',
   $$INSERT INTO stability_chamber (equipment_id, condition_id) SELECT id, pg_temp.t26cond('25 °C / 60% RH') FROM equipment WHERE equipment_name = 'HPLC T1';
@@ -53,8 +52,7 @@ SELECT pg_temp.expect_true('A chamber takes its lab from its equipment', (SELECT
 SELECT pg_temp.expect_error_like('Rack codes are unique in a chamber',
   $$INSERT INTO stability_rack (chamber_id, rack_code) SELECT c.id, 'r1' FROM stability_chamber c JOIN equipment e ON e.id = c.equipment_id WHERE e.equipment_name = 'Viscometer 2'$$, 'stability_rack_code_uq');
 SELECT pg_temp.t26as('p.exec');
-SELECT pg_temp.expect_error_like('Without stability.configure, no racks',
-  $$INSERT INTO stability_rack (chamber_id, rack_code) SELECT c.id, 'R9' FROM stability_chamber c JOIN equipment e ON e.id = c.equipment_id WHERE e.equipment_name = 'Viscometer 2'$$, 'permission');
+-- Moved to the Java backend in migration 072 (JUnit: PermissionChecksTest): without stability.configure, no racks (StabilityService.saveRacks)
 SELECT pg_temp.t26as('akiddle');
 
 -- 2. the stability quote

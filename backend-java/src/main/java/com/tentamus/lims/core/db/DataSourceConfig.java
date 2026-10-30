@@ -30,7 +30,7 @@ public class DataSourceConfig {
                                  @Value("${lims.migrate-url}") String migrateUrl,
                                  @Value("${lims.db-root}") String dbRoot) {
         if (databaseUrl == null || databaseUrl.isBlank()) {
-            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in .env: the PostgreSQL database to connect to (see .env.example).");
+            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in backend-java/.env: the PostgreSQL database to connect to (see backend-java/.env.example).");
         }
         Migrations.atStart(databaseUrl, migrateUrl, dbRoot);
         HikariConfig c = new HikariConfig();

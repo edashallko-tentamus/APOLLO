@@ -1,9 +1,9 @@
--- LIMS3: create the PostgreSQL databases the app connects to (one account, matching .env.example).
+-- LIMS3: create the PostgreSQL databases the app connects to (one account, matching backend-java/.env.example).
 -- Run ONCE as a superuser (e.g. postgres), PostgreSQL 16:
 --
 --   psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql
 --
--- Then in .env: DATABASE_URL=postgres://lims:<same password>@localhost:5432/lims3?sslmode=disable
+-- Then in backend-java/.env: DATABASE_URL=postgres://lims:<same password>@localhost:5432/lims3?sslmode=disable
 --               LIMS_TEST_DATABASE_URL=postgres://lims:<same password>@localhost:5432/lims3_test?sslmode=disable
 -- Only the empty databases are made here: the app's migrations make every table, rule and the demo data
 -- at its first start (npm test does the same in lims3_test, emptying it first).

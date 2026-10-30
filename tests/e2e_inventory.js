@@ -8,7 +8,7 @@
 // Run on a freshly reset database (after the other browser tests, or on its own).
 const path = require('path'); const fs = require('fs');
 let chromium; try { ({ chromium } = require('playwright')); } catch (_) { ({ chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright')); }
-const { readTable, writeXlsx } = require('../backend/server/xlsx');
+const { readTable, writeXlsx } = require('./lib/xlsx');
 const { prepareUsers, signIn, sign } = require('./auth');
 const BASE = process.argv[2] || 'http://localhost:3000';
 const OUT = process.argv[3] || path.join(__dirname, 'screens'); fs.mkdirSync(OUT, { recursive: true });

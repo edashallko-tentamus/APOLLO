@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The verification's independent calculation and protocol writer against verification.js: every expected value below was
- * computed with node -e from backend/server/verification.js (formula precedence, exact rationals, rounding, LOQ and LOD
+ * computed with node -e from the Node backend's verification.js (removed since) (formula precedence, exact rationals, rounding, LOQ and LOD
  * reporting, conformance, the steered samples of a small design), plus the Word file's zip structure.
  */
 class IndependentCalculationTest {

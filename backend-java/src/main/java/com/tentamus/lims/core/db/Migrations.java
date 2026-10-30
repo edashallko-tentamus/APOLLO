@@ -49,7 +49,10 @@ public final class Migrations {
     }
 
     /** Applies what has not run yet; returns the files applied. */
-    public List<String> migrate(String url, String grantTo) {
+    public List<String> migrate(String url, String grantTo) { return migrate(url, grantTo, true); }
+
+    /** The same, with or without the demo data (the rule tests run on the migrations alone). */
+    public List<String> migrate(String url, String grantTo, boolean seed) {
         try (Connection c = connect(url)) {
             c.setAutoCommit(false);
             try (Statement s = c.createStatement()) {
@@ -60,7 +63,7 @@ public final class Migrations {
                 c.commit();
                 List<String> applied = new ArrayList<>();
                 for (String f : migrationFiles(root.resolve("migrations"))) if (!done.contains(f)) apply(c, root.resolve("migrations").resolve(f), f, applied);
-                List<String> seeds = seedFiles(root);
+                List<String> seeds = seed ? seedFiles(root) : List.of();
                 // demo media lots count as already qualified (migration 023); a seed can switch this off for a lot it wants unqualified
                 if (seeds.stream().anyMatch(f -> !done.contains(f))) { s.execute("SELECT set_config('lims.media_preapproved', '1', false)"); c.commit(); }
                 try {

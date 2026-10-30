@@ -12,8 +12,9 @@ import java.util.regex.Pattern;
 /**
  * The verification's independent calculation (verification.js): its own formula reader (ordinary maths precedence,
  * right-associative ^), exact arithmetic, rounding, LOQ and LOD reporting, dilution factors and specification
- * conformance, written apart from the database's calculation engine so the two can be compared. shortcut: a private
- * copy of reportValue and conformance, which the COA checks also port (wave 7); wave 9 merges the two.
+ * conformance, written apart from the database's calculation engine so the two can be compared. reportValue and
+ * conformance stay separate from core/calc/ResultReporting (the COA check): these round exact rationals (1/3 has no
+ * decimal form) and read numeric limits as JavaScript did, which BigDecimal over decimal text cannot reproduce exactly.
  */
 public final class Calculation {
     private Calculation() {}

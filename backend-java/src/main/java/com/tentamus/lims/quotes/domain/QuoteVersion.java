@@ -10,8 +10,8 @@ import java.util.Set;
 /**
  * One version of a project or quote and its status lifecycle: Draft, Submitted for Quote, Quoted, then Accepted,
  * Rejected, Expired or Superseded. Its tests, analytes, rush terms, packages and charges are locked once it is quoted.
- * The status moves are also kept in the database (project_version_lifecycle) because the Node backend still issues and
- * sends quotes and takes the client's answer through the public link; Java checks them first, with the same words.
+ * The status moves are also kept in the database (project_version_lifecycle), kept there for the Node backend, which is
+ * gone: dropping it is a later migration. Java checks them first, with the same words.
  */
 public record QuoteVersion(String id, String projectId, String clientId, String siteId, String kind, boolean listPriceAcceptance,
                            String status, String validUntil, String notes) {

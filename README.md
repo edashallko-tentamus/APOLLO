@@ -19,42 +19,32 @@ Every business rule lives in the database (PostgreSQL constraints, triggers and 
 
 ## Run it
 
-Needs Node.js 20.12 or later and a PostgreSQL 16 server. The app connects to databases that already exist; it never creates a database. At every start its migrations make whatever tables, rules and demo data are missing.
+Needs a PostgreSQL 16 server, Java 21 with Maven (the backend) and Node.js 20.12 or later (the front end and the browser tests). The app connects to databases that already exist; it never creates a database. At every start the backend's migrations make whatever tables, rules and demo data are missing.
 
 1. Create the account and the two databases once, as the `postgres` superuser:
    ```
    psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql
    ```
    This makes `lims3` (the app's data) and `lims3_test` (emptied by every `npm test` run), both empty.
-2. Copy `.env.example` to `.env` (never committed) and put the same password in `DATABASE_URL` and `LIMS_TEST_DATABASE_URL`. Every command reads `.env`.
-3. Then:
+2. Copy `backend-java/.env.example` to `backend-java/.env` (never committed) and put the same password in `DATABASE_URL` and `LIMS_TEST_DATABASE_URL`. Every command, the front end included, reads `backend-java/.env`.
+3. Start the app with two commands, each in its own terminal, then open http://localhost:3000:
    ```
-   npm test         # empties lims3_test, applies every migration there and runs every rule test
-   npm start        # starts the backend and the front end; then open http://localhost:3000
-   npm run reset    # empties lims3 (every record is lost); the next start rebuilds it with demo data
+   npm run start:backend   # the backend (Java, backend-java): the JSON API on 127.0.0.1:3001
+   npm start               # the front end: the screens on port 3000, /api forwarded to the backend
+   ```
+4. Other commands (both run by the Java backend):
+   ```
+   npm test        # empties lims3_test, applies every migration there and runs every rule test
+   npm run reset   # empties lims3 (every record is lost); the next start rebuilds it with demo data
    ```
 
-The app runs as two programs, started together by `npm start` (`start.js`); stopping one stops the other:
-
-- **Backend** (`backend/`): the JSON API only, on `http://127.0.0.1:3001/api` (`LIMS_API_PORT`). Start it alone with `npm run start:backend`.
-- **Front end** (`frontend/`): serves the screens on `http://localhost:3000` (`PORT`) and forwards every `/api/...` request to the backend (`LIMS_API_URL`, default `http://127.0.0.1:3001`), so the browser sees one address. Start it alone with `npm run start:frontend`.
-
-When starting them separately, set `LIMS_TRUST_PROXY=1` on the backend (so its rate limits see each person's computer, not the front end's), and keep `PORT` on the backend equal to the front end's port (links in emails and PDFs, and the verification screenshots, use it).
+There is no Node backend. The front end (`frontend/server.js`) only serves the screens and forwards every `/api/...` request unchanged to `LIMS_API_URL` (default `http://127.0.0.1:3001`; the backend's port is `LIMS_API_PORT`), so the browser sees one address. Keep `PORT` the same for both (links in emails and PDFs, and the verification screenshots, use it).
 
 On first start the system administrator sets their own password. The browser tests (`npm run test:browser` and the other `test:*` scripts) need Playwright and run against a freshly reset database.
 
 No PostgreSQL server yet? With Docker: `docker run -d --name apollo-pg --restart unless-stopped -e POSTGRES_PASSWORD=<choose one> -p 127.0.0.1:5432:5432 -v apollo-pgdata:/var/lib/postgresql/data postgres:16`, then step 1 with that password for `postgres`.
 
 For a server holding GxP data use `backend/db/roles_setup.sql` instead (separate owner and app accounts, `LIMS_MIGRATE_URL`).
-
-### The Java backend
-
-The rules moved out of the database run in the Java backend (`backend-java`). In a second terminal:
-
-1. `npm start` first (its migrations make the tables).
-2. `npm run start:java` starts the Java backend (port 3002, `LIMS_JAVA_PORT`); the front end sends the routes Java has taken over to `LIMS_JAVA_URL`.
-
-Without `LIMS_JAVA_URL` everything goes to the Node backend, which no longer checks the rules that moved to Java.
 
 On a Windows laptop the simplest way is the Claude desktop app's Code tab: open this folder and ask Claude to read `CLAUDE.md`, set up, start the app and run the tests.
 
@@ -65,10 +55,10 @@ On a Windows laptop the simplest way is the Claude desktop app's Code tab: open 
 | `backend/db/migrations/` | The schema and every rule, one numbered migration per change |
 | `backend/db/seed*.sql` | Fictional demo data |
 | `backend/db/tests/` | Database rule tests |
-| `backend/server/` | The backend: plain Node (no framework), the JSON API, PDFs, Excel, the sensor feed |
+| `backend-java/` | The backend (Java, Spring Boot): the JSON API, PDFs, Excel, the sensor feed, the rule tests |
 | `frontend/public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
 | `frontend/server.js` | The front-end server: the screens, and `/api` forwarded to the backend |
-| `start.js` | Starts both |
+| `start-java.js` | Starts the backend (and runs `npm test`, `npm run reset`) with `backend-java/.env` loaded |
 | `tests/` | Browser tests (Playwright), run against the front end on port 3000 |
 | `docs/LIMS3 Design and Build Log.md` | Every version: what changed, why, how it was checked |
 | `docs/ontology_vault/` | The design (Obsidian vault): business objects, rules, workflows and every decision (`08 Decisions`) |

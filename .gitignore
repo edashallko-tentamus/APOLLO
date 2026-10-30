@@ -6,5 +6,6 @@ tests/screens/
 *.log
 docs/ontology_vault/.obsidian/
 
-# Local database password (see README section "Local PostgreSQL")
+# Local database password: backend-java/.env (see backend-java/.env.example); a root .env from before stays ignored
 .env
+backend-java/.env

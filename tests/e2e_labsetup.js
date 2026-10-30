@@ -6,7 +6,7 @@
 //    shows in the header); the accreditation placeholders are filled in the Sites grid;
 //  - a COA preview carries the lab's logo and accreditation statement, and reports with the lab's default template;
 //  - the product name is one setting: renamed, the header, the browser tab and the sign-in page follow; then put back.
-// The multi-part COA (tests on one sample using different templates) is checked by tests/coa_parts.js.
+// The multi-part COA (tests on one sample using different templates) was checked by tests/coa_parts.js (removed with the Node backend; not replaced).
 const path = require('path'); const fs = require('fs');
 let chromium; try { ({ chromium } = require('playwright')); } catch (_) { ({ chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright')); }
 const { prepareUsers, signIn, sign, call, login } = require('./auth');

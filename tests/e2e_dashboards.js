@@ -182,7 +182,7 @@ async function as(who) {
   await page.click('#fdreport'); await page.waitForSelector('.modal #f_from');
   check('Performance report: a period and the labs (ticked)', (await page.locator('.modal [data-rlab]:checked').count()) === f0.labs.length);
   const [rep] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('.modal [data-ok]')]);
-  const repBuf = fs.readFileSync(await rep.path()); const { unzip } = require('../backend/server/xlsx');
+  const repBuf = fs.readFileSync(await rep.path()); const { unzip } = require('./lib/xlsx');
   const zx = unzip(repBuf); const sheetNames = [...String(zx.get('xl/workbook.xml') || '').matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
   check('...downloads one workbook: the Summary first, then the raw tabs', /^Performance CFL-TPS \d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}\.xlsx$/.test(rep.suggestedFilename())
     && sheetNames[0] === 'Summary' && ['Invoices', 'Invoice lines', 'Finance weeks', 'Finance plans', 'Samples', 'Tests', 'Work in progress', 'OOS investigations'].every((n) => sheetNames.includes(n)), `${rep.suggestedFilename()} ${sheetNames.join(', ')}`);

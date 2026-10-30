@@ -1,5 +1,6 @@
 package com.tentamus.lims.core.db;
 
+import com.tentamus.lims.core.config.Env;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -12,7 +13,7 @@ public final class Reset {
     private Reset() {}
 
     public static int run() {
-        String url = System.getenv("DATABASE_URL");
+        String url = Env.get("DATABASE_URL");
         if (url == null || url.isBlank()) throw new IllegalStateException("DATABASE_URL is not set. Copy backend/.env.example to backend/.env and point it at your PostgreSQL database.");
         empty(url);
         System.out.println("Database emptied. Run \"npm run start:backend\" to rebuild it with demo data.");

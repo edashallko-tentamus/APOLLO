@@ -1,5 +1,6 @@
 package com.tentamus.lims.stability.service;
 
+import com.tentamus.lims.core.config.Env;
 import com.tentamus.lims.stability.domain.ExcursionAssessment;
 import com.tentamus.lims.stability.domain.StabilityDesign;
 import com.tentamus.lims.stability.repo.ExcursionRepository;
@@ -258,8 +259,8 @@ public class StabilityService {
         Map<String, Object> study = db.one("SELECT id, study_code, status, project_version_id, amendment_no FROM stability_study WHERE project_id = ?::uuid", pid);
         String link = null;
         if (Js.truthy(v.get("client_token"))) {
-            String pub = System.getenv("LIMS_PUBLIC_URL");
-            String port = System.getenv("PORT");
+            String pub = Env.get("LIMS_PUBLIC_URL");
+            String port = Env.get("PORT");
             String base = Js.truthy(pub) ? pub : "http://localhost:" + (Js.truthy(port) ? port : "3000");
             link = base.replaceAll("/$", "") + "/quote-response.html?t=" + v.get("client_token");
         }

@@ -1,5 +1,6 @@
 package com.tentamus.lims.core.web;
 
+import com.tentamus.lims.core.config.Env;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -28,9 +29,9 @@ public record RequestContext(String userId, String siteId, String rawSite, Strin
             reason == null ? "" : reason.toString(), clientIp(req));
     }
 
-    /** The person's computer: behind the front end (LIMS_TRUST_PROXY=1) the last X-Forwarded-For entry, as the Node backend reads it. */
+    /** The person's computer: behind the front end (LIMS_TRUST_PROXY, default 1) the last X-Forwarded-For entry, as the Node backend reads it. */
     static String clientIp(HttpServletRequest req) {
-        if ("1".equals(System.getenv("LIMS_TRUST_PROXY"))) {
+        if ("1".equals(Env.get("LIMS_TRUST_PROXY", "1"))) {
             String f = req.getHeader("x-forwarded-for");
             if (f != null && !f.isBlank()) {
                 String last = f.substring(f.lastIndexOf(',') + 1).trim();

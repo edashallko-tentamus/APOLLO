@@ -1,5 +1,6 @@
 package com.tentamus.lims.core.db;
 
+import com.tentamus.lims.core.config.Env;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,10 +25,10 @@ public final class RuleTests {
     private RuleTests() {}
 
     public static int run(Path root) throws IOException, SQLException {
-        String url = System.getenv("LIMS_TEST_DATABASE_URL");
+        String url = Env.get("LIMS_TEST_DATABASE_URL");
         if (url == null || url.isBlank()) throw new IllegalStateException("LIMS_TEST_DATABASE_URL is not set: name a database kept for tests only (see backend/.env.example).");
         // the run empties it first, so never the app's own database
-        if (url.equals(System.getenv("DATABASE_URL"))) throw new IllegalStateException("LIMS_TEST_DATABASE_URL must not be the app database (DATABASE_URL).");
+        if (url.equals(Env.get("DATABASE_URL"))) throw new IllegalStateException("LIMS_TEST_DATABASE_URL must not be the app database (DATABASE_URL).");
         Reset.empty(url);
         new Migrations(root).migrate(url, null, false);
         int pass = 0;

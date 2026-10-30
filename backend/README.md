@@ -6,7 +6,7 @@ The LIMS3 backend: a Java (Spring Boot) program that answers every `/api/...` re
 
 - PostgreSQL 16 or later (the server the backend connects to)
 - Java 21 and Maven
-- Node.js 20.12 or later (only for the small launcher `start.js`)
+- npm is only a shortcut for the Maven commands below; the backend itself is Java only
 
 ## First time
 
@@ -33,6 +33,10 @@ The first PDF downloads a headless Chromium (about 150 MB, internet needed once)
 | `npm run reset` | Empties `lims3` (every record is lost) so the next start rebuilds it with demo data |
 | `mvn -q test` (in `backend/`) | Runs the Java unit tests (no database needed) |
 
+The npm commands are only shortcuts for `mvn -q -f backend/pom.xml spring-boot:run` (add `-Dspring-boot.run.arguments=test` or `reset`).
+
+**Debugging on its own** (IntelliJ or any Java IDE): open `backend/` as a Maven project and run or debug `com.tentamus.lims.LimsApplication` with the working directory set to `backend/`, so it finds `.env` and `db/`. Program argument `test` or `reset` runs those commands instead of the server. The front end can be started and debugged separately (`npm start`).
+
 ## Folders
 
 | Path | What |
@@ -45,7 +49,7 @@ The first PDF downloads a headless Chromium (about 150 MB, internet needed once)
 | `db/tests/` | Database rule tests (`npm test`) |
 | `db/create_database.sql` | Creates the empty databases (development) |
 | `db/roles_setup.sql` | Creates separate owner and app accounts (a server holding GxP data; set `LIMS_MIGRATE_URL`) |
-| `start.js` | Loads `.env` and runs Maven |
+| `.env` | Your settings (not in Git); the program reads it at start |
 | `.env.example` | Every setting, with its default |
 
 ## Rules for changing it

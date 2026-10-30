@@ -1,5 +1,6 @@
 package com.tentamus.lims.inventory.service;
 
+import com.tentamus.lims.core.config.Env;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.web.RuleException;
@@ -35,7 +36,7 @@ public class CoaReader {
     public boolean enabled() { return key() != null; }
 
     public String model() {
-        String m = System.getenv("LIMS_AI_MODEL");
+        String m = Env.get("LIMS_AI_MODEL");
         return m == null || m.isEmpty() ? "claude-sonnet-5-5" : m;
     }
 
@@ -71,7 +72,7 @@ public class CoaReader {
     }
 
     private static String key() {
-        String k = System.getenv("ANTHROPIC_API_KEY");
+        String k = Env.get("ANTHROPIC_API_KEY");
         return k == null || k.isEmpty() ? null : k;
     }
 }

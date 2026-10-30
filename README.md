@@ -58,7 +58,7 @@ On a Windows laptop the simplest way is the Claude desktop app's Code tab: open 
 | `backend/` | The backend (Java, Spring Boot): the JSON API, PDFs, Excel, the sensor feed, the rule tests |
 | `frontend/public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
 | `frontend/server.js` | The front-end server: the screens, and `/api` forwarded to the backend |
-| `backend/start.js` | Starts the backend (and runs `npm test`, `npm run reset`) with `backend/.env` loaded |
+| `backend/.env` | The backend's settings (copy `backend/.env.example`); the front end reads its `PORT` and `LIMS_API_URL` |
 | `tests/` | Browser tests (Playwright), run against the front end on port 3000 |
 | `docs/LIMS3 Design and Build Log.md` | Every version: what changed, why, how it was checked |
 | `docs/ontology_vault/` | The design (Obsidian vault): business objects, rules, workflows and every decision (`08 Decisions`) |

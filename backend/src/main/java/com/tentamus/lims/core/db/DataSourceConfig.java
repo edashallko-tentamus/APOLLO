@@ -1,5 +1,6 @@
 package com.tentamus.lims.core.db;
 
+import com.tentamus.lims.core.config.Env;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.net.URI;
@@ -52,7 +53,7 @@ public class DataSourceConfig {
      * (LIMS_DB_TIMEZONE when the server's default is not UTC).
      */
     static String timeZone() {
-        String zone = System.getenv().getOrDefault("LIMS_DB_TIMEZONE", "UTC");
+        String zone = Env.get("LIMS_DB_TIMEZONE", "UTC");
         if (!zone.matches("[A-Za-z0-9/_+-]+")) throw new IllegalStateException("LIMS_DB_TIMEZONE is not a time zone name: " + zone);
         return zone;
     }

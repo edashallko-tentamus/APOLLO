@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
 /**
  * Report Finalization around the COA: the queue with its claims and urgency, claiming and releasing work, issued COAs,
  * an order's and a sample's COAs, notes, the issued PDFs, and sample attachments. Making a COA (the preview and the
- * signed finalization, with its PDF and release check) is the documents engine's and stays in the Node backend for now.
+ * signed finalization, with its PDF and release check) is {@link CoaService}.
  */
 @Service
 public class ReportsService {

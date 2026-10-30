@@ -23,8 +23,8 @@ import java.util.regex.Pattern;
 /**
  * The data behind a stability quote and a study, as the Node backend's stability.js builds it: a version's design (plan,
  * conditions, timepoints with their planned dates, lines, cells, problems), the price per study year and the cumulative
- * report's data (per condition, one table per test: analytes down, timepoints across). The quotation PDF and the report
- * PDFs (quoteHtml, reportHtml, reportPdf) need headless Chromium and stay in Node.
+ * report's data (per condition, one table per test: analytes down, timepoints across). The documents made from them are
+ * {@link StabilityDocuments}'.
  */
 public final class StabilityData {
     private static final Pattern ISO = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}");

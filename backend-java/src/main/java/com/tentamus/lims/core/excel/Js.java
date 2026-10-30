@@ -78,6 +78,14 @@ public final class Js {
         return sign + "0." + "0".repeat(-e - 1) + digits;
     }
 
+    /** Number.prototype.toFixed(f) in JavaScript: the exact binary value rounded half up (away from zero). */
+    public static String toFixed(double x, int f) {
+        if (Double.isNaN(x)) return "NaN";
+        if (Double.isInfinite(x) || Math.abs(x) >= 1e21) return number(x);
+        String s = new BigDecimal(Math.abs(x)).setScale(f, java.math.RoundingMode.HALF_UP).toPlainString();
+        return (x < 0 ? "-" : "") + s;
+    }
+
     /** Number.prototype.toExponential(f) in JavaScript. */
     public static String toExponential(double x, int f) {
         if (Double.isNaN(x)) return "NaN";

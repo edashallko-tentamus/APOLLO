@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Training and competency (other than the training report PDF): same paths and answers as the Node backend. */
+/** Training and competency, and the training report PDF: same paths and answers as the Node backend. */
 @RestController
 public class TrainingController {
     private final TrainingService training;
@@ -18,6 +18,14 @@ public class TrainingController {
 
     @GetMapping("/api/training")
     public Object overview(HttpServletRequest req) { return training.overview(ctx(req, null)); }
+
+    @GetMapping("/api/training/people/{id}/report.pdf")
+    public ResponseEntity<byte[]> report(HttpServletRequest req, @PathVariable String id, @RequestParam(required = false) String s) {
+        // a link opened in a new tab names its lab in ?s= (no lab header)
+        RequestContext c = ctx(req, null);
+        Map<String, Object> d = training.reportPdf(s == null || s.isEmpty() ? c : c.withSite(s), id);
+        return new StoredFile((byte[]) d.get("buf"), "application/pdf", (String) d.get("file_name")).response();
+    }
 
     @GetMapping("/api/training/people/{id}")
     public Object person(HttpServletRequest req, @PathVariable String id) { return training.personPage(ctx(req, null), id); }

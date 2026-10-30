@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 /**
  * Training and competency: qualifications, competency attempts (initial and continuing, by training samples or by
  * record), the rules per department, legacy qualifications. The rules are the domain's (training/domain, migration 071).
- * The training report PDF stays in the Node backend for now.
+ * The training report PDF: {@link TrainingReport}.
  */
 @Service
 public class TrainingService {
@@ -44,8 +44,10 @@ public class TrainingService {
     private final ObjectMapper json;
     private final TrainingRepository repo;
     private final LabClock clock;
+    private final TrainingReport report;
 
-    public TrainingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json, TrainingRepository repo, LabClock clock) {
+    public TrainingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, ObjectMapper json, TrainingRepository repo, LabClock clock, TrainingReport report) {
+        this.report = report;
         this.repo = repo;
         this.clock = clock;
         this.db = db;
@@ -132,6 +134,16 @@ public class TrainingService {
             "last_competency_sample", db.one("""
                 SELECT attempt_code, test_name, kind, decided_at FROM competency_attempt_view WHERE user_id = ?::uuid AND site_id = ?::uuid AND status = 'Approved' AND route = 'Training samples'
                  ORDER BY decided_at DESC LIMIT 1""", userId, site));
+    }
+
+    /** The person's training report as a PDF: {buf, file_name}. */
+    public Map<String, Object> reportPdf(RequestContext ctx, String userId) {
+        if (!RequestContext.isUuid(userId)) throw new RuleException("Person not found");
+        needView(ctx, userId);
+        String site = access.currentSite(ctx);
+        Map<String, Object> lab = db.one("SELECT site_code, site_name, time_zone FROM lab_site WHERE id = ?::uuid", site);
+        Map<String, Object> p = person(site, userId);
+        return map("buf", report.pdf(lab, p), "file_name", "training-" + ((Map<?, ?>) p.get("person")).get("username") + ".pdf");
     }
 
     public Map<String, Object> personPage(RequestContext ctx, String userId) {

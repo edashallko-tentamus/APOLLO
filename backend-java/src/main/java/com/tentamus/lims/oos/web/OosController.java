@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** OOS investigations' routes other than the conclusion (it makes the report PDF) and the client's public page: same paths and answers. */
+/** OOS investigations' routes, the conclusion with its report PDF and the client's public page: same paths and answers. */
 @RestController
 public class OosController {
     private final OosService oos;
@@ -39,6 +39,17 @@ public class OosController {
 
     @PostMapping("/api/oos/{id}/supervisor")
     public Object supervisor(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return oos.supervisor(ctx(req, b), id, body(b)); }
+
+    @PostMapping("/api/oos/{id}/conclude")
+    public Object conclude(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return oos.conclude(ctx(req, b), id, body(b)); }
+
+    @GetMapping("/api/public/oos/{token}")
+    public Object publicView(@PathVariable String token) { return oos.publicView(token); }
+
+    @PostMapping("/api/public/oos/{token}")
+    public Object publicAnswer(HttpServletRequest req, @PathVariable String token, @RequestBody(required = false) Map<String, Object> b) {
+        return oos.publicAnswer(token, body(b), ctx(req, b).ip());
+    }
 
     @PostMapping("/api/oos/{id}/cancel")
     public Object cancel(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return oos.cancel(ctx(req, b), id, body(b)); }

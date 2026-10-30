@@ -30,8 +30,8 @@ import org.springframework.stereotype.Service;
 /**
  * Billing: work ready to invoice, claimed into the reviewer's own draft per lab order; the draft checked (price, late
  * rush, PO, note, charges) or released; payments recorded by hand; an order's billing; settings (payment terms, the
- * accounting connection). The rules are the domain's ({@link Invoice}, {@link InvoiceLine}, {@link PaymentTerms}). Issuing, credit notes, PO corrections and a draft's PDF
- * make PDFs and stay in the Node backend for now; stored PDFs of corrections are served here.
+ * accounting connection). The rules are the domain's ({@link Invoice}, {@link InvoiceLine}, {@link PaymentTerms}). Issuing, credit notes, PO corrections and
+ * an invoice's PDF are {@link InvoiceIssueService}'s; stored PDFs of corrections are served here.
  */
 @Service
 public class InvoicingService {
@@ -95,7 +95,7 @@ public class InvoicingService {
         return out;
     }
 
-    private Map<String, Object> invoiceOf(RequestContext ctx, Object id) {
+    Map<String, Object> invoiceOf(RequestContext ctx, Object id) {
         if (!RequestContext.isUuid(id)) throw new RuleException("Invoice not found");
         Map<String, Object> i = db.one("SELECT * FROM invoice_view WHERE id = ?::uuid", id);
         if (i == null) throw new RuleException("Invoice not found");

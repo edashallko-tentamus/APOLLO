@@ -6,12 +6,21 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
-/** Sensors other than the feed itself (the Sensors page, Read now, Re-judge stay in Node): same paths and answers. */
+/** Sensors: same paths and answers as routes_sensors.js. */
 @RestController
 public class SensorsController {
     private final SensorsService sensors;
 
     public SensorsController(SensorsService sensors) { this.sensors = sensors; }
+
+    @GetMapping("/api/sensors")
+    public Object page(HttpServletRequest req) { return sensors.page(ctx(req, null)); }
+
+    @PostMapping("/api/sensors/links/{id}/rejudge")
+    public Object rejudge(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return sensors.rejudge(ctx(req, b), id, body(b)); }
+
+    @PostMapping("/api/sensors/read-now")
+    public Object readNow(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) { return sensors.readNow(ctx(req, b)); }
 
     @PostMapping("/api/sensors/connection")
     public Object connection(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) { return sensors.saveConnection(ctx(req, b), body(b)); }

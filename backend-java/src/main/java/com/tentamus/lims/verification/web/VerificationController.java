@@ -10,7 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Workflow verification other than the protocol writer, the run, the evidence capture and the documents: same paths and answers. */
+/** Workflow verification: same paths and answers as routes_verification.js. */
 @RestController
 public class VerificationController {
     private final VerificationService verification;
@@ -19,6 +19,26 @@ public class VerificationController {
 
     @GetMapping("/api/verification/versions/{id}")
     public Object forVersion(HttpServletRequest req, @PathVariable String id) { return verification.forVersion(ctx(req, null), id); }
+
+    @PostMapping("/api/verification/versions/{id}/protocol")
+    public Object protocol(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return verification.protocol(ctx(req, b), id, body(b)); }
+
+    @GetMapping("/api/verification/{id}")
+    public Object document(HttpServletRequest req, @PathVariable String id) { return verification.document(ctx(req, null), id); }
+
+    @PostMapping("/api/verification/{id}/execute")
+    public Object execute(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return verification.execute(ctx(req, b), id, body(b)); }
+
+    @PostMapping("/api/verification/{id}/capture-evidence")
+    public Object captureEvidence(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return verification.captureAgain(ctx(req, b), id, body(b)); }
+
+    @GetMapping("/api/verification/{id}/report.docx")
+    public ResponseEntity<byte[]> reportDocx(HttpServletRequest req, @PathVariable String id, @RequestParam(name = "s", required = false) String s) {
+        RequestContext c = ctx(req, null);
+        if (s != null && !s.isEmpty()) c = c.withSite(RequestContext.isUuid(s) ? s : null);
+        Map<String, Object> d = verification.reportDocx(c, id);
+        return new StoredFile((byte[]) d.get("body"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", (String) d.get("file_name")).response();
+    }
 
     @PostMapping("/api/verification/{id}/approve-protocol")
     public Object approveProtocol(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return verification.approveProtocol(ctx(req, b), id, body(b)); }

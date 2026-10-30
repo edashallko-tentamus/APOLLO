@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** The chain of custody (other than its PDF and Receive and sign) and sample photos: same paths and answers. */
+/** The chain of custody, its PDF, Receive and sign, and sample photos: same paths and answers. */
 @RestController
 public class CustodyController {
     private final CustodyService custody;
@@ -18,6 +18,15 @@ public class CustodyController {
 
     @GetMapping("/api/orders/{id}/custody")
     public Object custody(HttpServletRequest req, @PathVariable String id) { return custody.custody(ctx(req, null), id); }
+
+    @GetMapping("/api/orders/{id}/custody.pdf")
+    public ResponseEntity<byte[]> custodyPdf(HttpServletRequest req, @PathVariable String id) {
+        Map<String, Object> d = custody.custodyPdf(ctx(req, null), id);
+        return new StoredFile((byte[]) d.get("buf"), "application/pdf", (String) d.get("file_name")).response();
+    }
+
+    @PostMapping("/api/orders/{id}/receive")
+    public Object receive(HttpServletRequest req, @PathVariable String id, @RequestBody(required = false) Map<String, Object> b) { return custody.receive(ctx(req, b), id, body(b)); }
 
     @GetMapping("/api/custody/events/{id}/file")
     public ResponseEntity<byte[]> eventFile(HttpServletRequest req, @PathVariable String id) { return file(custody.eventFile(ctx(req, null), id)); }

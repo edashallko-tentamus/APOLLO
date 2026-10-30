@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Billing's routes other than those that make PDFs (issue, credit, correct PO, a draft's PDF): same paths and answers. */
+/** Billing's routes other than those that make PDFs (those are InvoiceIssueController's): same paths and answers. */
 @RestController
 public class InvoicingController {
     private final InvoicingService billing;

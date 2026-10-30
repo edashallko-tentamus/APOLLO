@@ -6,7 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
-/** Stability studies: same paths and answers as the Node backend (its PDF routes stay in Node). */
+/** Stability studies: same paths and answers as the Node backend (the report PDFs are StabilityReportsController's). */
 @RestController
 public class StabilityController {
     private final StabilityService stability;

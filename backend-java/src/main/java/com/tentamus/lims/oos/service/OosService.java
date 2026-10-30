@@ -27,8 +27,9 @@ import org.springframework.stereotype.Service;
 /**
  * OOS investigations: the list, one investigation, its signed steps (open, analyst, supervisor, cancel, retests, the
  * retest determination, the client's Phase II decision), the client's answers handled, the stored report and an Outbox
- * email's attachment, and the OOS checklists (QA). The rules are the domain's ({@link OosInvestigation}, {@link OosOpening}, {@link Checklist}). The conclusion (which makes the
- * report PDF) and the client's public answer page stay in the Node backend for now.
+ * email's attachment, the conclusion with its report PDF ({@link OosReport}), the client's public answer page, and the OOS
+ * checklists (QA). The rules are the domain's ({@link OosInvestigation}, {@link OosOpening}, {@link Checklist}); the conclusion
+ * and the client's answer call the kept database functions conclude_oos and record_oos_client_response.
  */
 @Service
 public class OosService {
@@ -50,8 +51,10 @@ public class OosService {
     private final OosChecks checks;
     private final ObjectMapper json;
     private final OosStore store;
+    private final OosReport report;
 
-    public OosService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, OosChecks checks, ObjectMapper json, OosStore store) {
+    public OosService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, OosChecks checks, ObjectMapper json, OosStore store, OosReport report) {
+        this.report = report;
         this.store = store;
         this.db = db;
         this.uow = uow;
@@ -337,6 +340,55 @@ public class OosService {
             store.handle(d, rid, str(body.get("note")));
             return voidAnswer("handle_oos_response");
         });
+    }
+
+    // ---------------------------------------------------------------- the conclusion and the client's answers
+    /** Conclude: the password first, then the report PDF as it will stand, then the signed conclusion with it. */
+    public Map<String, Object> conclude(RequestContext ctx, String id, Map<String, Object> body) {
+        Map<String, Object> o = oosOf(ctx, id);
+        signatures.verify(ctx, body);
+        Map<String, Object> me = db.one("SELECT full_name, clock_timestamp() AS now FROM app_user WHERE id = ?::uuid", ctx.userId());
+        Object answers = truthy(body.get("answers")) ? body.get("answers") : Map.of();
+        com.tentamus.lims.core.documents.Pdfs.Made pdf = report.pdf(db, (String) o.get("id"),
+            new OosReport.Pending(body.get("conclusion"), body.get("cause"), body.get("comment"), answers, (String) me.get("full_name"), me.get("now")));
+        return uow.run(ctx, "OOS investigation concluded", d -> {
+            d.one("SELECT sign_action(?, ?, ?, ?) AS id", "Approved by", o.get("oos_code") + ": conclusion (" + str(body.get("conclusion")) + ")", "Testing", null);
+            String doc = com.tentamus.lims.core.documents.Pdfs.store(d, o.get("oos_code") + " investigation report.pdf", pdf);
+            d.one("SELECT conclude_oos(?::uuid, ?, ?, ?, ?::jsonb, ?::uuid, ?)", o.get("id"), str(body.get("conclusion")), orNull(body.get("cause")), str(body.get("comment")),
+                toJson(answers), doc, pdf.sha256());
+            return Map.<String, Object>of("ok", true);
+        });
+    }
+
+    private static String token(String t) { String s = t == null ? "" : t; return s.length() > 80 ? s.substring(0, 80) : s; }
+
+    private static String left(Object v, int n) { String s = Js.string(v); return s.length() > n ? s.substring(0, n) : s; }
+
+    /** The client's link (no sign-in): what it shows, valid 90 days from the client being told. */
+    public Map<String, Object> publicView(String tok) {
+        Map<String, Object> x = db.one("""
+            SELECT x.oos_code, s.client_sample_id, s.sample_code, t.test_name, a.analyte_name, x.reported, x.unit, x.spec_text, si.site_name,
+                (x.client_notified_at > clock_timestamp() - interval '90 days') AS valid
+              FROM oos_investigation x JOIN sample s ON s.id = x.sample_id JOIN requested_test rt ON rt.id = x.requested_test_id JOIN test t ON t.id = rt.test_id
+              JOIN analyte a ON a.id = x.analyte_id JOIN lab_site si ON si.id = x.site_id WHERE x.client_token = ?""", token(tok));
+        if (x == null || !Boolean.TRUE.equals(x.get("valid"))) return Map.of("found", false);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("found", true);
+        out.putAll(x);
+        out.put("answers", db.rows("SELECT cr.choice, cr.received_at FROM oos_client_response cr JOIN oos_investigation x ON x.id = cr.oos_id WHERE x.client_token = ? ORDER BY cr.received_at", tok == null ? "" : tok));
+        return out;
+    }
+
+    /** The client's answer, recorded as the system user. */
+    public Map<String, Object> publicAnswer(String tok, Map<String, Object> body, String ip) {
+        Map<String, Object> sys = db.one("SELECT id FROM app_user WHERE username = 'system'");
+        RequestContext asSystem = new RequestContext((String) sys.get("id"), null, "", "Client response through the OOS link", ip);
+        Object code = uow.run(asSystem, d -> d.one("SELECT record_oos_client_response(?, ?, ?, ?) AS code", token(tok), str(body.get("choice")), left(orBlank(body.get("note")), 2000),
+            left(orBlank(body.get("name")), 200)).get("code"));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("oos_code", code);
+        return out;
     }
 
     // ---------------------------------------------------------------- files

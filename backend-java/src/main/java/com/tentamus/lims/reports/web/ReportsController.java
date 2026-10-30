@@ -10,7 +10,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Report Finalization's routes other than making a COA (preview and finalize stay in Node): same paths and answers. */
+/** Report Finalization's routes other than making a COA (that is CoaController): same paths and answers. */
 @RestController
 public class ReportsController {
     private final ReportsService reports;

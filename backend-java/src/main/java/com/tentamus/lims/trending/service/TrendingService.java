@@ -30,8 +30,7 @@ import org.springframework.stereotype.Service;
  * Trending and control charts: what can be charted, building a chart (one panel per analyte, QC check or piece of
  * equipment when the definition says "each"), saved charts with frozen limits and QA approval, applying an approved QC
  * chart's limits to the test's draft version, signal reviews, Trend watch, the report packs, QC Review's applied charts
- * and the Excel download. The PDF download (POST /api/trending/pdf) stays in the Node backend: it is printed by headless
- * Chromium.
+ * and the Excel and PDF downloads (the PDF printed by headless Chromium: {@link TrendPdf}).
  */
 @Service
 public class TrendingService {
@@ -58,8 +57,11 @@ public class TrendingService {
     private final TrendEngine engine;
     private final ObjectMapper json;
     private final TrendChartRepository charts;
+    private final com.tentamus.lims.core.browser.HeadlessBrowser browser;
 
-    public TrendingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TrendEngine engine, ObjectMapper json, TrendChartRepository charts) {
+    public TrendingService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TrendEngine engine, ObjectMapper json, TrendChartRepository charts,
+            com.tentamus.lims.core.browser.HeadlessBrowser browser) {
+        this.browser = browser;
         this.charts = charts;
         this.db = db;
         this.uow = uow;
@@ -634,5 +636,72 @@ public class TrendingService {
         String y = Js.truthy(p.get("yLabel")) ? Js.string(p.get("yLabel")) : "Value";
         byte[] file = Xlsx.write("Trend", List.of("Point", x, y, "Detail", "Signals"), rows, List.of(28, 16, 22, 40, 14));
         return new Download(file, safe(p.get("title")) + ".xlsx");
+    }
+
+    // ---------------------------------------------------------------- the PDF: a chart, a definition or a report pack
+    /** Saved charts of a pack ("watched" or "all") as definitions, the range replacing their own, each with its QA line. */
+    private List<Map<String, Object>> savedDefs(String site, String k, Object from, Object to) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> ch : db.rows("""
+            SELECT tc.*, qu.full_name AS qa_approved_by_name FROM trend_chart tc LEFT JOIN app_user qu ON qu.id = tc.qa_approved_by
+             WHERE tc.site_id = ?::uuid AND tc.status = 'Active' AND (?::text = 'all' OR tc.watch) ORDER BY tc.chart_code""", site, k)) {
+            Map<String, Object> params = mapOf(ch.get("params"));
+            if (Js.truthy(from)) params.put("from", from); else params.remove("from");
+            if (Js.truthy(to)) params.put("to", to); else params.remove("to");
+            Map<String, Object> d = defOf(ch, params);
+            d.put("chart_id", ch.get("id"));
+            String code = Js.string(ch.get("chart_code")), at = ch.get("qa_approved_at") == null ? "null" : Js.string(ch.get("qa_approved_at"));
+            d.put("qa", Js.truthy(ch.get("qa_review")) ? ("Approved".equals(ch.get("qa_status"))
+                ? code + ": approved by QA (" + (Js.truthy(ch.get("qa_approved_by_name")) ? ch.get("qa_approved_by_name") : "") + ", " + at.substring(0, Math.min(10, at.length())) + ")"
+                : code + ": awaiting QA approval") : code + ": QA review not required");
+            out.add(d);
+        }
+        return out;
+    }
+
+    /** POST /api/trending/pdf: the PDF and its file name. */
+    public Download pdf(RequestContext ctx, Map<String, Object> b) {
+        String site = access.currentSite(ctx);
+        view(ctx);
+        String title = "Trend chart", intro = "";
+        List<Map<String, Object>> panels = new ArrayList<>();
+        if (Js.truthy(b.get("pack"))) {
+            String name = Js.string(b.get("pack"));
+            String[] pack = packOf(name);
+            title = pack[0];
+            intro = pack[1];
+            List<Map<String, Object>> defs = new ArrayList<>();
+            if (SAVED.contains(name)) defs = savedDefs(site, name, b.get("from"), b.get("to"));
+            else for (String[] c : PACK_CHARTS[Integer.parseInt(pack[2])]) {
+                Map<String, Object> params = map("metric", c[2]);
+                if (c[3] != null) params.put("period", c[3]);
+                params.put("from", Js.orNull(b.get("from")));
+                params.put("to", Js.orNull(b.get("to")));
+                params.put("test_id", Js.orNull(b.get("test_id")));
+                defs.add(map("source", c[0], "title", c[1], "params", params));
+            }
+            for (Map<String, Object> d : defs) {
+                List<Map<String, Object>> ps = buildAll(site, cleanDef(d), d.get("chart_id"));
+                if (Js.truthy(d.get("qa")) && !ps.isEmpty()) ps.get(0).put("qa", d.get("qa"));
+                panels.addAll(ps);
+            }
+        } else if (RequestContext.isUuid(b.get("chart_id"))) {
+            Map<String, Object> ch = chartOf(ctx, b.get("chart_id"));
+            title = ch.get("chart_code") + " " + ch.get("chart_name");
+            Map<String, Object> params = mapOf(ch.get("params"));
+            if (Js.truthy(b.get("from"))) params.put("from", b.get("from")); else params.remove("from");
+            if (Js.truthy(b.get("to"))) params.put("to", b.get("to")); else params.remove("to");
+            panels = buildAll((String) ch.get("site_id"), defOf(ch, params), ch.get("id"));
+        } else {
+            panels = buildAll(site, cleanDef(b), null);
+            if (!panels.isEmpty() && Js.truthy(panels.get(0).get("title"))) title = Js.string(panels.get(0).get("title"));
+        }
+        Map<String, Object> lab = db.one("SELECT site_code, site_name FROM lab_site WHERE id = ?::uuid", site);
+        Map<String, Object> me = db.one("SELECT full_name, clock_timestamp() AS now FROM app_user WHERE id = ?::uuid", ctx.userId());
+        String html = TrendPdf.html(title, intro, panels, lab, me, b.get("from"), b.get("to"));
+        String now = Js.string(me.get("now"));
+        byte[] file = browser.htmlToPdf(html, com.tentamus.lims.core.documents.Html.esc(title + " · " + lab.get("site_code") + " · printed " + now.substring(0, Math.min(10, now.length()))
+            + " by " + me.get("full_name")), false);
+        return new Download(file, safe(title) + ".pdf");
     }
 }

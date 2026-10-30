@@ -36,8 +36,7 @@ import org.springframework.stereotype.Service;
  * chambers, pull orders, recording pulls, the cumulative report's data; cancelling, disposal, excursion assessments and
  * the reports due. Sending, the client's link, accepting and rejecting are the quote routes.
  *
- * <p>Stay in Node: the summary PDF (report.pdf), the issued report's preview and issue (report-preview.pdf, POST reports,
- * they make PDFs with headless Chromium), an issued report's PDF (reports/:id/pdf), and the hourly makeDuePulls job.
+ * <p>The report PDFs (summary, preview, issue, an issued report) are {@link StabilityReportsService}'s.
  */
 @Service
 public class StabilityService {

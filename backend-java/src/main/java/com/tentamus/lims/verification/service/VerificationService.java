@@ -9,16 +9,31 @@ import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.signature.SignatureService;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.core.db.UnitOfWork;
+import com.tentamus.lims.verification.domain.Design;
+import com.tentamus.lims.verification.domain.JsValues;
+import com.tentamus.lims.verification.domain.ProtocolWriter;
+import com.tentamus.lims.verification.domain.VerificationReport;
 import com.tentamus.lims.verification.domain.WorkflowVerification;
+import com.tentamus.lims.verification.repo.DesignRepository;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
- * Workflow verification: a version's verifications and the gate, QA's approval of the protocol, a screenshot of the
- * evidence, QA's signature on the report, cancelling. Writing the protocol, the automated run, capturing the evidence,
- * the whole document (it reports the capture in progress) and the Word file stay in the Node backend for now.
+ * Workflow verification (routes_verification.js): a version's verifications and the gate, writing the protocol (signed
+ * "Prepared by"), QA's approval of it, the automated run (signed "Executed by") and the evidence capture that follows it
+ * in the background, the whole document, a screenshot, the Word file, QA's signature on the report, cancelling.
+ * Database functions still called: create_verification, start_verification_run, finish_verification_run,
+ * record_verification_check, record_verification_evidence and the bench and review functions the run uses.
  */
 @Service
 public class VerificationService {
@@ -26,12 +41,25 @@ public class VerificationService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final ObjectMapper json;
+    private final UnitOfWork uow;
+    private final DesignRepository designs;
+    private final EvidenceCapture evidence;
+    // verification id -> {started} while capturing, {error} if the last try failed (in this process, as Node's map)
+    private final Map<String, Map<String, Object>> capturing = new ConcurrentHashMap<>();
+    private final ExecutorService background = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "verification-evidence");
+        t.setDaemon(true);
+        return t;
+    });
 
-    public VerificationService(Db db, AccessPolicy access, SignatureService signatures, ObjectMapper json) {
+    public VerificationService(Db db, AccessPolicy access, SignatureService signatures, ObjectMapper json, UnitOfWork uow, DesignRepository designs, EvidenceCapture evidence) {
         this.db = db;
         this.access = access;
         this.signatures = signatures;
         this.json = json;
+        this.uow = uow;
+        this.designs = designs;
+        this.evidence = evidence;
     }
 
     private <T> T signed(RequestContext ctx, Map<String, Object> body, String meaning, String action, Function<Db, T> work) {
@@ -74,6 +102,131 @@ public class VerificationService {
                   FROM workflow_verification w JOIN app_user cu ON cu.id = w.created_by WHERE w.test_version_id = ?::uuid ORDER BY w.created_at DESC""", v.get("id")),
             "can_design", access.has(ctx, "methods.design"), "can_verify", access.has(ctx, "methods.verify"), "user_id", ctx.userId());
         return out;
+    }
+
+    /** Writes the protocol (signed "Prepared by"): requirements, samples, inputs and expected results from the design. */
+    public Map<String, Object> protocol(RequestContext ctx, String id, Map<String, Object> body) {
+        Map<String, Object> v = versionOf(ctx, id);
+        Design d = designs.load(db, (String) v.get("id"));
+        ProtocolWriter.Protocol p = new ProtocolWriter(d).build();
+        return signed(ctx.orReason("Workflow verification protocol written"), body, "Prepared by", "Workflow verification protocol: " + label(v),
+            t -> t.one("SELECT create_verification(?::uuid, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb) AS id", v.get("id"), d.version.hash(), ProtocolWriter.GENERATOR,
+                JsValues.json(p.plan()), JsValues.json(p.requirements()), JsValues.json(p.checks())));
+    }
+
+    private Map<String, Object> sig(Object id) {
+        return id == null ? null : db.one("SELECT full_name, meaning, action, method, signed_at FROM signature_event WHERE id = ?::uuid", id);
+    }
+
+    /** The whole document: protocol, run, evidence and report. */
+    public Map<String, Object> document(RequestContext ctx, String id) {
+        Map<String, Object> w = verOf(ctx, id);
+        List<Map<String, Object>> requirements = db.rows("SELECT * FROM verification_requirement WHERE verification_id = ?::uuid ORDER BY sort_order", w.get("id"));
+        List<Map<String, Object>> checks = db.rows("SELECT * FROM verification_check WHERE verification_id = ?::uuid ORDER BY sort_order", w.get("id"));
+        List<Map<String, Object>> batches = db.rows("SELECT id, batch_code, status::text AS status FROM test_batch WHERE verification_id = ?::uuid ORDER BY batch_code", w.get("id"));
+        List<Map<String, Object>> samples = w.get("lab_order_id") != null
+            ? db.rows("SELECT id, sample_code, client_sample_id FROM sample WHERE lab_order_id = ?::uuid ORDER BY sample_code", w.get("lab_order_id")) : List.of();
+        Map<String, Object> prepared = sig(w.get("prepared_signature_id")), approved = sig(w.get("protocol_signature_id")),
+            executed = sig(w.get("execution_signature_id")), report = sig(w.get("report_signature_id"));
+        Map<String, Object> preparer = db.one("SELECT full_name FROM app_user WHERE id = ?::uuid", w.get("created_by"));
+        Map<String, Object> method = db.one("SELECT m.method_name, m.sop_code FROM test_version v LEFT JOIN method m ON m.id = v.method_id WHERE v.id = ?::uuid", w.get("test_version_id"));
+        Map<String, Object> order = w.get("lab_order_id") != null ? db.one("SELECT order_code, status::text AS status FROM lab_order WHERE id = ?::uuid", w.get("lab_order_id")) : null;
+        List<Map<String, Object>> ev = db.rows("""
+            SELECT seq, title, page_ref, check_codes, sha256, width_px, height_px, captured_at FROM verification_evidence WHERE verification_id = ?::uuid ORDER BY seq""", w.get("id"));
+        Map<String, Object> ver = new LinkedHashMap<>(w);
+        ver.put("prepared_by_name", preparer == null ? null : preparer.get("full_name"));
+        ver.put("method_name", method == null ? null : method.get("method_name"));
+        ver.put("sop_code", method == null ? null : method.get("sop_code"));
+        Map<String, Object> cap = capturing.getOrDefault((String) w.get("id"), Map.of());
+        boolean captured = w.get("evidence_captured_at") != null;
+        return map("verification", ver, "requirements", requirements, "checks", checks, "batches", batches, "samples", samples, "order", order, "evidence", ev,
+            "signatures", map("prepared", prepared, "approved", approved, "executed", executed, "evidence", sig(w.get("evidence_signature_id")), "report", report),
+            "capturing", !captured && cap.get("started") != null, "capture_error", captured ? null : cap.get("error"),
+            "can_design", access.has(ctx, "methods.design"), "can_verify", access.has(ctx, "methods.verify"), "user_id", ctx.userId());
+    }
+
+    private static final Pattern SIGNING = Pattern.compile("signature|password|user ID|locked", Pattern.CASE_INSENSITIVE);
+
+    /** Executes (signed "Executed by"): the automated run, in one transaction; if the run itself breaks, nothing is kept. */
+    public Map<String, Object> execute(RequestContext ctx, String id, Map<String, Object> body) {
+        Map<String, Object> w = verOf(ctx, id);
+        List<Map<String, Object>> log = new ArrayList<>();
+        Map<String, Object> res;
+        try {
+            res = signed(ctx.withReason("Workflow verification executed"), body, "Executed by",
+                "Verification " + w.get("verification_code") + ": automated run of " + label(w), t -> {
+                    Map<String, Object> out = new AutomatedRun(t, (String) w.get("id"), log, designs).execute();
+                    Object outcome = t.one("SELECT finish_verification_run(?::uuid, ?::jsonb) AS outcome", w.get("id"), JsValues.json(log)).get("outcome");
+                    return map("outcome", outcome, "batches", out.get("batches"), "blocked", out.get("blocked"));
+                });
+        } catch (RuntimeException e) {
+            String m = AutomatedRun.message(e);
+            if (SIGNING.matcher(m).find()) throw e;
+            throw new RuleException("The run stopped and nothing was kept (the protocol is still approved): " + m);
+        }
+        // The run is kept. The screenshots of its pages are taken now, in the background, under the executor's signature
+        // just given (a minute or so; the page shows it and refreshes). If it fails, "Capture the evidence" tries again.
+        String vid = (String) w.get("id");
+        capturing.put(vid, map("started", System.currentTimeMillis()));
+        background.submit(() -> {
+            try {
+                captureEvidence(ctx, w, false, body);
+                capturing.remove(vid);
+            } catch (RuntimeException e) {
+                capturing.put(vid, map("error", AutomatedRun.message(e)));
+            }
+        });
+        res.put("capturing", true);
+        return res;
+    }
+
+    // Screenshots of every page the run's checks point to, recorded and signed "Evidence captured by"
+    private Map<String, Object> captureEvidence(RequestContext ctx, Map<String, Object> w0, boolean verify, Map<String, Object> body) {
+        Map<String, Object> w = verOf(ctx, (String) w0.get("id")); // after the run: its order and batches
+        EvidenceCapture.Captured captured = evidence.capture(db, w, ctx.userId(), ctx.siteId() != null ? ctx.siteId() : (String) w.get("site_id"));
+        String action = "Verification " + w.get("verification_code") + ": screenshots of the run's pages";
+        Function<Db, Map<String, Object>> store = t -> map("pages", evidence.record(t, w.get("id"), captured), "missed", captured.missed());
+        if (verify) return signatures.signed(ctx.withReason("Objective evidence captured"), body, new SignatureService.Meaning("Evidence captured by", action, "Methods"), store);
+        // the password was checked moments ago for the run itself, in the same request
+        return uow.run(ctx.withReason("Objective evidence captured"), t -> {
+            t.one("SELECT sign_action(?, ?, ?, ?) AS id", "Evidence captured by", action, "Methods", "Objective evidence captured");
+            return store.apply(t);
+        });
+    }
+
+    /** Captures the evidence again (signed; the password is checked before a minute in the browser). */
+    public Map<String, Object> captureAgain(RequestContext ctx, String id, Map<String, Object> body) {
+        Map<String, Object> w = verOf(ctx, id);
+        String vid = (String) w.get("id");
+        if (!"Executed".equals(w.get("status"))) throw new RuleException("Evidence is captured after the run and before QA signs the report");
+        if (w.get("evidence_captured_at") != null) throw new RuleException("The evidence for this verification is already captured");
+        if (capturing.getOrDefault(vid, Map.of()).get("started") != null) throw new RuleException("The evidence is being captured now: wait a moment");
+        signatures.verify(ctx, body);
+        capturing.put(vid, map("started", System.currentTimeMillis()));
+        try {
+            Map<String, Object> out = captureEvidence(ctx, w, true, body);
+            capturing.remove(vid);
+            return out;
+        } catch (RuntimeException e) {
+            capturing.put(vid, map("error", AutomatedRun.message(e)));
+            throw e;
+        }
+    }
+
+    /** The protocol and report as a Word document, made from the record when asked (nothing is stored): {body, file_name}. */
+    public Map<String, Object> reportDocx(RequestContext ctx, String id) {
+        Map<String, Object> d = document(ctx, id);
+        Map<String, Object> v = JsValues.map(d.get("verification"));
+        List<Map<String, Object>> ev = new ArrayList<>();
+        for (Map<String, Object> x : db.rows("""
+            SELECT e.seq, e.title, e.page_ref, e.check_codes, e.sha256, e.width_px, e.height_px, e.captured_at, encode(f.content, 'base64') AS b64
+              FROM verification_evidence e JOIN document_file f ON f.id = e.document_id WHERE e.verification_id = ?::uuid ORDER BY e.seq""", v.get("id"))) {
+            Map<String, Object> e = new LinkedHashMap<>(x);
+            e.put("png", Base64.getMimeDecoder().decode((String) x.get("b64")));
+            ev.add(e);
+        }
+        String file = v.get("verification_code") + " " + Js.string(v.get("test_code")).replaceAll("[^\\w.\\- ]", "_") + " v" + Js.string(v.get("version_no")) + ".docx";
+        return map("body", VerificationReport.build(d, ev), "file_name", file);
     }
 
     /** QA approves the protocol (signed "Approved by"). */

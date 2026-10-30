@@ -3,6 +3,7 @@ package com.tentamus.lims.sensors.service;
 import static com.tentamus.lims.core.web.Answers.*;
 
 import com.tentamus.lims.core.access.AccessPolicy;
+import com.tentamus.lims.core.access.UserAccess;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
@@ -14,15 +15,19 @@ import com.tentamus.lims.sensors.domain.SensorLink;
 import com.tentamus.lims.sensors.repo.SensorRepository;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import org.springframework.stereotype.Service;
 
 /**
  * Sensors: the lab's connection (system administrators), links of sensors to logbooks and equipment (signed), QA's
- * approval, retiring, the reason for a sensor entry's excursion or silence, a piece of equipment's sensors. The feed
- * itself (reading iMonnit or the pretend service: the Sensors page's sensor list, Read now, Re-judge, the minute job)
- * stays in the Node backend for now.
+ * approval, retiring, the Sensors page (with the sensors iMonnit lists), Read now, Re-judge (request_sensor_rejudge,
+ * then a read), the reason for a sensor entry's excursion or silence, a piece of equipment's sensors. The feed itself is
+ * SensorFeedService.
  */
 @Service
 public class SensorsService {
@@ -31,8 +36,10 @@ public class SensorsService {
     private final AccessPolicy access;
     private final SignatureService signatures;
     private final SensorRepository sensors;
+    private final SensorFeedService feed;
 
-    public SensorsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, SensorRepository sensors) {
+    public SensorsService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, SensorRepository sensors, SensorFeedService feed) {
+        this.feed = feed;
         this.sensors = sensors;
         this.db = db;
         this.uow = uow;
@@ -118,6 +125,78 @@ public class SensorsService {
                 sensors.retired(d, s);
                 return ok();
             });
+    }
+
+    /** The Sensors page: the connection, links, recent reads, what a sensor can feed (and what it cannot yet), iMonnit's sensors. */
+    public Map<String, Object> page(RequestContext ctx) {
+        String site = access.currentSite(ctx);
+        Map<String, Object> conn = db.one("SELECT c.*, u.full_name AS modified_by_name FROM sensor_connection c JOIN app_user u ON u.id = c.modified_by WHERE c.site_id = ?::uuid", site);
+        List<Map<String, Object>> links = db.rows("""
+            SELECT s.id, s.external_id, s.sensor_name, s.measures, s.equipment_id, e.equipment_code, e.equipment_name, s.logbook_id, l.logbook_code, l.logbook_name,
+                  s.field_key, s.gap_minutes, s.status, s.created_by, cu.full_name AS created_by_name, s.created_at, au.full_name AS approved_by_name, s.approved_at, s.feeds_from, s.retired_reason,
+                  (SELECT jsonb_build_object('at', r.read_at, 'value', r.value, 'battery', r.battery, 'signal', r.signal) FROM sensor_reading r WHERE r.link_id = s.id ORDER BY r.read_at DESC LIMIT 1) AS last,
+                  (SELECT count(*)::int FROM logbook_entry x WHERE x.sensor_link_id = s.id AND x.status <> 'Voided' AND x.result = 'Fail' AND x.failure_reason IS NULL) AS reasons_needed
+                FROM sensor_link s JOIN equipment e ON e.id = s.equipment_id JOIN logbook l ON l.id = s.logbook_id JOIN app_user cu ON cu.id = s.created_by
+                LEFT JOIN app_user au ON au.id = s.approved_by WHERE s.site_id = ?::uuid ORDER BY s.status = 'Retired', s.external_id, s.measures""", site);
+        List<Map<String, Object>> syncs = db.rows("SELECT g.*, u.full_name AS run_by_name FROM sensor_sync_log g LEFT JOIN app_user u ON u.id = g.run_by WHERE g.site_id = ?::uuid ORDER BY g.finished_at DESC LIMIT 12", site);
+        // what a sensor can feed: each number field of an approved Equipment logbook, for each piece of equipment it covers
+        List<Map<String, Object>> targets = db.rows("""
+            SELECT l.id AS logbook_id, l.logbook_code, l.logbook_name, f.field_key, f.label, f.unit, le.equipment_id, e.equipment_code, e.equipment_name,
+                  sensor_link_problem(l.id, le.equipment_id, f.field_key) AS problem
+                FROM logbook l JOIN logbook_field f ON f.version_id = logbook_effective_version(l.id) AND f.status = 'Active' AND f.field_type = 'Number'
+                JOIN logbook_equipment le ON le.logbook_id = l.id AND le.status = 'Active' JOIN equipment e ON e.id = le.equipment_id
+               WHERE l.site_id = ?::uuid AND l.status = 'Active' AND l.subject = 'Equipment' ORDER BY l.logbook_code, e.equipment_name, f.sort_order""", site);
+        Map<String, Object> me = db.one("SELECT is_admin FROM app_user WHERE id = ?::uuid", ctx.userId());
+        // the lab's equipment logbooks a sensor cannot feed yet, and why (0.25.1: the link dialog left them out silently)
+        List<Map<String, Object>> blocked = db.rows("""
+            SELECT l.logbook_code, l.logbook_name, e.equipment_code, e.equipment_name,
+                  CASE WHEN logbook_effective_version(l.id) IS NULL THEN l.logbook_code || ' has no approved design yet (QA approves it on its Design tab)'
+                       WHEN NOT EXISTS (SELECT 1 FROM logbook_field f WHERE f.version_id = logbook_effective_version(l.id) AND f.status = 'Active' AND f.field_type = 'Number')
+                         THEN l.logbook_code || ' has no number field for a reading'
+                       ELSE (SELECT string_agg(DISTINCT sensor_link_problem(l.id, le.equipment_id, f.field_key), '; ') FROM logbook_field f
+                              WHERE f.version_id = logbook_effective_version(l.id) AND f.status = 'Active' AND f.field_type = 'Number') END AS problem
+                FROM logbook l JOIN logbook_equipment le ON le.logbook_id = l.id AND le.status = 'Active' JOIN equipment e ON e.id = le.equipment_id
+               WHERE l.site_id = ?::uuid AND l.status = 'Active' AND l.subject = 'Equipment' AND e.admin_status <> 'Retired' ORDER BY l.logbook_code, e.equipment_name""", site);
+        Set<String> linkable = new HashSet<>();
+        for (Map<String, Object> x : targets) if (!Js.truthy(x.get("problem"))) linkable.add(x.get("logbook_code") + "|" + x.get("equipment_code"));
+        List<Map<String, Object>> sensorList = List.of();
+        String sensorsError = null;
+        if (conn != null && Boolean.TRUE.equals(conn.get("enabled"))) {
+            try { sensorList = feed.listSensors(conn); } catch (RuntimeException e) { sensorsError = SensorFeedService.message(e); }
+        }
+        UserAccess u = access.load(ctx.userId());
+        return map("connection", conn, "links", links, "syncs", syncs, "targets", targets.stream().filter(x -> !Js.truthy(x.get("problem"))).toList(), "sensors", sensorList,
+            "blocked", blocked.stream().filter(x -> Js.truthy(x.get("problem")) && !linkable.contains(x.get("logbook_code") + "|" + x.get("equipment_code"))).toList(),
+            "sensors_error", sensorsError, "key_set", feed.keySet(), "can_configure", u.can("sensors.configure", site), "can_approve", u.can("logbook.review", site),
+            "is_admin", me != null && Js.truthy(me.get("is_admin")), "me", ctx.userId());
+    }
+
+    /** Judge a sensor's entries again against the current limits (signed, a reason), then read at once. */
+    public Map<String, Object> rejudge(RequestContext ctx, String id, Map<String, Object> body) {
+        Map<String, Object> l = linkOf(ctx, id);
+        String why = Js.string(body.get("why")).trim();
+        Object hb = body.get("hours_back");
+        Double back = "all".equals(hb) || !Js.truthy(hb) ? null : Math.max(1, Math.min(24 * 90, numOrZero(hb)));
+        signed(ctx.withSite((String) l.get("site_id")).orReason("Sensor entries to be judged again"), body, "Changed by",
+            "Judge again the entries of sensor " + l.get("external_id") + " (" + l.get("measures") + ")",
+            d -> d.one("""
+                WITH p AS (SELECT ?::uuid AS link, ?::int AS back)
+                SELECT request_sensor_rejudge(p.link, CASE WHEN p.back IS NULL THEN (SELECT feeds_from FROM sensor_link WHERE id = p.link) ELSE clock_timestamp() - make_interval(hours => p.back) END, ?) FROM p""",
+                l.get("id"), back, why));
+        Map<String, Object> out = new LinkedHashMap<>(feed.runSite((String) l.get("site_id"), System.currentTimeMillis(), ctx.userId()));
+        out.put("requested", true);
+        return out;
+    }
+
+    private static double numOrZero(Object v) { double n = Js.toNumber(v); return Double.isNaN(n) ? 0 : n; }
+
+    /** Read the lab's sensors now (sensors.configure). */
+    public Map<String, Object> readNow(RequestContext ctx) {
+        String site = access.currentSite(ctx);
+        if (!access.load(ctx.userId()).can("sensors.configure", site)) throw new RuleException("You do not have permission to do this: read the sensors now (sensors.configure)");
+        Map<String, Object> out = feed.runSite(site, System.currentTimeMillis(), ctx.userId());
+        if (Boolean.TRUE.equals(out.get("skipped"))) throw new RuleException("The sensor connection is switched off (a system administrator switches it on)");
+        return out;
     }
 
     /** The reason for a sensor entry's excursion or silence (signed when the logbook signs). */

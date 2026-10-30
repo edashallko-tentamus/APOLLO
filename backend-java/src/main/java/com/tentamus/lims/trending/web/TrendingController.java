@@ -8,7 +8,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Trending and control charts: same paths and answers as the Node backend (POST /api/trending/pdf stays in Node). */
+/** Trending and control charts, and their PDF: same paths and answers as the Node backend. */
 @RestController
 public class TrendingController {
     private final TrendingService trending;
@@ -56,6 +56,12 @@ public class TrendingController {
 
     @GetMapping("/api/trending/review/{batchId}")
     public Object review(HttpServletRequest req, @PathVariable String batchId) { return trending.review(ctx(req, null), batchId); }
+
+    @PostMapping("/api/trending/pdf")
+    public ResponseEntity<byte[]> pdf(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) {
+        TrendingService.Download d = trending.pdf(ctx(req, b), body(b));
+        return new com.tentamus.lims.core.files.StoredFile(d.file(), "application/pdf", d.fileName()).response();
+    }
 
     @PostMapping("/api/trending/export.xlsx")
     public ResponseEntity<byte[]> exportXlsx(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) {

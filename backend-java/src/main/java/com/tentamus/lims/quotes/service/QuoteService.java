@@ -21,8 +21,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Standalone quotes (one-off answers to a customer): the list with "My open quotes", a new quote, its details, the
- * catalogue at the client's price, and recording the client's acceptance or rejection. Sending a quote and its PDF stay in
- * the Node backend until the documents feature moves.
+ * catalogue at the client's price, and recording the client's acceptance or rejection. Sending a quote, its PDF and the
+ * client's page are {@link QuoteSendService}'s.
  */
 @Service
 public class QuoteService {

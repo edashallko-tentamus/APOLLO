@@ -35,8 +35,7 @@ import static com.tentamus.lims.core.web.Answers.ok;
  * dashboard.gm) and the executive dashboard (every lab; dashboard.executive). Each widget is worked out from the
  * database's views; live widgets every time, the others kept in memory per board, labs, widget and person until someone
  * asks again (?refresh=1, ?only=). Also each person's layout, each group's widgets, the lab's departments and the finance
- * figures (weeks, forecasts, their Excel download and upload preview). The performance report (report.xlsx) stays in
- * the Node backend: it needs the styled multi-sheet workbook writer the Java core does not have.
+ * figures (weeks, forecasts, their Excel download and upload preview). The performance report is {@link PerformanceReport}.
  * The SQL is Node's own, with its $n placeholders (pg() turns them into positional ?).
  */
 @Service
@@ -81,7 +80,7 @@ public class DashboardService {
 
     static String now() { return ISO.format(Instant.now().truncatedTo(ChronoUnit.MILLIS)); }
 
-    private record Sql(String text, Object[] params) {}
+    record Sql(String text, Object[] params) {}
 
     /** Node's SQL with $n placeholders: each one becomes ? with its value, so a value used twice is passed twice. */
     static Sql pg(String sql, Object... p) {

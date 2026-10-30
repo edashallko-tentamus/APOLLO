@@ -19,8 +19,8 @@ import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 /**
- * The chain of custody (its receipts and paper copies) and sample photos (4:3; their rules: {@link SamplePhoto}). The chain of custody PDF and Receive
- * and sign (which keeps the signed PDF) make PDFs and stay in the Node backend for now.
+ * The chain of custody (its receipts and paper copies, its PDF: {@link CustodyDocument}), Receive and sign (the kept database
+ * functions receive_samples and record_custody_pdf, the signed PDF kept with the receipt) and sample photos (4:3; their rules: {@link SamplePhoto}).
  */
 @Service
 public class CustodyService {
@@ -28,8 +28,15 @@ public class CustodyService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final CustodyDocument document;
+    private final com.tentamus.lims.core.signature.SignatureService signatures;
+    private final com.tentamus.lims.core.documents.PublicLinks links;
 
-    public CustodyService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public CustodyService(Db db, UnitOfWork uow, AccessPolicy access, CustodyDocument document, com.tentamus.lims.core.signature.SignatureService signatures,
+            com.tentamus.lims.core.documents.PublicLinks links) {
+        this.document = document;
+        this.signatures = signatures;
+        this.links = links;
         this.db = db;
         this.uow = uow;
         this.access = access;
@@ -67,6 +74,36 @@ public class CustodyService {
         if (o == null) throw new RuleException("Order not found");
         access.checkSite(ctx, (String) o.get("site_id"));
         return o;
+    }
+
+    /** The chain of custody as it stands now (printed to travel with the samples): the PDF and its name. */
+    public Map<String, Object> custodyPdf(RequestContext ctx, String id) {
+        Map<String, Object> o = orderSite(ctx, id);
+        Map<String, Object> d = document.data(db, (String) o.get("id"), links.base());
+        return map("buf", document.pdf(d).buf(), "file_name", d.get("coc_code") + ".pdf");
+    }
+
+    /** Receive and sign ("Received by"): logs the samples and adds the receipt; the chain of custody as it now stands is kept as a PDF with it. */
+    public Map<String, Object> receive(RequestContext ctx, String id, Map<String, Object> b) {
+        Map<String, Object> o = orderSite(ctx, id);
+        List<Object> ids = uuids(b.get("sample_ids"));
+        Object t = b.get("temperature");
+        Double temp = t == null || "".equals(t) ? null : Js.toNumber(t);
+        if (temp != null && !Double.isFinite(temp)) throw new RuleException("The temperature is a number (°C)");
+        return signatures.signed(ctx.withReason(""), b, new com.tentamus.lims.core.signature.SignatureService.Meaning("Received by",
+            "Received " + ids.size() + " sample(s) of " + o.get("order_code") + " and signed the chain of custody", "Intake"), d -> {
+            // the thermometer (057): from the register, required with a temperature
+            Object ev = d.one("SELECT receive_samples(?::uuid, ?::uuid[], ?::timestamptz, ?, ?, ?, ?, ?, ?, ?::uuid) AS id", o.get("id"), ids, Js.orNull(b.get("received_at")),
+                Js.orNull(b.get("delivered_by")), Js.orNull(b.get("tracking_no")), temp, Js.orNull(b.get("condition")), Js.orNull(b.get("seals")), Js.orNull(b.get("note")),
+                uuidOrNull(b.get("thermometer_id"))).get("id");
+            Map<String, Object> data = document.data(d, (String) o.get("id"), links.base());
+            int receipts = ((List<?>) data.get("receipts")).size();
+            com.tentamus.lims.core.documents.Pdfs.Made p = document.pdf(data);
+            String f = com.tentamus.lims.core.documents.Pdfs.store(d, data.get("coc_code") + "-receipt-" + receipts + ".pdf", p);
+            d.one("SELECT record_custody_pdf(?::uuid, ?::uuid, ?)", ev, f, p.sha256());
+            Object n = d.one("SELECT count(*)::int AS n FROM sample WHERE id = ANY(?::uuid[]) AND logged_at IS NOT NULL", ids).get("n");
+            return map("id", ev, "logged", n, "receipt", receipts);
+        });
     }
 
     private Map<String, Object> sampleSite(RequestContext ctx, String id) {

@@ -26,10 +26,10 @@ Needs a PostgreSQL 16 server, Java 21 with Maven (the backend) and Node.js 20.12
    psql -h localhost -U postgres -v pw='<choose one>' -f backend/db/create_database.sql
    ```
    This makes `lims3` (the app's data) and `lims3_test` (emptied by every `npm test` run), both empty.
-2. Copy `backend-java/.env.example` to `backend-java/.env` (never committed) and put the same password in `DATABASE_URL` and `LIMS_TEST_DATABASE_URL`. Every command, the front end included, reads `backend-java/.env`.
+2. Copy `backend/.env.example` to `backend/.env` (never committed) and put the same password in `DATABASE_URL` and `LIMS_TEST_DATABASE_URL`. Every command, the front end included, reads `backend/.env`.
 3. Start the app with two commands, each in its own terminal, then open http://localhost:3000:
    ```
-   npm run start:backend   # the backend (Java, backend-java): the JSON API on 127.0.0.1:3001
+   npm run start:backend   # the backend (Java, in backend/): the JSON API on 127.0.0.1:3001
    npm start               # the front end: the screens on port 3000, /api forwarded to the backend
    ```
 4. Other commands (both run by the Java backend):
@@ -55,10 +55,10 @@ On a Windows laptop the simplest way is the Claude desktop app's Code tab: open 
 | `backend/db/migrations/` | The schema and every rule, one numbered migration per change |
 | `backend/db/seed*.sql` | Fictional demo data |
 | `backend/db/tests/` | Database rule tests |
-| `backend-java/` | The backend (Java, Spring Boot): the JSON API, PDFs, Excel, the sensor feed, the rule tests |
+| `backend/` | The backend (Java, Spring Boot): the JSON API, PDFs, Excel, the sensor feed, the rule tests |
 | `frontend/public/` | The screens (plain HTML, CSS and JavaScript modules, no build step) |
 | `frontend/server.js` | The front-end server: the screens, and `/api` forwarded to the backend |
-| `start-java.js` | Starts the backend (and runs `npm test`, `npm run reset`) with `backend-java/.env` loaded |
+| `backend/start.js` | Starts the backend (and runs `npm test`, `npm run reset`) with `backend/.env` loaded |
 | `tests/` | Browser tests (Playwright), run against the front end on port 3000 |
 | `docs/LIMS3 Design and Build Log.md` | Every version: what changed, why, how it was checked |
 | `docs/ontology_vault/` | The design (Obsidian vault): business objects, rules, workflows and every decision (`08 Decisions`) |

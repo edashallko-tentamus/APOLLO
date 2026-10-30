@@ -15,24 +15,24 @@ Two programs, and **no Node backend** (Edashall Konah, 2026-10-30). **Every path
 
 | Old path | Now |
 |---|---|
-| `server/`, later `backend/server/` (the Node backend) | gone: `backend-java/` (Java, Spring Boot) answers every route |
+| `server/`, later `backend/server/` (the Node backend) | gone: `backend/` (Java, Spring Boot) answers every route |
 | `db/` (migrations, seeds, rule tests) | `backend/db/` (the Java backend applies and runs them) |
 | `public/` (the screens) | `frontend/public/` |
 | `server/xlsx.js` (used by two browser tests) | `tests/lib/xlsx.js` |
-| `start.js` | `start-java.js` (the backend) and `frontend/server.js` (the screens) |
+| `start.js` | `backend/start.js` (the backend) and `frontend/server.js` (the screens) |
 
-- **Backend** (`backend-java`): the JSON API only, on `127.0.0.1:3001` (`LIMS_API_PORT`). It migrates the database at start and runs the background jobs. `start-java.js` loads `backend-java/.env` and sets `LIMS_TRUST_PROXY=1` (it trusts the front end's X-Forwarded-For for the rate limits). Security headers for API answers and files are set there.
+- **Backend** (`backend`): the JSON API only, on `127.0.0.1:3001` (`LIMS_API_PORT`). It migrates the database at start and runs the background jobs. `backend/start.js` loads `backend/.env` and sets `LIMS_TRUST_PROXY=1` (it trusts the front end's X-Forwarded-For for the rate limits). Security headers for API answers and files are set there.
 - **Front end** (`frontend/server.js`, Node, not a backend): serves the screens on port 3000 (`PORT`) and forwards every `/api` request unchanged to `LIMS_API_URL` (default `http://127.0.0.1:3001`), so the browser sees one address (same cookie, same security policy, no CORS). Security headers for pages are set here. `PORT` also tells the backend the address people open (links in emails and PDFs).
-- **For Claude in the cloud:** deliver files to the new paths. Backend code goes into `backend-java`, never as Node files.
+- **For Claude in the cloud:** deliver files to the new paths. Backend code goes into `backend`, never as Node files.
 
 ## How to run it (do this for Alex)
 
-The app connects to an existing PostgreSQL database; nothing creates a database. Every command, the front end included, reads `backend-java/.env` (copy `backend-java/.env.example`; it holds the password, never committed). The backend needs Java 21 and Maven.
+The app connects to an existing PostgreSQL database; nothing creates a database. Every command, the front end included, reads `backend/.env` (copy `backend/.env.example`; it holds the password, never committed). The backend needs Java 21 and Maven.
 
-1. Once per server, as `postgres`: `psql -h localhost -U postgres -v pw='...' -f backend/db/create_database.sql` (makes the `lims` account and the empty databases `lims3` and `lims3_test`). Put the password in `backend-java/.env` (`DATABASE_URL`, `LIMS_TEST_DATABASE_URL`).
+1. Once per server, as `postgres`: `psql -h localhost -U postgres -v pw='...' -f backend/db/create_database.sql` (makes the `lims` account and the empty databases `lims3` and `lims3_test`). Put the password in `backend/.env` (`DATABASE_URL`, `LIMS_TEST_DATABASE_URL`).
 2. `npm run start:backend` (the Java backend; its migrations make any missing tables, rules and demo data), then `npm start` in a second terminal (the front end), then open http://localhost:3000 in the Browser pane.
-3. `npm test` (run by Java: `node start-java.js test`) empties `lims3_test` (drops the `lims` and `public` schemas), applies every migration without demo data and runs every rule test in `backend/db/tests`; all must pass. It refuses to run on `DATABASE_URL`.
-4. `npm run reset` (`node start-java.js reset`) empties `lims3` the same way so the next start rebuilds it with demo data.
+3. `npm test` (run by Java: `node backend/start.js test`) empties `lims3_test` (drops the `lims` and `public` schemas), applies every migration without demo data and runs every rule test in `backend/db/tests`; all must pass. It refuses to run on `DATABASE_URL`.
+4. `npm run reset` (`node backend/start.js reset`) empties `lims3` the same way so the next start rebuilds it with demo data.
 
 GxP server: `backend/db/roles_setup.sql` and `LIMS_MIGRATE_URL` as before. Older notes below about PGlite, the Node backend, `data/pgdata` and `backend/data` describe the history, not how it runs now.
 

@@ -30,7 +30,7 @@ public class DataSourceConfig {
                                  @Value("${lims.migrate-url}") String migrateUrl,
                                  @Value("${lims.db-root}") String dbRoot) {
         if (databaseUrl == null || databaseUrl.isBlank()) {
-            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in backend-java/.env: the PostgreSQL database to connect to (see backend-java/.env.example).");
+            throw new IllegalStateException("Set DATABASE_URL (postgres://user:pass@host:port/db) in backend/.env: the PostgreSQL database to connect to (see backend/.env.example).");
         }
         Migrations.atStart(databaseUrl, migrateUrl, dbRoot);
         HikariConfig c = new HikariConfig();
@@ -64,7 +64,7 @@ public class DataSourceConfig {
             String[] auth = u.getRawUserInfo() == null ? new String[0] : u.getRawUserInfo().split(":", 2);
             Map<String, String> params = new LinkedHashMap<>();
             params.put("stringtype", "unspecified");
-            params.put("ApplicationName", "lims-backend-java");
+            params.put("ApplicationName", "lims-backend");
             // every query planned for its own values, as the Node client's unnamed statements are: a reused generic plan
             // returned rows of unordered queries in another order (QC Review's step list, found 2026-10-28)
             params.put("prepareThreshold", "0");

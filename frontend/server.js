@@ -6,8 +6,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// the backend's settings file (backend-java/.env), so both agree on PORT and the backend's address (LIMS_API_URL)
-try { process.loadEnvFile(path.join(__dirname, '..', 'backend-java', '.env')); } catch { /* no .env: use the environment as it is */ }
+// the backend's settings file (backend/.env), so both agree on PORT and the backend's address (LIMS_API_URL)
+try { process.loadEnvFile(path.join(__dirname, '..', 'backend', '.env')); } catch { /* no .env: use the environment as it is */ }
 
 const PORT = Number(process.env.PORT || 3000);
 const API = new URL(process.env.LIMS_API_URL || 'http://127.0.0.1:3001');

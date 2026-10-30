@@ -6,6 +6,6 @@ tests/screens/
 *.log
 docs/ontology_vault/.obsidian/
 
-# Local database password: backend-java/.env (see backend-java/.env.example); a root .env from before stays ignored
+# Local database password: backend/.env (see backend/.env.example); a root .env from before stays ignored
 .env
-backend-java/.env
+backend/.env

@@ -13,7 +13,7 @@ public final class Reset {
 
     public static int run() {
         String url = System.getenv("DATABASE_URL");
-        if (url == null || url.isBlank()) throw new IllegalStateException("DATABASE_URL is not set. Copy backend-java/.env.example to backend-java/.env and point it at your PostgreSQL database.");
+        if (url == null || url.isBlank()) throw new IllegalStateException("DATABASE_URL is not set. Copy backend/.env.example to backend/.env and point it at your PostgreSQL database.");
         empty(url);
         System.out.println("Database emptied. Run \"npm run start:backend\" to rebuild it with demo data.");
         return 0;

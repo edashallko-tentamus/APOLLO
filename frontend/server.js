@@ -128,7 +128,7 @@ function forward(req, res, API) {
   up.on('error', () => {
     if (res.headersSent) return res.destroy();
     closeIfUnread();
-    send(res, 502, { error: 'The LIMS backend is not running. Start it (npm start) and try again.' });
+    send(res, 502, { error: API === JAVA ? 'The Java backend is not running. Start it (npm run start:java) and try again.' : 'The LIMS backend is not running. Start it (npm start) and try again.' });
   });
   req.pipe(up);
 }
@@ -139,6 +139,6 @@ const server = http.createServer((req, res) => {
   try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) send(res, 500, { error: 'Could not read that file' }); }
 });
 if (require.main === module) {
-  server.listen(PORT, '127.0.0.1', () => console.log(`LIMS3 front end running: http://localhost:${PORT} (API at ${API.origin})`));
+  server.listen(PORT, '127.0.0.1', () => console.log(`LIMS3 front end running: http://localhost:${PORT} (API at ${API.origin}${JAVA ? `, Java at ${JAVA.origin}` : ', Java backend off: LIMS_JAVA_URL not set'})`));
 }
 module.exports = { server };

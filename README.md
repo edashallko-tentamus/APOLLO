@@ -52,6 +52,15 @@ To keep the data in a real PostgreSQL 16 server instead of the embedded one, wit
    ```
 3. `npm run start:pg` runs the app on it (database `lims3`); `npm run test:pg` runs the rule tests in a separate `lims3_test` database, dropped and rebuilt each run.
 
+### The Java backend
+
+The rules moved out of the database run in the Java backend (`backend-java`), which needs the PostgreSQL server above. Copy `.env.example` to `.env` and fill it in, then use two terminals:
+
+1. `npm run start:java` starts the Java backend (port 3002, `LIMS_JAVA_PORT`).
+2. `npm run start:pg` starts the Node backend and the front end; the front end sends the routes Java has taken over to `LIMS_JAVA_URL`.
+
+Without `LIMS_JAVA_URL` everything goes to the Node backend, which no longer checks the rules that moved to Java.
+
 `npm run reset` only clears the embedded database. To start the PostgreSQL one again: `docker rm -f apollo-pg` and `docker volume rm apollo-pgdata`, then step 2.
 
 On a Windows laptop the simplest way is the Claude desktop app's Code tab: open this folder and ask Claude to read `CLAUDE.md`, set up, start the app and run the tests.

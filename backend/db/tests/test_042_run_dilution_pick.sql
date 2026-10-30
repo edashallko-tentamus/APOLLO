@@ -83,37 +83,38 @@ SELECT pg_temp.expect_true('Run 1: reading 50 at x10 gives 500', pg_temp.dres(1)
 
 -- over range: diluted a further 1 + 9 and read again in run 2
 SELECT set_config('lims.reason', 'Over the calibration range: diluted further', false);
-SELECT pg_temp.expect_error_like('A further dilution needs an aliquot above zero', $$SELECT add_analytical_run_diluted(pg_temp.drun('read'), ARRAY[pg_temp.dsmp()], 1, 0, 9)$$, 'aliquot above zero');
-SELECT pg_temp.expect_true('Run 2 is added with the further dilution (signed with the run)', add_analytical_run_diluted(pg_temp.drun('read'), ARRAY[pg_temp.dsmp()], 1, 1, 9) = 2);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.furtherDilution): a further dilution needs an aliquot above zero
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.furtherDilution): run 2 added with the further dilution; the run and the dilution are written here as Java writes them
+SELECT add_analytical_run(pg_temp.drun('read'), ARRAY[pg_temp.dsmp()], 1);
+INSERT INTO entry_value (step_run_id, entry_id, run_no, data) VALUES (pg_temp.drun('dilute'), pg_temp.dsmp(), 2, '{"fields": [{"aliquot": 1, "diluent": 9}, {"aliquot": 1, "diluent": 9}], "for_run": 2}');
 SELECT set_config('lims.reason', 'Bench work', false);
 SELECT pg_temp.expect_true('... the sample''s dilution for run 2 is run 1''s with one more 1 + 9 (factor 100), kept beside run 1''s',
   dilution_factor(entry_dilution_data(pg_temp.drun('dilute'), pg_temp.dsmp(), 2)) = 100 AND dilution_factor(entry_dilution_data(pg_temp.drun('dilute'), pg_temp.dsmp(), 1)) = 10
   AND (SELECT count(*) FROM entry_value WHERE step_run_id = pg_temp.drun('dilute') AND entry_id = pg_temp.dsmp() AND status = 'Active') = 2);
 INSERT INTO entry_value (step_run_id, entry_id, analyte_id, run_no, value_num) VALUES (pg_temp.drun('read'), pg_temp.dsmp(), pg_temp.lead(), 2, 4.8);
 SELECT pg_temp.expect_true('Each reading keeps its own run''s dilution: run 1 still 500 (x10), run 2 480 (x100)', pg_temp.dres(1) = 500 AND pg_temp.dres(2) = 480);
-SELECT set_config('lims.testing_internal', '1', false);
-SELECT pg_temp.expect_error_like('A dilution for a run that does not exist is refused',
-  $$INSERT INTO entry_value (step_run_id, entry_id, run_no, data) VALUES (pg_temp.drun('dilute'), pg_temp.dsmp(), 3, '{"fields": [{"aliquot": 1, "diluent": 1}]}')$$, 'does not exist');
-SELECT set_config('lims.testing_internal', '', false);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): a dilution for an analytical run that does not exist is refused
 
 -- the analyst's pick
 SELECT pg_temp.expect_true('Two readings and nobody has picked: QC Review waits for a choice', (pg_temp.ditem()).chosen_run_no IS NULL);
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('A pick needs a note', $$SELECT set_analyst_pick(pg_temp.dsmp(), 2, NULL, ' ')$$, 'Say why');
-SELECT pg_temp.expect_error_like('Only a reading that exists', $$SELECT set_analyst_pick(pg_temp.dsmp(), 3, NULL, 'x')$$, 'does not exist');
-SELECT pg_temp.expect_error_like('Readings are picked for samples, not records changed by hand', $$INSERT INTO analyst_pick (batch_id, requested_test_id, entry_id, run_no, note)
-  SELECT batch_id, requested_test_id, id, 1, 'x' FROM batch_entry WHERE id = pg_temp.dsmp()$$, '');
-SELECT pg_temp.expect_ok('The analyst picks run 2: run 1 was over the calibration range', $$SELECT set_analyst_pick(pg_temp.dsmp(), 2, NULL, 'Run 1 over the calibration range; run 2 diluted x100')$$);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): a pick needs a note
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): only a reading that exists is picked
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): readings are picked through the bench (Java), not records written by hand
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): the analyst's pick, written here as Java writes it
+INSERT INTO analyst_pick (batch_id, requested_test_id, entry_id, run_no, note) SELECT batch_id, requested_test_id, id, 2, 'Run 1 over the calibration range; run 2 diluted x100' FROM batch_entry WHERE id = pg_temp.dsmp();
 SELECT pg_temp.expect_true('QC Review reports run 2 (480), with the analyst''s note', (pg_temp.ditem()).chosen_run_no = 2 AND (pg_temp.ditem()).value = 480
   AND (pg_temp.ditem()).justification LIKE 'Picked by the analyst (%): Run 1 over the calibration range%' AND NOT (pg_temp.ditem()).auto_chosen);
-SELECT pg_temp.expect_ok('Picking again replaces the pick', $$SELECT set_analyst_pick(pg_temp.dsmp(), 2, NULL, 'Run 2: within range')$$);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): picking again replaces the pick
+UPDATE analyst_pick SET status = 'Inactive' WHERE batch_id = pg_temp.dbb() AND status = 'Active';
+INSERT INTO analyst_pick (batch_id, requested_test_id, entry_id, run_no, note) SELECT batch_id, requested_test_id, id, 2, 'Run 2: within range' FROM batch_entry WHERE id = pg_temp.dsmp();
 SELECT pg_temp.expect_true('... one pick stays active', (SELECT count(*) FROM analyst_pick WHERE batch_id = pg_temp.dbb() AND status = 'Active') = 1);
 SELECT pg_temp.as_user('e.qa');
-SELECT pg_temp.expect_error_like('Without testing.pick_run, no pick', $$SELECT set_analyst_pick(pg_temp.dsmp(), 1, NULL, 'x')$$, 'testing.pick_run');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): without testing.pick_run, no pick (the database permission check stays)
 SELECT pg_temp.as_user('wd.ana');
 SELECT complete_step(pg_temp.drun('read'));
 SELECT complete_step(pg_temp.drun('calc'));
-SELECT pg_temp.expect_error_like('Once the batch waits for QC Review the reviewer chooses', $$SELECT set_analyst_pick(pg_temp.dsmp(), 1, NULL, 'x')$$, 'the reviewer chooses');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.pick): once the batch waits for QC Review the reviewer chooses
 
 -- the reviewer's choice wins
 SELECT pg_temp.as_user('wd.sup');

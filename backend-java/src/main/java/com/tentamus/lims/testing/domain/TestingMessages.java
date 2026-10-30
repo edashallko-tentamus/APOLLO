@@ -24,12 +24,16 @@ public final class TestingMessages {
         Exception t = MESSAGES.translate(e);
         if (t != e) return t;
         PSQLException pg = ApiExceptionHandler.find(e);
-        if (pg == null || pg.getServerErrorMessage() == null || pg.getServerErrorMessage().getMessage() == null) return e;
-        Matcher m = DEPARTMENT.matcher(pg.getServerErrorMessage().getMessage());
+        // the department rule is Java's since migration 067 (StepDepartment): its refusal is said plainly too
+        String msg = e instanceof RuleException r ? r.getMessage()
+            : pg == null || pg.getServerErrorMessage() == null ? null : pg.getServerErrorMessage().getMessage();
+        if (msg == null) return e;
+        Matcher m = DEPARTMENT.matcher(msg);
         if (!m.find()) return e;
+        String code = e instanceof RuleException r ? r.code() : pg.getServerErrorMessage().getSQLState();
         String what = m.group(1).startsWith("Batching ") ? "the batching for " + m.group(1).substring(9) : "\"" + m.group(1) + "\"";
         return RuleException.withCode("Only people in a " + m.group(2) + " department group can do " + what + ". "
             + "Ask a lab administrator to add you to the " + m.group(2) + " group (Admin > People and groups); nobody can add themselves. "
-            + "System administrators are not in department groups unless added: bench work depends on training.", pg.getServerErrorMessage().getSQLState());
+            + "System administrators are not in department groups unless added: bench work depends on training.", code);
     }
 }

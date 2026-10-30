@@ -91,10 +91,10 @@ SELECT pg_temp.expect_true('An analyst creates a test: Draft version 1 with the 
   (SELECT status = 'Draft' AND method_id IS NOT NULL AND rounding_mode = 'Significant figures' AND rounding_digits = 3 FROM test_version WHERE id = pg_temp.ver('WD Metals', 1))
   AND EXISTS (SELECT 1 FROM test_catalog_entry WHERE test_id = pg_temp.tst('WD Metals')));
 SELECT pg_temp.expect_error_like('An analyst cannot price it (catalog.edit)', $$UPDATE test_catalog_entry SET base_price = 99 WHERE test_id = pg_temp.tst('WD Metals')$$, 'catalog.edit');
-SELECT pg_temp.expect_error_like('A test''s department belongs to its lab', $$UPDATE test SET department_id = pg_temp.dept('TPS', 'WDC') WHERE id = pg_temp.tst('WD Metals')$$, 'own lab');
-SELECT pg_temp.expect_error_like('A test cannot move to another lab', $$UPDATE test SET site_id = pg_temp.site('TPS') WHERE id = pg_temp.tst('WD Metals')$$, 'copy it');
-SELECT pg_temp.expect_error_like('A new version cannot start Effective', $$INSERT INTO test_version (test_id, version_no, status) VALUES (pg_temp.tst('WD Metals'), 2, 'Effective')$$, 'approved');
-SELECT pg_temp.expect_error_like('A version cannot be made Effective directly', $$UPDATE test_version SET status = 'Effective' WHERE id = pg_temp.ver('WD Metals', 1)$$, 'approved');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a test's department belongs to its lab
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a test cannot move to another lab
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a new version cannot start Effective
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a version cannot be made Effective directly
 
 -- Analytes
 SELECT pg_temp.as_user('akiddle');
@@ -103,10 +103,9 @@ SELECT pg_temp.as_user('wd.ana');
 INSERT INTO test_version_analyte (test_version_id, analyte_id, sort_order, result_type, reporting_unit, loq, lod) VALUES
  (pg_temp.ver('WD Metals', 1), pg_temp.an('WD Lead'), 1, 'Numeric', 'MG/KG', 0.010, 0.005),
  (pg_temp.ver('WD Metals', 1), pg_temp.an('WD Cadmium'), 2, 'Numeric', NULL, 0.010, 0.003);
-SELECT pg_temp.expect_true('The reporting unit is matched to the Units list', (SELECT reporting_unit FROM test_version_analyte WHERE analyte_id = pg_temp.an('WD Lead')) = 'mg/kg');
-SELECT pg_temp.expect_error_like('A unit not on the Units list is refused',
-  $$UPDATE test_version_analyte SET reporting_unit = 'furlongs' WHERE analyte_id = pg_temp.an('WD Lead')$$, 'Units list');
-SELECT pg_temp.expect_error('The LOD cannot be above the LOQ', $$UPDATE test_version_analyte SET lod = 0.02 WHERE analyte_id = pg_temp.an('WD Lead')$$);
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): the reporting unit is matched to the Units list
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a unit not on the Units list is refused
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): the LOD cannot be above the LOQ
 SELECT pg_temp.expect_error('An analyte appears once per version', $$INSERT INTO test_version_analyte (test_version_id, analyte_id) VALUES (pg_temp.ver('WD Metals', 1), pg_temp.an('WD Lead'))$$);
 SELECT pg_temp.expect_true('Problems: Cadmium has no reporting unit; no steps yet',
   pg_temp.has_problem(pg_temp.ver('WD Metals', 1), 'Cadmium: a numeric result needs a reporting unit') AND pg_temp.has_problem(pg_temp.ver('WD Metals', 1), 'Add the workflow steps'));
@@ -128,19 +127,17 @@ CREATE OR REPLACE FUNCTION pg_temp.link(v uuid, a text, b text, t dependency_typ
 SELECT pg_temp.link(pg_temp.ver('WD Metals', 1), 'weigh', 'batch'), pg_temp.link(pg_temp.ver('WD Metals', 1), 'digest', 'weigh'),
        pg_temp.link(pg_temp.ver('WD Metals', 1), 'dil', 'digest'), pg_temp.link(pg_temp.ver('WD Metals', 1), 'read', 'dil'),
        pg_temp.link(pg_temp.ver('WD Metals', 1), 'calc', 'read'), pg_temp.link(pg_temp.ver('WD Metals', 1), 'review', 'calc');
-SELECT pg_temp.expect_error_like('No loops: the first step cannot depend on a later one', $$SELECT pg_temp.link(pg_temp.ver('WD Metals', 1), 'batch', 'calc')$$, 'loop');
-SELECT pg_temp.expect_error('A step cannot depend on itself', $$SELECT pg_temp.link(pg_temp.ver('WD Metals', 1), 'calc', 'calc')$$);
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): no loops between steps
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a step cannot depend on itself
 SELECT pg_temp.expect_error('Step keys are unique in a version',
   $$INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type) VALUES (pg_temp.ver('WD Metals', 1), 'calc', 'Again', 'Calculation')$$);
-SELECT pg_temp.expect_error('Step keys are short lower-case words (used in formulas)',
-  $$INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type) VALUES (pg_temp.ver('WD Metals', 1), 'Read 2', 'Again', 'Data Entry')$$);
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): step keys are short lower-case words
 SELECT pg_temp.expect_true('Problems: equipment missing on Weigh and the reading; the formula names a field Digestion does not offer',
   pg_temp.has_problem(pg_temp.ver('WD Metals', 1), 'Choose the equipment type for this weighing step')
   AND pg_temp.has_problem(pg_temp.ver('WD Metals', 1), '{digest.final_volume}: "Microwave digestion" offers {digest.digest_final_volume_ml}'));
 UPDATE workflow_step SET config = jsonb_set(config, '{formula}', '"{read.reading} * {dil.factor} * {digest.digest_final_volume_ml} / 1000 / {weigh.weight}"')
  WHERE id = pg_temp.step(pg_temp.ver('WD Metals', 1), 'calc');
-SELECT pg_temp.expect_error_like('Equipment types come from the test''s own lab',
-  $$INSERT INTO workflow_step_equipment (step_id, equipment_type_id, is_main) VALUES (pg_temp.step(pg_temp.ver('WD Metals', 1), 'weigh'), pg_temp.etype('TPS', 'WD Balance'), true)$$, 'own lab');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): equipment types come from the test's own lab
 INSERT INTO workflow_step_equipment (step_id, equipment_type_id, is_main) VALUES
  (pg_temp.step(pg_temp.ver('WD Metals', 1), 'weigh'), pg_temp.etype('CFL', 'WD Balance'), true),
  (pg_temp.step(pg_temp.ver('WD Metals', 1), 'read'), pg_temp.etype('CFL', 'WD ICP-MS'), false);
@@ -152,8 +149,7 @@ INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type, sort
 SELECT pg_temp.link(pg_temp.ver('WD Metals', 1), 'early', 'weigh'), pg_temp.link(pg_temp.ver('WD Metals', 1), 'review', 'early');
 SELECT pg_temp.expect_true('Problem: a formula cannot use a step that comes after it', pg_temp.has_problem(pg_temp.ver('WD Metals', 1), '{calc.result}: "Result" does not come before this step'));
 UPDATE workflow_step SET status = 'Inactive' WHERE id = pg_temp.step(pg_temp.ver('WD Metals', 1), 'early');
-SELECT pg_temp.expect_true('Removing a step removes its dependencies', NOT EXISTS (SELECT 1 FROM workflow_step_dependency d JOIN workflow_step s ON s.id = d.step_id
-  WHERE s.test_version_id = pg_temp.ver('WD Metals', 1) AND d.status = 'Active' AND (s.step_key = 'early' OR d.depends_on_step_id = (SELECT id FROM workflow_step WHERE step_key = 'early' AND test_version_id = pg_temp.ver('WD Metals', 1)))));
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): removing a step removes its dependencies
 -- an end that is not a QC Review
 INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type, sort_order, config) VALUES (pg_temp.ver('WD Metals', 1), 'loose', 'Loose end', 'Preparation', 9, '{}');
 SELECT pg_temp.link(pg_temp.ver('WD Metals', 1), 'loose', 'read');
@@ -201,9 +197,9 @@ SELECT approve_test_version(pg_temp.ver('WD Metals', 1));
 SELECT pg_temp.expect_true('The Lab Supervisor approves: Effective, with the approver, time and signature',
   (SELECT status = 'Effective' AND approved_by = pg_temp.uid('wd.sup') AND approval_signature_id IS NOT NULL AND effective_from IS NOT NULL FROM test_version WHERE id = pg_temp.ver('WD Metals', 1)));
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('An Effective version cannot be changed', $$UPDATE test_version SET procedure_text = 'x' WHERE id = pg_temp.ver('WD Metals', 1)$$, 'Start a new version');
-SELECT pg_temp.expect_error_like('Nor its steps', $$UPDATE workflow_step SET step_name = 'x' WHERE id = pg_temp.step(pg_temp.ver('WD Metals', 1), 'weigh')$$, 'Start a new version');
-SELECT pg_temp.expect_error_like('Nor its analytes', $$UPDATE test_version_analyte SET loq = 1 WHERE analyte_id = pg_temp.an('WD Lead')$$, 'Start a new version');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): an Effective version cannot be changed
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): nor its steps
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): nor its analytes
 
 -- New version
 SELECT new_test_version(pg_temp.tst('WD Metals'));
@@ -261,11 +257,11 @@ CREATE OR REPLACE FUNCTION pg_temp.wdline() RETURNS uuid LANGUAGE sql AS $$
   SELECT q.id FROM quoted_test_configuration q JOIN project_version pv ON pv.id = q.project_version_id JOIN project p ON p.id = pv.project_id
    WHERE p.project_name = 'WD Metals project' AND q.status = 'Active' ORDER BY pv.version_no DESC LIMIT 1 $$;
 INSERT INTO specification (quoted_line_id, analyte_id, max_value, unit, source) VALUES (pg_temp.wdline(), pg_temp.an('WD Lead'), 0.5, 'mg/kg', 'Client');
-SELECT pg_temp.expect_error_like('A specification is for an analyte of the test', $$INSERT INTO specification (quoted_line_id, analyte_id, max_value) VALUES (pg_temp.wdline(), pg_temp.an('WD Salmonella'), 1)$$, 'not an analyte of this test');
-SELECT pg_temp.expect_error('A specification needs a limit', $$INSERT INTO specification (quoted_line_id, analyte_id) VALUES (pg_temp.wdline(), pg_temp.an('WD Cadmium'))$$);
-SELECT pg_temp.expect_error('Minimum not above maximum', $$INSERT INTO specification (quoted_line_id, analyte_id, min_value, max_value) VALUES (pg_temp.wdline(), pg_temp.an('WD Cadmium'), 2, 1)$$);
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a specification is for an analyte of the test
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a specification needs a limit
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): minimum not above maximum
 UPDATE project_version SET status = 'Quoted', valid_until = current_date + 30 WHERE project_id = (SELECT id FROM project WHERE project_name = 'WD Metals project');
-SELECT pg_temp.expect_error_like('Specifications lock when the quote is issued', $$INSERT INTO specification (quoted_line_id, analyte_id, max_value) VALUES (pg_temp.wdline(), pg_temp.an('WD Cadmium'), 0.3)$$, 'locked');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): specifications lock when the quote is issued
 UPDATE project_version SET status = 'Accepted', accepted_by_contact_id = (SELECT id FROM contact WHERE email = 'sam@acme.com') WHERE project_id = (SELECT id FROM project WHERE project_name = 'WD Metals project');
 SELECT order_test((SELECT id FROM sample WHERE client_sample_id = 'LOT-A1'), pg_temp.wdline());
 SELECT pg_temp.expect_true('Ordered on a CFL sample: version 2 pinned, the Lead limit carried from the quote; Cadmium unspecified',

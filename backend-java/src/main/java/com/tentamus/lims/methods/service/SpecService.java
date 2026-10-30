@@ -7,7 +7,12 @@ import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.methods.domain.Specification;
+import com.tentamus.lims.methods.domain.VersionAnalyte;
+import com.tentamus.lims.methods.repo.DesignStore;
 import com.tentamus.lims.methods.repo.MethodsRepository;
+import java.util.ArrayList;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,11 +24,13 @@ public class SpecService {
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
+    private final DesignStore store;
 
-    public SpecService(Db db, UnitOfWork uow, AccessPolicy access) {
+    public SpecService(Db db, UnitOfWork uow, AccessPolicy access, DesignStore store) {
         this.db = db;
         this.uow = uow;
         this.access = access;
+        this.store = store;
     }
 
     /** Whose specifications: a requested test (?requested_test=) or a quoted test (?quoted_line=), from the query or the body. */
@@ -76,6 +83,34 @@ public class SpecService {
     public List<Map<String, Object>> save(RequestContext ctx, Map<String, String> query, Map<String, Object> body) {
         Map<String, Object> o = owner(ctx, query, body);
         String reason = "quoted_line".equals(o.get("kind")) && ctx.reason().isEmpty() ? "Quote edited" : ctx.reason();
-        return uow.run(ctx, reason, d -> MethodsRepository.SPECS.upsert(d, rows(body), Map.of(column(o), o.get("id"))));
+        String col = column(o);
+        return uow.run(ctx, reason, d -> {
+            Specification.Owner who = specOwner(d, o);
+            VersionAnalyte.Units units = store.units(d);
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (Map<String, Object> r : rows(body)) {
+                Map<String, Object> vals = MethodsRepository.SPECS.pick(r);
+                if (r.get("id") != null) {
+                    if (vals.isEmpty()) continue;
+                    Map<String, Object> before = store.row(d, "specification", r.get("id"));
+                    if (before == null) { out.add(null); continue; }
+                    Object analyte = vals.containsKey("analyte_id") ? vals.get("analyte_id") : before.get("analyte_id");
+                    out.add(MethodsRepository.SPECS.update(d, r.get("id").toString(), Specification.checked(before, vals, who, store.analyteName(d, analyte), units)));
+                } else {
+                    Map<String, Object> all = new LinkedHashMap<>(vals);
+                    all.put(col, o.get("id"));
+                    out.add(MethodsRepository.SPECS.insert(d, Specification.checked(null, all, who, store.analyteName(d, all.get("analyte_id")), units), "id"));
+                }
+            }
+            return out;
+        });
+    }
+
+    /** The owner as the rules need it: whether its quote is still open, its status, the analytes of its version. */
+    private Specification.Owner specOwner(Db d, Map<String, Object> o) {
+        Object version = o.get("version_id");
+        Set<String> analytes = version == null ? null : d.rows("SELECT analyte_id FROM test_version_analyte WHERE test_version_id = ?::uuid AND status = 'Active'", version)
+            .stream().map(a -> a.get("analyte_id").toString()).collect(java.util.stream.Collectors.toSet());
+        return new Specification.Owner((String) o.get("kind"), Boolean.TRUE.equals(o.get("open")), (String) o.get("status"), analytes);
     }
 }

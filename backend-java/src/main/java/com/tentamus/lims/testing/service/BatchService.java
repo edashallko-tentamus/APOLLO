@@ -34,14 +34,18 @@ public class BatchService {
     private final SignatureService signatures;
     private final TestingRepository repo;
     private final ObjectMapper json;
+    private final BatchMakingService makers;   // making batches and changing their samples (migration 067)
+    private final ReviewService reviews;       // QC Review (migration 068)
 
-    public BatchService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TestingRepository repo, ObjectMapper json) {
+    public BatchService(Db db, UnitOfWork uow, AccessPolicy access, SignatureService signatures, TestingRepository repo, ObjectMapper json, BatchMakingService makers, ReviewService reviews) {
         this.db = db;
         this.uow = uow;
         this.access = access;
         this.signatures = signatures;
         this.repo = repo;
         this.json = json;
+        this.makers = makers;
+        this.reviews = reviews;
     }
 
     <T> T signed(RequestContext ctx, Map<String, Object> body, String meaning, String action, Function<Db, T> work) {
@@ -81,11 +85,8 @@ public class BatchService {
         String site = access.currentSite(ctx);
         Object version = body.get("test_version_id");
         if (!RequestContext.isUuid(version)) throw new RuleException("Choose the test");
-        Object items = body.get("items") instanceof List<?> l && !l.isEmpty() ? toJson(json, l) : null;
-        return uow.run(withReason(ctx, body, "Batch created"), d -> {
-            Object id = d.one("SELECT create_batch(?::uuid, ?::uuid, ?::jsonb) AS id", site, version, items).get("id");
-            return d.one("SELECT id, batch_code FROM test_batch WHERE id = ?::uuid", id);
-        });
+        Object items = body.get("items") instanceof List<?> l && !l.isEmpty() ? l : null;
+        return makers.create(withReason(ctx, body, "Batch created"), site, version, items);
     }
 
     public Map<String, Object> batches(RequestContext ctx, Map<String, String> query) {
@@ -149,12 +150,10 @@ public class BatchService {
             items.add(i);
         }
         if (items.isEmpty()) throw new RuleException("Choose the samples to add");
-        return uow.run(withReason(ctx, body, "Sample added to the batch"), d -> {
-            Map<String, Object> out = new LinkedHashMap<>();
-            out.put("added", d.one("SELECT add_batch_items(?::uuid, ?::jsonb) AS n", b.get("id"), toJson(json, items)).get("n"));
-            out.put("batch_code", b.get("batch_code"));
-            return out;
-        });
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("added", makers.add(withReason(ctx, body, "Sample added to the batch"), (String) b.get("id"), items));
+        out.put("batch_code", b.get("batch_code"));
+        return out;
     }
 
     public Map<String, Object> remove(RequestContext ctx, String entryId, Map<String, Object> body) {
@@ -162,12 +161,10 @@ public class BatchService {
         Map<String, Object> e = db.one("SELECT batch_id, label FROM batch_entry WHERE id = ?::uuid", entryId);
         if (e == null) throw new RuleException("Entry not found");
         batchOf(ctx, (String) e.get("batch_id"));
-        return uow.run(withReason(ctx, body, "Sample removed from the batch"), d -> {
-            Map<String, Object> out = new LinkedHashMap<>();
-            out.put("removed", d.one("SELECT remove_batch_entry(?::uuid) AS n", entryId).get("n"));
-            out.put("label", e.get("label"));
-            return out;
-        });
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("removed", makers.remove(withReason(ctx, body, "Sample removed from the batch"), entryId));
+        out.put("label", e.get("label"));
+        return out;
     }
 
     /** Open batches a backlog item could join (same lab and version, nothing recorded yet). */
@@ -179,7 +176,8 @@ public class BatchService {
     public Map<String, Object> assign(RequestContext ctx, String id, Map<String, Object> body) {
         Map<String, Object> b = batchOf(ctx, id);
         if (!RequestContext.isUuid(body.get("user_id"))) throw new RuleException("Choose who does the batch");
-        return uow.run(withReason(ctx, body, "Batch assigned"), d -> { d.one("SELECT assign_batch(?::uuid, ?::uuid)", b.get("id"), body.get("user_id")); return ok(); });
+        makers.assign(withReason(ctx, body, "Batch assigned"), (String) b.get("id"), body.get("user_id"));
+        return ok();
     }
 
     public Map<String, Object> reprep(RequestContext ctx, String id, Map<String, Object> body) {
@@ -188,93 +186,27 @@ public class BatchService {
         if (ids.isEmpty()) throw new RuleException("Select the samples to re-prepare");
         Object reps = jsNumber(body, "replicates");
         return signed(ctx, body, "Requested by", "Re-prep (" + replicateWord(reps) + ") of " + ids.size() + " sample" + (ids.size() == 1 ? "" : "s") + " from " + b.get("batch_code"),
-            d -> kv("n", d.one("SELECT request_reprep(?::uuid[], ?) AS n", ids, reps).get("n")));
+            d -> kv("n", makers.reprep(d, ctx, ids, reps)));
     }
 
-    // ---------------------------------------------------------------- QC Review (WD-3)
-    public Map<String, Object> review(RequestContext ctx, String id) {
-        Map<String, Object> out = repo.review(batchOf(ctx, id), ctx.userId());
-        out.putAll(me(ctx));
-        return out;
-    }
+    // ---------------------------------------------------------------- QC Review (WD-3): its rules are Java's since migration 068
+    public Map<String, Object> review(RequestContext ctx, String id) { return reviews.review(ctx, id, me(ctx)); }
 
-    public Map<String, Object> choose(RequestContext ctx, String id, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        List<Map<String, Object>> rows = maps(body.get("rows"));
-        return uow.run(withReason(ctx, body, "Reportable reading chosen"), d -> {
-            for (Map<String, Object> x : rows) {
-                if (x.get("readings") instanceof List<?> r && r.size() > 1)   // the average of the readings ticked (WD-5)
-                    d.one("SELECT average_results(?::uuid, ?::uuid, ?::uuid, ?::jsonb, ?, ?)", b.get("id"), x.get("requested_test_id"), x.get("analyte_id"), toJson(json, r),
-                        or(x.get("justification")), or(x.get("result_key")));
-                else d.one("SELECT choose_result(?::uuid, ?::uuid, ?::uuid, ?::uuid, ?, ?, ?)", b.get("id"), x.get("requested_test_id"), x.get("analyte_id"), x.get("entry_id"),
-                    jsNumber(x, "run_no"), or(x.get("justification")), or(x.get("result_key")));
-            }
-            return Map.of("saved", rows.size());
-        });
-    }
+    public Map<String, Object> choose(RequestContext ctx, String id, Map<String, Object> body) { return reviews.choose(ctx, id, body); }
 
-    public Map<String, Object> acceptQc(RequestContext ctx, String id, Map<String, Object> x) {
-        Map<String, Object> b = batchOf(ctx, id);
-        return uow.run(withReason(ctx, x, "QC accepted by the reviewer"), d -> {
-            d.one("SELECT accept_qc(?::uuid, ?::uuid, ?::uuid, ?, ?, ?)", b.get("id"), x.get("entry_id"), RequestContext.isUuid(x.get("analyte_id")) ? x.get("analyte_id") : null,
-                x.get("limit_type"), truthy(x.get("justification")) ? x.get("justification") : "", orOne(x.get("analytical_run")));
-            return ok();
-        });
-    }
+    public Map<String, Object> acceptQc(RequestContext ctx, String id, Map<String, Object> x) { return reviews.acceptQc(ctx, id, x); }
 
-    /** The reviewer accepts an incubator load outside its window or temperature, with a justification (WD-5.1). */
-    public Map<String, Object> acceptLoad(RequestContext ctx, String id, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        if (!RequestContext.isUuid(body.get("load_id"))) throw new RuleException("Load not found");
-        return uow.run(withReason(ctx, body, "Incubator load accepted by the reviewer"), d -> {
-            d.one("SELECT accept_load(?::uuid, ?::uuid, ?)", b.get("id"), body.get("load_id"), truthy(body.get("justification")) ? body.get("justification") : "");
-            return ok();
-        });
-    }
+    public Map<String, Object> acceptLoad(RequestContext ctx, String id, Map<String, Object> body) { return reviews.acceptLoad(ctx, id, body); }
 
-    /** The reviewer approves each step with a click (a recorded mark, not a signature), or undoes it (migration 020). */
-    public Map<String, Object> reviewMark(RequestContext ctx, String id, String runId, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        if (!RequestContext.isUuid(runId)) throw new RuleException("Step not found");
-        boolean undo = Boolean.TRUE.equals(body.get("undo"));
-        return uow.run(withReason(ctx, body, undo ? "Step approval undone in QC Review" : "Step approved in QC Review"), d -> {
-            Map<String, Object> r = d.one("SELECT id FROM step_run WHERE id = ?::uuid AND batch_id = ?::uuid", runId, b.get("id"));
-            if (r == null) throw new RuleException("Step not found in this batch");
-            d.one(undo ? "SELECT withdraw_review_step(?::uuid)" : "SELECT approve_review_step(?::uuid)", r.get("id"));
-            return ok();
-        });
-    }
+    public Map<String, Object> reviewMark(RequestContext ctx, String id, String runId, Map<String, Object> body) { return reviews.reviewMark(ctx, id, runId, body); }
 
-    public Map<String, Object> approve(RequestContext ctx, String id, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        return signed(withReason(ctx, body, "Batch reviewed and approved"), body, "Reviewed by", "QC Review and approval of " + b.get("batch_code"),
-            d -> kv("results", d.one("SELECT approve_batch(?::uuid) AS n", b.get("id")).get("n")));
-    }
+    public Map<String, Object> approve(RequestContext ctx, String id, Map<String, Object> body) { return reviews.approve(ctx, id, body); }
 
-    /** Release a timepoint's results as preliminary (WD-5): signed "Reviewed by". */
-    public Map<String, Object> release(RequestContext ctx, String id, String runId, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        if (!RequestContext.isUuid(runId)) throw new RuleException("Step not found");
-        Map<String, Object> s = db.one("SELECT ws.step_name FROM step_run r JOIN workflow_step ws ON ws.id = r.step_id WHERE r.id = ?::uuid AND r.batch_id = ?::uuid", runId, b.get("id"));
-        if (s == null) throw new RuleException("Step not found in this batch");
-        return signed(withReason(ctx, body, "Timepoint reviewed: preliminary results released"), body, "Reviewed by",
-            s.get("step_name") + " of " + b.get("batch_code") + ": release preliminary results",
-            d -> kv("results", d.one("SELECT release_timepoint(?::uuid) AS n", runId).get("n")));
-    }
+    public Map<String, Object> release(RequestContext ctx, String id, String runId, Map<String, Object> body) { return reviews.release(ctx, id, runId, body); }
 
-    public Map<String, Object> returnBatch(RequestContext ctx, String id, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        if (!RequestContext.isUuid(body.get("step_run_id"))) throw new RuleException("Choose the step to reopen");
-        if (str(body.get("reason")).trim().isEmpty()) throw new RuleException("Say what the analyst needs to fix");
-        return signed(ctx, body, "Returned by", "Return " + b.get("batch_code") + " to the analyst",
-            d -> { d.one("SELECT return_batch(?::uuid, ?::uuid)", b.get("id"), body.get("step_run_id")); return ok(); });
-    }
+    public Map<String, Object> returnBatch(RequestContext ctx, String id, Map<String, Object> body) { return reviews.returnBatch(ctx, id, body); }
 
-    public Map<String, Object> cancel(RequestContext ctx, String id, Map<String, Object> body) {
-        Map<String, Object> b = batchOf(ctx, id);
-        if (str(body.get("reason")).trim().isEmpty()) throw new RuleException("Say why the batch is cancelled");
-        return signed(ctx, body, "Cancelled by", "Cancel " + b.get("batch_code"), d -> { d.one("SELECT cancel_batch(?::uuid)", b.get("id")); return ok(); });
-    }
+    public Map<String, Object> cancel(RequestContext ctx, String id, Map<String, Object> body) { return reviews.cancel(ctx, id, body); }
 
     /** Approved results of a sample (the sample page). */
     public Map<String, Object> sampleResults(RequestContext ctx, String sampleId) {

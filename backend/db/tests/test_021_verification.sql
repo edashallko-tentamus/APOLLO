@@ -158,7 +158,7 @@ SELECT pg_temp.expect_true('Each requirement takes its checks'' result',
   (SELECT string_agg(req_code || '=' || result, ',' ORDER BY sort_order) FROM verification_requirement WHERE verification_id = pg_temp.w()) = 'URS-01=Pass,FRS-01=Pass,FRS-02=Not tested'
   AND (SELECT result FROM verification_check WHERE verification_id = pg_temp.w() AND check_code = 'VC-02') = 'Not tested');
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('After the run nobody works in a verification batch', $$UPDATE entry_value SET value_num = 9 WHERE step_run_id = pg_temp.vr('read') AND value_num = 2$$, 'only its automated run');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): after the run nobody works in a verification batch
 SELECT pg_temp.expect_true('Verification samples stay out of the backlog', NOT EXISTS (SELECT 1 FROM test_pool_view WHERE test_version_id = pg_temp.tv()));
 
 -- 5. the report and the gate

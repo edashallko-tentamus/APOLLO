@@ -92,7 +92,7 @@ SELECT pg_temp.expect_error_like('A linked daily control takes no data in the se
 SELECT pg_temp.expect_true('The second batch only needs its own sample plated', pg_temp.mmiss('plate', 2) NOT LIKE '%Control%' AND pg_temp.mmiss('plate', 2) LIKE '%: record the plates%');
 
 -- plating: plates per entry, the media lot (off its stock), the strain on the positive control
-SELECT pg_temp.expect_error_like('Plates are whole numbers', $$INSERT INTO entry_value (step_run_id, entry_id, value_num) VALUES (pg_temp.mr('plate'), pg_temp.me('Negative Control'), 1.5)$$, 'whole numbers');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): plates are counted in whole numbers
 INSERT INTO entry_value (step_run_id, entry_id, value_num, data)
   SELECT pg_temp.mr('plate'), id, 1, '{"levels": "1:10"}' FROM batch_entry WHERE batch_id = pg_temp.mb(1) AND status = 'Active';
 SELECT pg_temp.expect_true('Missing: the media lot for each plated entry', pg_temp.mmiss('plate') LIKE '%: record the media lot%');
@@ -149,11 +149,11 @@ SELECT complete_step(pg_temp.mr('ident'));
 SELECT pg_temp.expect_true('Completing the split-off step raises a request for the sample with a finding (D*), not for ND',
   (SELECT count(*) FROM split_request WHERE batch_id = pg_temp.mb(1)) = 1
   AND (SELECT status = 'Awaiting consent' AND finding = 'WD Salmonella D*' FROM split_request WHERE entry_id = pg_temp.sampleentry('LOT-M2')));
-SELECT pg_temp.expect_error_like('Split-off requests are raised by the step, not written',
-  $$UPDATE split_request SET status = 'Ordered' WHERE batch_id = pg_temp.mb(1)$$, 'raised by the Split off step');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.splits): split-off requests are raised by the step and decided at the bench routes, not written (deciding needs orders.edit: the database permission check stays)
 SELECT pg_temp.as_user('wd.int');
-SELECT pg_temp.expect_error_like('A declined request needs a note', $$SELECT decide_split_request((SELECT id FROM split_request WHERE batch_id = pg_temp.mb(1)), 'Declined', '')$$, 'Note who declined');
-SELECT decide_split_request((SELECT id FROM split_request WHERE batch_id = pg_temp.mb(1)), 'Consent given', 'Sam Nguyen agreed by email');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.splits): a declined request needs a note
+-- the customer's consent (Java's SplitRequest.decide since migration 067), written here as Java writes it
+UPDATE split_request SET status = 'Consent given', decision_note = 'Sam Nguyen agreed by email', decided_by = current_app_user(), decided_at = clock_timestamp() WHERE batch_id = pg_temp.mb(1);
 SELECT pg_temp.as_user('akiddle');
 SELECT order_test((SELECT sample_id FROM split_request WHERE batch_id = pg_temp.mb(1)), pg_temp.mline('WD Micro P/A'));
 SELECT pg_temp.expect_true('Consent recorded by intake; ordering the test closes the request (Ordered, linked to the new test, which is in the backlog)',

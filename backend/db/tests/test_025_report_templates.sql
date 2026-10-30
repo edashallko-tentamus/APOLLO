@@ -69,8 +69,7 @@ SELECT pg_temp.expect_true('A lab without its own default uses the every-lab def
 SELECT script_signature('Rule test', false);
 CREATE TEMP TABLE tt AS SELECT create_test(pg_temp.t25site('CFL'), 'Template rule test') AS test_id;
 CREATE TEMP TABLE tv AS SELECT v.id FROM test_version v, tt WHERE v.test_id = tt.test_id;
-SELECT pg_temp.expect_error_like('A test cannot use another lab''s template',
-  $$UPDATE test_version SET report_template_id = pg_temp.t25rt('RT TPS only') WHERE id = (SELECT id FROM tv)$$, 'belongs to another lab');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a test uses only its own lab's (or every lab's) report template
 SELECT pg_temp.expect_ok('A test uses its own lab''s template', $$UPDATE test_version SET report_template_id = pg_temp.t25rt('RT micro CFL') WHERE id = (SELECT id FROM tv)$$);
 SELECT pg_temp.expect_ok('or the every-lab one', $$UPDATE test_version SET report_template_id = pg_temp.t25rt('Standard Certificate of Analysis') WHERE id = (SELECT id FROM tv)$$);
 UPDATE test_version SET report_template_id = pg_temp.t25rt('RT micro CFL') WHERE id = (SELECT id FROM tv);

@@ -2,6 +2,9 @@ package com.tentamus.lims.methods.repo;
 
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.db.RecordWriter;
+import com.tentamus.lims.methods.domain.Problem;
+import com.tentamus.lims.methods.domain.QcCriteria;
+import com.tentamus.lims.methods.domain.VersionDesign;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,7 @@ public class MethodsRepository {
     }
 
     public List<Map<String, Object>> tests(String site) {
+        // shortcut: the list's Error count still comes from the kept database copy of the review (one query for every test); the designer page and approval use Java's
         return db.rows("""
             SELECT v.*, (SELECT count(*) FROM test_version_problems(v.draft_version_id) p WHERE p.severity = 'Error') AS draft_problems
               FROM test_design_view v WHERE v.site_id = ?::uuid OR v.site_id IS NULL ORDER BY v.site_id IS NULL, lower(v.test_name)""", site);
@@ -55,8 +59,9 @@ public class MethodsRepository {
         return out;
     }
 
-    /** Everything the designer shows for one version, with the lists its pickers offer. */
-    public Map<String, Object> versionPage(Map<String, Object> v, String user) {
+    /** Everything the designer shows for one version (its review, QC limits and formula values worked out by Java), with the lists its pickers offer. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> versionPage(Map<String, Object> v, String user, VersionDesign design, java.util.Set<String> authorIds) {
         Object id = v.get("id"), testId = v.get("test_id"), site = v.get("site_id");
         Map<String, Object> version = new LinkedHashMap<>(v);
         Map<String, Object> approver = v.get("approved_by") == null ? null : db.one("SELECT full_name FROM app_user WHERE id = ?::uuid", v.get("approved_by"));
@@ -68,21 +73,23 @@ public class MethodsRepository {
             SELECT a.*, an.analyte_name, an.analyte_code, an.analyte_class FROM test_version_analyte a JOIN analyte an ON an.id = a.analyte_id
              WHERE a.test_version_id = ?::uuid AND a.status = 'Active' ORDER BY a.sort_order, an.analyte_name""", id));
         out.put("steps", db.rows("""
-            SELECT s.*, d.department_code, step_token_fields(s.id) AS tokens FROM workflow_step s LEFT JOIN department d ON d.id = s.department_id
+            SELECT s.*, d.department_code FROM workflow_step s LEFT JOIN department d ON d.id = s.department_id
              WHERE s.test_version_id = ?::uuid AND s.status = 'Active' ORDER BY s.sort_order, s.step_key""", id));
+        Map<String, List<String>> tokens = design.tokenFields();
+        for (Object s : (List<?>) out.get("steps")) ((Map<String, Object>) s).put("tokens", tokens.getOrDefault(((Map<?, ?>) s).get("id"), List.of()));
         out.put("equipment", db.rows("""
             SELECT e.id, e.step_id, e.equipment_type_id, e.is_main, et.type_name FROM workflow_step_equipment e JOIN equipment_type et ON et.id = e.equipment_type_id
               JOIN workflow_step s ON s.id = e.step_id WHERE s.test_version_id = ?::uuid AND e.status = 'Active' ORDER BY e.is_main DESC, et.type_name""", id));
         out.put("deps", db.rows("""
             SELECT d.id, d.step_id, d.depends_on_step_id, d.dependency_type FROM workflow_step_dependency d JOIN workflow_step s ON s.id = d.step_id
              WHERE s.test_version_id = ?::uuid AND d.status = 'Active'""", id));
-        out.put("problems", problems(id));
+        out.put("problems", design.problems().stream().map(Problem::row).toList());
         out.put("versions", db.rows("SELECT id, version_no, status FROM test_version WHERE test_id = ?::uuid ORDER BY version_no DESC", testId));
         out.put("entry", db.one("SELECT * FROM test_catalogue WHERE test_id = ?::uuid", testId));
-        out.put("qcCriteria", db.rows("SELECT * FROM qc_criteria(?::uuid)", id));   // the limit each QC applies to each analyte (WD-1.2)
-        out.put("authors", db.rows("SELECT u.full_name FROM test_version_authors(?::uuid) a JOIN app_user u ON u.id = a.user_id ORDER BY u.full_name", id)
+        out.put("qcCriteria", design.qcCriteria().stream().map(QcCriteria.Row::row).toList());   // the limit each QC applies to each analyte (WD-1.2)
+        out.put("authors", db.rows("SELECT full_name FROM app_user WHERE id = ANY(?::uuid[]) ORDER BY full_name", List.copyOf(authorIds))
             .stream().map(a -> a.get("full_name")).toList());
-        out.put("i_worked_on_it", db.one("SELECT 1 AS x FROM test_version_authors(?::uuid) a WHERE a.user_id = ?::uuid", id, user) != null);
+        out.put("i_worked_on_it", authorIds.contains(user));
         Map<String, Object> lists = new LinkedHashMap<>();
         lists.put("departments", db.rows("""
             SELECT d.id, d.department_code, d.department_name, department_has_people(d.id) AS has_people,
@@ -106,8 +113,6 @@ public class MethodsRepository {
         out.put("lists", lists);
         return out;
     }
-
-    public List<Map<String, Object>> problems(Object versionId) { return db.rows("SELECT * FROM test_version_problems(?::uuid)", versionId); }
 
     public List<Map<String, Object>> methods(String site) {
         return db.rows("""

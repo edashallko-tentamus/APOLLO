@@ -124,7 +124,7 @@ SELECT pg_temp.expect_true('A preliminary result does not make the order Approve
 SELECT pg_temp.expect_error_like('The approval of a step that fed released results stands', $$SELECT withdraw_review_step(pg_temp.sr('read_7'))$$, 'its approval stands');
 SELECT pg_temp.as_user('wd.ana');
 SELECT set_config('lims.reason', 'Typo', false);
-SELECT pg_temp.expect_error_like('A step that fed released results cannot be reopened', $$SELECT reopen_step(pg_temp.sr('calc_7'))$$, 'already released as preliminary');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): a step that fed released results is not reopened
 SELECT pg_temp.expect_error_like('Nor read again in a new analytical run', $$SELECT add_analytical_run(pg_temp.sr('read_7'), ARRAY[pg_temp.se()], 1)$$, 'already released as preliminary');
 SELECT pg_temp.as_user('wd.sup');
 SELECT set_config('lims.reason', 'Instrument down', false);

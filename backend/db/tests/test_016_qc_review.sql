@@ -60,8 +60,7 @@ SELECT pg_temp.expect_true('A sample read once has its reading chosen automatica
 -- who may review
 SELECT pg_temp.as_user('wd.ana');
 SELECT pg_temp.expect_error_like('An analyst cannot review (testing.review)', $$SELECT choose_result(pg_temp.bb(1), pg_temp.rt(8), pg_temp.an('WD Lead'), pg_temp.e(8), 2)$$, 'testing.review');
-SELECT pg_temp.expect_error_like('Choices are made by the review, not written directly',
-  $$INSERT INTO result_choice (batch_id, requested_test_id, analyte_id, entry_id, run_no) VALUES (pg_temp.bb(1), pg_temp.rt(8), pg_temp.an('WD Lead'), pg_temp.e(8), 2)$$, 'QC Review screen');
+-- Moved to the Java backend in migration 068 (JUnit: ReviewRulesTest): choices are made by the review, not written directly
 SELECT pg_temp.as_user('wd.sup');
 SELECT pg_temp.expect_error_like('A reading that is not this sample''s is refused', $$SELECT choose_result(pg_temp.bb(1), pg_temp.rt(8), pg_temp.an('WD Lead'), pg_temp.e(5), 1)$$, 'not a result');
 SELECT pg_temp.expect_error_like('WD-5: picking one of several readings needs a justification',
@@ -165,8 +164,8 @@ SELECT pg_temp.expect_true('Results are compared with the sample''s specificatio
   AND (SELECT conformance = 'No specification' FROM test_result WHERE requested_test_id = pg_temp.rt(5) AND analyte_id = pg_temp.an('WD Cadmium')));
 SELECT pg_temp.expect_true('The QC accepted keeps its justification and the verdict it had', (SELECT count(*) FROM qc_acceptance WHERE batch_id = pg_temp.bb(1) AND verdict = 'Fail' AND justification LIKE 'Closing CCV%') >= 3);
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('An approved batch is locked', $$UPDATE step_run SET notes = 'late note' WHERE id = pg_temp.rn('weigh')$$, 'Approved');
-SELECT pg_temp.expect_error_like('Results are only stored by approval', $$UPDATE test_result SET reported = '1' WHERE batch_id = pg_temp.bb(1)$$, 'QC Review screen');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): an approved batch is locked (no bench work in a closed batch)
+-- Moved to the Java backend in migration 068 (JUnit: ReviewRulesTest): results are only stored by approval
 SELECT pg_temp.expect_true('The order is In Testing (its other tests are not finished)',
   (SELECT o.status::text = 'In Testing' FROM lab_order o JOIN sample s ON s.lab_order_id = o.id JOIN requested_test rt ON rt.sample_id = s.id WHERE rt.id = pg_temp.rt(5)));
 

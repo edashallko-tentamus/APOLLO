@@ -72,9 +72,9 @@ INSERT INTO workflow_step_equipment (step_id, equipment_type_id, is_main) SELECT
 SELECT pg_temp.expect_true('Designer: a value that is not a result must be one of the result values',
   EXISTS (SELECT 1 FROM test_version_problems(pg_temp.bv()) WHERE severity = 'Error' AND problem LIKE '%values that are not results must be among its result values%'));
 UPDATE test_version_analyte SET invalid_values = '{"Presumptive positive"," Signal error ",""}' WHERE test_version_id = pg_temp.bv();
-SELECT pg_temp.expect_true('Designer: a value cannot both mean found and be not a result (the list is tidied: blanks and spaces removed)',
-  EXISTS (SELECT 1 FROM test_version_problems(pg_temp.bv()) WHERE severity = 'Error' AND problem LIKE '%cannot both mean "found" and be "not a result"%')
-  AND (SELECT invalid_values = '{"Presumptive positive","Signal error"}' FROM test_version_analyte WHERE test_version_id = pg_temp.bv()));
+SELECT pg_temp.expect_true('Designer: a value cannot both mean found and be not a result',
+  EXISTS (SELECT 1 FROM test_version_problems(pg_temp.bv()) WHERE severity = 'Error' AND problem LIKE '%cannot both mean "found" and be "not a result"%'));
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): the list is tidied (blanks and spaces removed)
 UPDATE test_version_analyte SET invalid_values = '{Indeterminate,"Signal error"}' WHERE test_version_id = pg_temp.bv();
 UPDATE workflow_step SET config = jsonb_set(config, '{by_category,0,window_max}', '20') WHERE id = pg_temp.bs('inc');
 SELECT pg_temp.expect_true('Designer: a window per product category needs its shortest at or below its longest',

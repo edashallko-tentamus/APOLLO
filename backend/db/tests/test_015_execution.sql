@@ -107,8 +107,7 @@ SELECT pg_temp.user_only('wd.int');
 SELECT pg_temp.expect_error_like('Intake cannot make batches', $$SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 3))$$, 'testing.perform');
 SELECT pg_temp.user_only('wd.ana2');
 SELECT pg_temp.expect_error_like('An analyst outside the test''s department cannot batch it', $$SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 3))$$, 'department');
-SELECT pg_temp.expect_error_like('Batches are only made by autobatch',
-  $$INSERT INTO test_batch (site_id, test_id, test_version_id, assigned_to) VALUES (pg_temp.site('CFL'), pg_temp.x_tst('WD Metals'), pg_temp.x_ver('WD Metals', 3), pg_temp.uid('wd.ana2'))$$, 'autobatch');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): batches are made from the backlog only
 SELECT pg_temp.user_only('wd.ana');
 SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 3));
 SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 2), (SELECT jsonb_agg(jsonb_build_object('requested_test_id', requested_test_id)) FROM test_pool_view WHERE test_version_id = pg_temp.x_ver('WD Metals', 2)));
@@ -126,27 +125,22 @@ SELECT pg_temp.expect_true('The spike and its duplicate are made from the first 
 SELECT pg_temp.expect_true('One step run per workflow step, all Not started', (SELECT count(*) = 7 AND bool_and(status = 'Not started') FROM step_run WHERE batch_id = pg_temp.b()));
 SELECT pg_temp.expect_true('Batched tests leave the backlog', NOT EXISTS (SELECT 1 FROM test_pool_view WHERE test_version_id = pg_temp.x_ver('WD Metals', 3)));
 SELECT pg_temp.expect_error_like('Nothing left to batch', $$SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 3))$$, 'Nothing in the pool');
-SELECT pg_temp.expect_error_like('A batch''s status follows its steps', $$UPDATE test_batch SET status = 'Awaiting Review' WHERE id = pg_temp.b()$$, 'follows its steps');
-SELECT pg_temp.expect_error_like('Entries are only made by autobatch',
-  $$INSERT INTO batch_entry (batch_id, position, entry_type, qc_type, label) VALUES (pg_temp.b(), 99, 'QC', 'Laboratory Control Sample', 'Extra')$$, 'autobatch');
-SELECT pg_temp.expect_error_like('Only a spike''s sample can be changed', $$UPDATE batch_entry SET label = 'Renamed' WHERE id = pg_temp.at(5)$$, 'Only the sample a spike');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): a batch's status follows its steps
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): entries are made with the batch only
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.entries): only the sample a spike is made from changes at the bench
 
 -- Assigning
-SELECT pg_temp.expect_error_like('An analyst cannot reassign a batch (testing.assign)', $$SELECT assign_batch(pg_temp.b(), pg_temp.uid('wd.ana2'))$$, 'testing.assign');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): reassigning needs testing.assign (the database permission check stays)
 SELECT pg_temp.expect_error_like('Use Assign to reassign', $$UPDATE test_batch SET assigned_to = pg_temp.uid('wd.ana2') WHERE id = pg_temp.b()$$, 'Assign');
 SELECT pg_temp.as_user('wd.sup');
 SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('A batch goes only to someone who does bench work', $$SELECT assign_batch(pg_temp.b(), pg_temp.uid('wd.int'))$$, 'testing.perform');
-SELECT assign_batch(pg_temp.b(), pg_temp.uid('wd.ana2'));
-SELECT assign_batch(pg_temp.b(), pg_temp.uid('wd.ana'));
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): a batch goes only to someone who does bench work
 SELECT set_config('lims.reason', 'Bench work', false);
-SELECT pg_temp.expect_true('A supervisor assigns the batch (with the reason recorded)', (SELECT assigned_to = pg_temp.uid('wd.ana') FROM test_batch WHERE id = pg_temp.b())
-  AND (SELECT count(*) FROM audit_log WHERE record_id = pg_temp.b() AND reason = 'Batch assigned') = 2);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batches): a supervisor assigns the batch
 
 -- Batching step
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('Weighing cannot start before Batching is completed',
-  $$INSERT INTO entry_value (step_run_id, entry_id, value_num) VALUES (pg_temp.run('weigh'), pg_temp.at(5), 0.5)$$, 'cannot start');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): a step starts once the steps before it are completed
 UPDATE batch_entry SET parent_entry_id = pg_temp.at(8) WHERE id = pg_temp.ent('Matrix Spike Duplicate');
 SELECT pg_temp.expect_true('Before Batching is completed, the spiked sample can be changed', (SELECT parent_entry_id = pg_temp.at(8) FROM batch_entry WHERE id = pg_temp.ent('Matrix Spike Duplicate')));
 UPDATE batch_entry SET parent_entry_id = pg_temp.at(5) WHERE id = pg_temp.ent('Matrix Spike Duplicate');
@@ -156,34 +150,26 @@ SELECT pg_temp.as_user('wd.ana');
 SELECT complete_step(pg_temp.run('batch'));
 SELECT pg_temp.expect_true('Batching completed, signed by the analyst', (SELECT status = 'Completed' AND performed_by = pg_temp.uid('wd.ana') AND signature_id IS NOT NULL AND witness_id IS NULL FROM step_run WHERE id = pg_temp.run('batch')));
 SELECT pg_temp.expect_error_like('A completed step cannot be completed again', $$SELECT complete_step(pg_temp.run('batch'))$$, 'already completed');
-SELECT pg_temp.expect_error_like('After Batching, the spiked sample is fixed', $$UPDATE batch_entry SET parent_entry_id = pg_temp.at(8) WHERE id = pg_temp.ent('Matrix Spike')$$, 'reopen');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.entries): after Batching the spiked sample is fixed
 
 -- Weighing: values, the balance, the spike
 SELECT pg_temp.user_only('wd.ana2');
-SELECT pg_temp.expect_error_like('Someone outside the department cannot record weights',
-  $$INSERT INTO entry_value (step_run_id, entry_id, value_num) VALUES (pg_temp.run('weigh'), pg_temp.at(5), 0.5)$$, 'department');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): someone outside the step's department records nothing
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('A weight must be above zero', $$INSERT INTO entry_value (step_run_id, entry_id, value_num) VALUES (pg_temp.run('weigh'), pg_temp.at(5), 0)$$, 'above zero');
-SELECT pg_temp.expect_error_like('An entry of another batch is refused', $$INSERT INTO entry_value (step_run_id, entry_id, value_num)
-  SELECT pg_temp.run('weigh'), e.id, 0.5 FROM batch_entry e WHERE e.batch_id <> pg_temp.b() LIMIT 1$$, 'not in this batch');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): a weight must be above zero
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): an entry of another batch is refused
 INSERT INTO entry_value (step_run_id, entry_id, value_num) SELECT pg_temp.run('weigh'), id, 0.5 FROM batch_entry WHERE batch_id = pg_temp.b() AND (entry_type = 'Sample' OR qc_class = 'Prep') AND label <> 'Laboratory Control Sample';
 SELECT pg_temp.expect_true('The first value starts the step and the batch', (SELECT status = 'In progress' FROM step_run WHERE id = pg_temp.run('weigh'))
   AND (SELECT status = 'In Progress' FROM test_batch WHERE id = pg_temp.b()));
 SELECT pg_temp.expect_true('Missing: the LCS weight and the balance', pg_temp.missing('weigh') LIKE 'Laboratory Control Sample: no weight%record the balance used%');
-SELECT pg_temp.expect_error_like('An instrument the step does not use is refused',
-  $$INSERT INTO entry_equipment (step_run_id, equipment_id) VALUES (pg_temp.run('weigh'), pg_temp.x_eq('WD ICP-MS 1'))$$, 'does not use');
-SELECT pg_temp.expect_error_like('A balance out of calibration is refused',
-  $$INSERT INTO entry_equipment (step_run_id, equipment_id) VALUES (pg_temp.run('weigh'), pg_temp.x_eq('WD Balance 2'))$$, 'out of calibration');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.equipment): an instrument the step does not use is refused
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.equipment): a balance out of calibration is refused
 INSERT INTO entry_equipment (step_run_id, equipment_id) VALUES (pg_temp.run('weigh'), pg_temp.x_eq('WD Balance 1'));
 INSERT INTO entry_value (step_run_id, entry_id, value_num) VALUES (pg_temp.run('weigh'), pg_temp.ent('Laboratory Control Sample'), 0.5);
-SELECT pg_temp.expect_error_like('An expired lot cannot be used',
-  $$INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose, volume, volume_unit) VALUES (pg_temp.run('weigh'), pg_temp.ent('Laboratory Control Sample'), pg_temp.x_lot('WD-OLD'), 'Spike', 0.5, 'mL')$$, 'expired');
-SELECT pg_temp.expect_error_like('Another lab''s lot cannot be used',
-  $$INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose, volume, volume_unit) VALUES (pg_temp.run('weigh'), pg_temp.ent('Laboratory Control Sample'), pg_temp.x_lot('WD-TPS'), 'Spike', 0.5, 'mL')$$, 'another lab');
-SELECT pg_temp.expect_error_like('A material needs the amount used (it comes off the stock)',
-  $$INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose) VALUES (pg_temp.run('weigh'), pg_temp.ent('Laboratory Control Sample'), pg_temp.x_lot('WD-SPK'), 'Spike')$$, 'amount');
-SELECT pg_temp.expect_error_like('The amount must convert to the lot''s unit (a mL lot cannot take grams)',
-  $$INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose, volume, volume_unit) VALUES (pg_temp.run('weigh'), pg_temp.ent('Laboratory Control Sample'), pg_temp.x_lot('WD-SPK'), 'Spike', 1, 'g')$$, 'cannot be converted');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.materials): an expired lot cannot be used
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.materials): another lab's lot cannot be used
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.materials): a material needs the amount used
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.materials): the amount must convert to the lot's unit
 INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose, volume, volume_unit)
   SELECT pg_temp.run('weigh'), id, pg_temp.x_lot('WD-SPK'), 'Spike', 500, 'µL' FROM batch_entry WHERE batch_id = pg_temp.b() AND qc_type IN ('Laboratory Control Sample', 'Matrix Spike', 'Matrix Spike Duplicate');
 SELECT pg_temp.expect_true('(the spike volume is kept in the Units list spelling)', (SELECT volume_unit FROM entry_material WHERE entry_id = pg_temp.ent('Laboratory Control Sample') LIMIT 1) = 'µL');
@@ -199,10 +185,9 @@ SELECT pg_temp.expect_true('A material removed while its step is open puts its s
 SELECT pg_temp.expect_error_like('Stock cannot be put back outside the bench',
   $$INSERT INTO inventory_transaction (lot_id, txn_type, quantity_change, corrects_txn_id)
     SELECT lot_id, 'Usage', 0.5, id FROM inventory_transaction WHERE lot_id = pg_temp.x_lot('WD-SPK') AND txn_type = 'Usage' AND quantity_change < 0 LIMIT 1$$, 'puts stock back');
-SELECT pg_temp.expect_error_like('A recorded amount cannot be edited (remove and add again)',
-  $$UPDATE entry_material SET volume = 600 WHERE entry_id = pg_temp.ent('Laboratory Control Sample') AND status = 'Active'$$, 'Remove the material');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.materials): a recorded amount is removed and added again, never edited
 SELECT complete_step(pg_temp.run('weigh'));
-SELECT pg_temp.expect_error_like('A completed step''s data cannot change', $$UPDATE entry_value SET value_num = 0.51 WHERE step_run_id = pg_temp.run('weigh') AND entry_id = pg_temp.ent('Laboratory Control Sample')$$, 'completed');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): a completed step's data cannot change
 
 -- Digestion: fields, and a required witness
 UPDATE step_run SET fields = '{"digest_final_volume_ml": "50"}' WHERE id = pg_temp.run('digest');
@@ -236,10 +221,8 @@ INSERT INTO entry_value (step_run_id, entry_id, analyte_id, value_num)
               ELSE CASE e.label WHEN 'Matrix Spike' THEN 40 WHEN 'Matrix Spike Duplicate' THEN 38 WHEN 'Laboratory Control Sample' THEN 19 WHEN 'ICV' THEN 49
                                 WHEN 'CCV-1' THEN 51 WHEN 'CCV-2' THEN 50 WHEN 'CCV-3' THEN 60 END END
     FROM batch_entry e, analyte a WHERE e.batch_id = pg_temp.b() AND a.analyte_name IN ('WD Lead', 'WD Cadmium');
-SELECT pg_temp.expect_error_like('A second reading needs a re-analysis first',
-  $$INSERT INTO entry_value (step_run_id, entry_id, analyte_id, run_no, value_num) VALUES (pg_temp.run('read'), pg_temp.at(5), pg_temp.an('WD Lead'), 2, 21)$$, 're-analysis');
-SELECT pg_temp.expect_error_like('A reading for an analyte not on the test is refused',
-  $$INSERT INTO entry_value (step_run_id, entry_id, analyte_id, value_num) VALUES (pg_temp.run('read'), pg_temp.at(5), pg_temp.an('WD Salmonella'), 1)$$, 'not on this test');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): a second reading needs a re-analysis first
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): a reading for an analyte not on the test is refused
 SELECT pg_temp.expect_true('Missing: the raw data file, the instrument and the check standards',
   pg_temp.missing('read') LIKE '%Attach the raw data%' AND pg_temp.missing('read') LIKE '%Record the instrument used%' AND pg_temp.missing('read') LIKE '%ICV: record the check standard used%');
 
@@ -280,13 +263,13 @@ SELECT pg_temp.expect_true('Check standards: reading against the standard (0.05 
 
 -- Re-analysis
 SELECT pg_temp.user_only('wd.ana');
-SELECT pg_temp.expect_error_like('Re-analysis needs a signature', $$SELECT request_reanalysis(pg_temp.run('read'), ARRAY[pg_temp.at(8)], 2)$$, 'electronic signature');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.analyticalRuns): re-analysis is signed (Java signs it)
 SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('Re-analysis is single, duplicate or triplicate', $$SELECT request_reanalysis(pg_temp.run('read'), ARRAY[pg_temp.at(8)], 4)$$, 'single, duplicate or triplicate');
-SELECT pg_temp.expect_error_like('Re-analysis is asked for at a reading step', $$SELECT request_reanalysis(pg_temp.run('dil'), ARRAY[pg_temp.at(8)], 1)$$, 'reading');
-SELECT pg_temp.expect_error_like('Re-analysis is asked for from the batch', $$INSERT INTO reanalysis_request (step_run_id, entry_id, runs, first_run_no, reason) VALUES (pg_temp.run('read'), pg_temp.at(8), 1, 2, 'x')$$, 'signed');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.analyticalRuns): re-analysis is single, duplicate or triplicate
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.analyticalRuns): re-analysis is asked for at a reading step
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.analyticalRuns): re-analysis is asked for from the batch
 SELECT set_config('lims.reason', 'High internal standard drift', false);
-SELECT request_reanalysis(pg_temp.run('read'), ARRAY[pg_temp.at(8)], 2);
+SELECT add_analytical_run(pg_temp.run('read'), ARRAY[pg_temp.at(8)], 2);
 SELECT pg_temp.expect_true('Duplicate re-analysis: readings 2 and 3 are expected for that sample; missing until entered', entry_runs(pg_temp.run('read'), pg_temp.at(8)) = 3
   AND pg_temp.missing('read') LIKE '%' || pg_temp.lbl(8) || ': 4 readings missing%'
   AND (SELECT reason = 'High internal standard drift' AND signature_id IS NOT NULL AND first_run_no = 2 FROM reanalysis_request WHERE entry_id = pg_temp.at(8)));
@@ -307,8 +290,7 @@ INSERT INTO entry_value (step_run_id, entry_id, analyte_id, run_no, value_num)
 SELECT pg_temp.expect_true('WD-5: QC is judged per analytical run: run 2''s closing CCV passes (100%) while run 1''s fails (120%)',
   (SELECT verdict || ' ' || measured FROM batch_qc_verdicts(pg_temp.b()) WHERE label = 'RA1-CCV-3' AND analyte_name = 'WD Cadmium' AND analytical_run = 2) = 'Pass 100.0'
   AND pg_temp.verdict('CCV-3', 'WD Cadmium', 'Recovery %') = 'Fail 120.0');
-SELECT pg_temp.expect_error_like('WD-5: equipment and raw data belong to a run that exists',
-  $$INSERT INTO entry_equipment (step_run_id, equipment_id, analytical_run_no) VALUES (pg_temp.run('read'), pg_temp.x_eq('WD ICP-MS 1'), 5)$$, 'does not exist');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.equipment): equipment and raw data belong to an analytical run that exists
 INSERT INTO document_file (file_name, mime_type, size_bytes, sha256, content) VALUES ('wd-icpms-run2.csv', 'text/csv', 0, '', convert_to('Sample,Pb,Cd', 'UTF8'));
 INSERT INTO step_attachment (step_run_id, document_id, label, analytical_run_no) SELECT pg_temp.run('read'), id, 'ICP-MS export, run 2', 2 FROM document_file WHERE file_name = 'wd-icpms-run2.csv';
 INSERT INTO entry_equipment (step_run_id, equipment_id, analytical_run_no) VALUES (pg_temp.run('read'), pg_temp.x_eq('WD ICP-MS 1'), 2);
@@ -325,15 +307,12 @@ SELECT pg_temp.expect_true('All bench steps done: the batch waits for QC Review 
   (SELECT status = 'Awaiting Review' FROM test_batch WHERE id = pg_temp.b()) AND pg_temp.missing('review') LIKE '%reviewer%');
 
 -- Reopening and corrections
-SELECT pg_temp.expect_error_like('A step cannot reopen while a later step is completed', $$SELECT reopen_step(pg_temp.run('weigh'))$$, 'Reopen the steps after it first');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): a step does not reopen while a later step is completed
 SELECT set_config('lims.reason', '', false);
-SELECT pg_temp.expect_error_like('Reopening needs a reason', $$SELECT reopen_step(pg_temp.run('calc'))$$, 'why');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): reopening needs a reason
 SELECT set_config('lims.reason', 'Transcription check', false);
-SELECT reopen_step(pg_temp.run('calc'));
-SELECT pg_temp.expect_true('Reopened: the step is in progress and the batch is back in progress', (SELECT status = 'In progress' FROM step_run WHERE id = pg_temp.run('calc'))
-  AND (SELECT status = 'In Progress' FROM test_batch WHERE id = pg_temp.b()));
-SELECT complete_step(pg_temp.run('calc'));
-SELECT request_reanalysis(pg_temp.run('read'), ARRAY[pg_temp.at(10)], 1);
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.steps): reopened: the step and the batch are back in progress
+SELECT add_analytical_run(pg_temp.run('read'), ARRAY[pg_temp.at(10)], 1);
 SELECT pg_temp.expect_true('A re-analysis reopens the reading step and the calculation after it',
   (SELECT status FROM step_run WHERE id = pg_temp.run('read')) = 'In progress' AND (SELECT status FROM step_run WHERE id = pg_temp.run('calc')) = 'In progress'
   AND (SELECT status FROM step_run WHERE id = pg_temp.run('dil')) = 'Completed' AND (SELECT status = 'In Progress' FROM test_batch WHERE id = pg_temp.b()));
@@ -346,17 +325,18 @@ SELECT pg_temp.expect_true('A corrected reading is audited with its reason and r
 
 -- Re-prep
 SELECT set_config('lims.reason', 'Digest incomplete (particles)', false);
-SELECT pg_temp.expect_error_like('QC is not re-prepared (it is made again with the new batch)', $$SELECT request_reprep(ARRAY[pg_temp.ent('Laboratory Control Sample')], 1)$$, 'QC sample');
-SELECT pg_temp.expect_error_like('Re-prep is single, duplicate or triplicate', $$SELECT request_reprep(ARRAY[pg_temp.at(10)], 0)$$, 'single, duplicate or triplicate');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.entries): QC is not re-prepared
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.entries): re-prep is single, duplicate or triplicate
 CREATE TEMP TABLE wd_reprep AS SELECT pg_temp.at(10) AS entry_id, pg_temp.lbl(10) AS label, (SELECT requested_test_id FROM batch_entry WHERE id = pg_temp.at(10)) AS rt;
-SELECT request_reprep(ARRAY[pg_temp.at(10)], 2);
+-- the re-prep (Java's BatchMakingService.reprep since migration 067), written here as Java writes it
+INSERT INTO reprep_request (requested_test_id, origin_entry_id, replicates, reason) SELECT rt, entry_id, 2, current_reason() FROM wd_reprep;
+UPDATE batch_entry SET status = 'Superseded', superseded_reason = 'Re-prep: ' || current_reason() WHERE id = (SELECT entry_id FROM wd_reprep);
 SELECT pg_temp.expect_true('Re-prep: the entry is superseded with the reason and keeps its data; the test is back at the top of the backlog, in duplicate',
   (SELECT status = 'Superseded' AND superseded_reason LIKE 'Re-prep: Digest incomplete%' FROM batch_entry WHERE id = (SELECT entry_id FROM wd_reprep))
   AND EXISTS (SELECT 1 FROM entry_value WHERE entry_id = (SELECT entry_id FROM wd_reprep))
   AND (SELECT kind = 'Re-prep' AND priority = 'Re-prep' AND priority_rank = 0 AND replicates = 2 FROM test_pool_view WHERE requested_test_id = (SELECT rt FROM wd_reprep)));
-SELECT pg_temp.expect_error_like('A superseded entry takes no more data',
-  $$INSERT INTO entry_value (step_run_id, entry_id, analyte_id, run_no, value_num) SELECT pg_temp.run('read'), entry_id, pg_temp.an('WD Lead'), 2, 1 FROM wd_reprep$$, 'superseded');
-SELECT pg_temp.expect_error_like('An entry is re-prepared once', $$SELECT request_reprep(ARRAY[(SELECT entry_id FROM wd_reprep)], 1)$$, 'already superseded');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): a superseded entry takes no more data
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.entries): an entry is re-prepared once
 SELECT pg_temp.expect_true('The superseded sample drops out of the results', NOT EXISTS (SELECT 1 FROM batch_results(pg_temp.b()) WHERE entry_id = (SELECT entry_id FROM wd_reprep)));
 SELECT create_batch(pg_temp.site('CFL'), pg_temp.x_ver('WD Metals', 3));
 SELECT pg_temp.expect_true('The re-prep batch: two preparations of the sample (WD-5: labelled RP1- and RP2-), with fresh QC (two CCV brackets for two samples); the re-prep is marked batched',

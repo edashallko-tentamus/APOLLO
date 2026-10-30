@@ -62,7 +62,7 @@ SELECT pg_temp.expect_true('A new line uses the lab''s new rates: $650 less 20 %
 UPDATE lab_site SET subcontract_markup_pct = 30 WHERE site_code = 'CFL';
 -- Moved to the Java backend in migration 061 (JUnit: QuoteRulesTest): a quote stays with its lab (site_id is not written after the insert)
 -- Moved to the Java backend in migration 060 (JUnit: MasterDataRulesTest): The rates are percentages a lab can use (a discount under 100 %)
-SELECT pg_temp.expect_error_like('A lab''s test never moves to another lab', $$UPDATE test SET site_id = pg_temp.sc_site('TPS') WHERE test_name = 'SC In-house test'$$, 'cannot move');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): a lab's test never moves to another lab
 
 -------------------------------------------------------------------------------
 -- 2. CATALOGUE PRICES BY A PERCENTAGE

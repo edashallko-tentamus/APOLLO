@@ -50,8 +50,7 @@ SELECT create_test(pg_temp.sv_cfl(), 'SV Density', (SELECT d.id FROM department 
 INSERT INTO test_version_analyte (test_version_id, analyte_id, sort_order, result_type, reporting_unit, rounding_mode, rounding_digits)
   VALUES (pg_temp.sv_v('SV Serving weight'), (SELECT id FROM analyte WHERE analyte_name = 'SV Unit weight'), 1, 'Numeric', 'g', 'Decimal places', 4),
          (pg_temp.sv_v('SV Density'), (SELECT id FROM analyte WHERE analyte_name = 'SV Density'), 1, 'Numeric', 'g/mL', 'Decimal places', 3);
-SELECT pg_temp.expect_error_like('Replicate weighings are 1 to 10',
-  $$INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type, sort_order, config) VALUES (pg_temp.sv_v('SV Serving weight'), 'w11', 'Too many', 'Weighing', 9, '{"replicates": 11}')$$, '1 to 10');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): replicate weighings are 1 to 10
 INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type, sort_order, config) VALUES
  (pg_temp.sv_v('SV Serving weight'), 'batch', 'Batch', 'Batching', 1, '{"max_samples": 10, "qc": []}'),
  (pg_temp.sv_v('SV Serving weight'), 'weigh', 'Weigh 10 units', 'Weighing', 2, '{"target_mode": "None", "unit": "g", "replicates": 10}'),
@@ -107,7 +106,7 @@ INSERT INTO entry_value (step_run_id, entry_id, run_no, value_num)
 SELECT pg_temp.expect_true('9 of 10 weights: the step says so, and no average is used yet',
   (SELECT string_agg(problem, ' | ') FROM step_run_missing(pg_temp.sv_r('SV Serving weight', 'weigh'))) LIKE '%9 of 10 weights%'
   AND entry_weight(pg_temp.sv_r('SV Serving weight', 'weigh'), pg_temp.sv_e('SV Serving weight')) IS NULL);
-SELECT pg_temp.expect_error_like('There is no 11th weighing', $$INSERT INTO entry_value (step_run_id, entry_id, run_no, value_num) VALUES (pg_temp.sv_r('SV Serving weight', 'weigh'), pg_temp.sv_e('SV Serving weight'), 10, 0.6), (pg_temp.sv_r('SV Serving weight', 'weigh'), pg_temp.sv_e('SV Serving weight'), 11, 0.6)$$, 'no weighing 11');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.values): there is no weighing past the step's replicates
 INSERT INTO entry_value (step_run_id, entry_id, run_no, value_num) VALUES (pg_temp.sv_r('SV Serving weight', 'weigh'), pg_temp.sv_e('SV Serving weight'), 10, 0.610);
 SELECT pg_temp.expect_true('10 weights (0.592 to 0.610 g): the weight the formula uses is their average, 0.601 g',
   entry_weight(pg_temp.sv_r('SV Serving weight', 'weigh'), pg_temp.sv_e('SV Serving weight')) = 0.601
@@ -166,7 +165,8 @@ SELECT pg_temp.expect_true('The request for the Serving weight test waits for th
   (SELECT status = 'Awaiting consent' AND serving_role = 'Serving weight' AND step_run_id IS NULL AND test_id = pg_temp.sv_t('SV Serving weight') FROM split_request WHERE sample_id = pg_temp.sv_s(3)));
 SELECT pg_temp.expect_true('(it is listed with the sample''s split-off requests)', EXISTS (SELECT 1 FROM split_request_view WHERE sample_id = pg_temp.sv_s(3) AND serving_role = 'Serving weight'));
 SELECT pg_temp.expect_error_like('One request at a time', $$SELECT request_serving_test(pg_temp.sv_s(3), 'Serving weight', 'again')$$, 'already waits');
-SELECT decide_split_request((SELECT id FROM split_request WHERE sample_id = pg_temp.sv_s(3) AND serving_role = 'Serving weight'), 'Consent given', 'Client agreed by email to the serving weight test');
+-- the customer's consent (Java's SplitRequest.decide since migration 067), written here as Java writes it
+UPDATE split_request SET status = 'Consent given', decision_note = 'Client agreed by email to the serving weight test', decided_by = current_app_user(), decided_at = clock_timestamp() WHERE sample_id = pg_temp.sv_s(3) AND serving_role = 'Serving weight';
 SELECT pg_temp.expect_true('Consent given: the Serving weight test is ordered at its catalogue price and the request is closed (Ordered)',
   (SELECT status = 'Ordered' AND ordered_requested_test_id IS NOT NULL FROM split_request WHERE sample_id = pg_temp.sv_s(3) AND serving_role = 'Serving weight')
   AND (SELECT r.serving_order AND r.price = 40 FROM requested_test r WHERE r.sample_id = pg_temp.sv_s(3) AND r.test_id = pg_temp.sv_t('SV Serving weight')));

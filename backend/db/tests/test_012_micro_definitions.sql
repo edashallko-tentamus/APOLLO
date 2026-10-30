@@ -43,7 +43,7 @@ INSERT INTO test_version_analyte (test_version_id, analyte_id, result_type) VALU
 SELECT pg_temp.expect_true('A qualitative analyte defaults to Absent / Present, with Present meaning found',
   (SELECT result_values = '{Absent,Present}' AND found_values = '{Present}' FROM test_version_analyte WHERE test_version_id = pg_temp.v()));
 UPDATE test_version_analyte SET result_values = '{" ND ",ND*,D*,D,ND}', found_values = '{D*,D}' WHERE test_version_id = pg_temp.v();
-SELECT pg_temp.expect_true('Result values are trimmed and de-duplicated, keeping their order', (SELECT result_values FROM test_version_analyte WHERE test_version_id = pg_temp.v()) = '{ND,ND*,D*,D}');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): result values are trimmed and de-duplicated, keeping their order
 INSERT INTO workflow_step (test_version_id, step_key, step_name, step_type, sort_order, config) VALUES
  (pg_temp.v(), 'batch', 'Batch', 'Batching', 1, '{"max_samples": 20, "qc": [{"qc_type": "Positive Control", "qc_class": "Prep", "frequency": "Daily", "material": "Strains", "criteria": [{"limit_type": "Presence"}]}]}'),
  (pg_temp.v(), 'weigh', 'Weigh', 'Weighing', 2, '{"target_mode": "None"}'),

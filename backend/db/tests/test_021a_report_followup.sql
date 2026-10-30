@@ -118,9 +118,7 @@ SELECT set_config('lims.reason', 'Rule test', false);
 -------------------------------------------------------------------------------
 SELECT pg_temp.as_user('wd.ana');
 SELECT create_test(pg_temp.rf_cfl(), 'RF Uncertainty Test', (SELECT d.id FROM department d WHERE d.site_id = pg_temp.rf_cfl() AND d.department_code = 'WDC'), (SELECT id FROM method WHERE site_id = pg_temp.rf_cfl() LIMIT 1));
-SELECT pg_temp.expect_error_like('"Report ±" needs the uncertainty first',
-  $$INSERT INTO test_version_analyte (test_version_id, analyte_id, sort_order, result_type, reporting_unit, report_uncertainty)
-    SELECT v.id, (SELECT id FROM analyte WHERE analyte_name = 'WD Lead'), 1, 'Numeric', 'mg/kg', true FROM test_version v JOIN test t ON t.id = v.test_id WHERE t.test_name = 'RF Uncertainty Test'$$, 'uncertainty before');
+-- Moved to the Java backend in migration 066 (JUnit: DesignerRulesTest): "Report ±" needs the uncertainty first
 INSERT INTO test_version_analyte (test_version_id, analyte_id, sort_order, result_type, reporting_unit, uncertainty, report_uncertainty)
 SELECT v.id, (SELECT id FROM analyte WHERE analyte_name = 'WD Lead'), 1, 'Numeric', 'mg/kg', 0.04, true FROM test_version v JOIN test t ON t.id = v.test_id WHERE t.test_name = 'RF Uncertainty Test';
 SELECT pg_temp.expect_true('Stored per analyte: ± 0.04 in the result''s unit (the default kind), reported',

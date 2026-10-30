@@ -154,35 +154,14 @@ SELECT pg_temp.expect_true('(a batch of two samples has two CCV brackets, every 
 SELECT complete_step(pg_temp.m_run(pg_temp.m_bb(), 'batch'));
 SELECT pg_temp.expect_error_like('Media is released only for the tests it was qualified for: the qualified lot is refused for another test',
   $$INSERT INTO entry_material (step_run_id, entry_id, lot_id, purpose, volume, volume_unit) VALUES (pg_temp.m_run(pg_temp.m_bb(), 'read'), NULL, (pg_temp.m_lot('WD-TSA-1')).id, 'Media', 1, 'each')$$, 'released only for WD Micro Screen');
-SELECT pg_temp.as_user('wd.int');
-SELECT pg_temp.expect_error_like('Adding samples needs bench rights (testing.perform)',
-  $$SELECT add_batch_items(pg_temp.m_bb(), (SELECT jsonb_agg(jsonb_build_object('requested_test_id', p.requested_test_id)) FROM test_pool_view p WHERE p.test_version_id = pg_temp.m_ver('WD Bracket Assay')))$$, 'testing.perform');
-SELECT pg_temp.as_user('wd.ana');
-SELECT pg_temp.expect_error_like('Only samples waiting for the same test version can join',
-  $$SELECT add_batch_items(pg_temp.m_bb(), (SELECT jsonb_agg(jsonb_build_object('requested_test_id', p.requested_test_id)) FROM test_pool_view p WHERE p.test_version_id = pg_temp.m_ver('WD Growth Promotion')))$$, 'same test version');
-SELECT set_config('lims.signature_id', '', false);   -- no signature (Alex)
-SELECT add_batch_items(pg_temp.m_bb(), (SELECT jsonb_agg(jsonb_build_object('requested_test_id', p.requested_test_id, 'reprep_request_id', NULL)) FROM test_pool_view p WHERE p.test_version_id = pg_temp.m_ver('WD Bracket Assay')));
-SELECT pg_temp.expect_true('Added without a signature: 3 samples, the brackets follow (3 CCVs), the completed Batching step is open again to confirm, and the backlog is empty',
-  batch_client_sample_count(pg_temp.m_bb()) = 3 AND pg_temp.m_ccvs(pg_temp.m_bb()) = 3
-  AND (SELECT status FROM step_run WHERE id = pg_temp.m_run(pg_temp.m_bb(), 'batch')) = 'In progress'
-  AND NOT EXISTS (SELECT 1 FROM test_pool_view WHERE test_version_id = pg_temp.m_ver('WD Bracket Assay'))
-  AND (SELECT string_agg(label, ',' ORDER BY position) FROM batch_entry WHERE batch_id = pg_temp.m_bb() AND status = 'Active') LIKE 'CCV-1,%,CCV-3');
-SELECT pg_temp.expect_error_like('Nothing left to add', $$SELECT add_batch_items(pg_temp.m_bb(), jsonb_build_array(jsonb_build_object('requested_test_id', gen_random_uuid())))$$, 'no longer waiting');
-SELECT pg_temp.expect_error_like('QC entries are not removed by hand', $$SELECT remove_batch_entry((SELECT id FROM batch_entry WHERE batch_id = pg_temp.m_bb() AND label = 'CCV-1'))$$, 'Only samples');
-SELECT remove_batch_entry(pg_temp.m_entry(pg_temp.m_bb(), 'LOT-N1'));
-SELECT pg_temp.expect_true('Removed: back in the backlog, the brackets follow (2 CCVs), the entry kept in the record (not deleted)',
-  batch_client_sample_count(pg_temp.m_bb()) = 2 AND pg_temp.m_ccvs(pg_temp.m_bb()) = 2
-  AND EXISTS (SELECT 1 FROM test_pool_view WHERE test_version_id = pg_temp.m_ver('WD Bracket Assay') AND client_sample_id = 'LOT-N1')
-  AND EXISTS (SELECT 1 FROM batch_entry WHERE batch_id = pg_temp.m_bb() AND superseded_reason = 'Removed from the batch' AND removed_by = (SELECT id FROM app_user WHERE username = 'wd.ana'))
-  AND EXISTS (SELECT 1 FROM audit_log WHERE table_name = 'batch_entry' AND changed_fields ? 'removed_at' AND changed_by = (SELECT id FROM app_user WHERE username = 'wd.ana')));
-SELECT remove_batch_entry(pg_temp.m_entry(pg_temp.m_bb(), 'LOT-M2'));
-SELECT pg_temp.expect_error_like('The last sample is not removed (cancel the batch instead)', $$SELECT remove_batch_entry(pg_temp.m_entry(pg_temp.m_bb(), 'LOT-A2'))$$, 'cancel the batch instead');
-SELECT pg_temp.as_user('wd.ana');
-SELECT complete_step(pg_temp.m_run(pg_temp.m_bb(), 'batch'));
-INSERT INTO entry_value (step_run_id, entry_id, analyte_id, value_text) VALUES (pg_temp.m_run(pg_temp.m_bb(), 'read'), pg_temp.m_entry(pg_temp.m_bb(), 'LOT-A2'), pg_temp.m_ga(), 'Growth');
-SELECT pg_temp.expect_error_like('Once bench work is recorded the batch''s samples no longer change',
-  $$SELECT add_batch_items(pg_temp.m_bb(), (SELECT jsonb_agg(jsonb_build_object('requested_test_id', p.requested_test_id)) FROM test_pool_view p WHERE p.test_version_id = pg_temp.m_ver('WD Bracket Assay')))$$, 'has started');
-SELECT pg_temp.expect_error_like('... nor can one be removed', $$SELECT remove_batch_entry((SELECT id FROM batch_entry WHERE batch_id = pg_temp.m_bb() AND status = 'Active' AND entry_type = 'Sample' LIMIT 1))$$, 'has started');
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): adding samples needs bench rights (testing.perform; the database permission check stays)
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): only samples waiting for the same test version join a batch
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): added without a signature: the brackets follow the samples, a completed Batching step opens again, the run order is set again
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): nothing left to add is refused
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): QC entries are not removed by hand
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): removed: back in the backlog, the brackets follow, the entry kept (superseded, removed_at and removed_by)
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): the last sample is not removed (cancel the batch instead)
+-- Moved to the Java backend in migration 067 (JUnit: BenchRulesTest.batchEdits): once bench work is recorded the batch's samples no longer change (added or removed)
 
 -------------------------------------------------------------------------------
 -- 3. PURCHASING: web link, actual price, receiving into inventory

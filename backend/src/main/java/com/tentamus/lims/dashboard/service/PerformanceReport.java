@@ -184,14 +184,23 @@ public class PerformanceReport {
         List<Map<String, Object>> plans = q("""
             SELECT s.site_code, p.month, p.plan, p.revenue, p.costs FROM finance_plan p JOIN lab_site s ON s.id = p.site_id
               WHERE p.site_id = ANY($1) AND p.status = 'Active' AND p.month BETWEEN date_trunc('month', $2::date) AND $3 ORDER BY p.month, s.site_code, p.plan""", P);
+        // the period's samples first, then the turnaround of just those (0.37.1: joining sample_tat_view worked it out for every
+        // sample ever, once per row: over 10 minutes on Alex's data; asked by sample ID it takes about 2 s for a year)
         List<Map<String, Object>> samples = q("""
-            SELECT s.sample_code, s.client_sample_id, ls.site_code, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, s.matrix, s.received_at, s.logged_at,
-                t.day0, t.due_date, t.tests, t.completed_on, t.all_reported, t.hold_days, t.on_time, t.days_late,
+            SELECT s.id, s.sample_code, s.client_sample_id, ls.site_code, o.order_code, COALESCE(cl.display_name, cl.legal_name) AS client_name, s.matrix, s.received_at, s.logged_at,
                 (s.logged_at AT TIME ZONE ls.time_zone)::date AS logged_on
               FROM sample s JOIN lab_order o ON o.id = s.lab_order_id JOIN lab_site ls ON ls.id = o.site_id JOIN client cl ON cl.id = o.client_id
-              LEFT JOIN sample_tat_view t ON t.sample_id = s.id
               WHERE o.site_id = ANY($1) AND NOT cl.is_internal AND s.logged_at IS NOT NULL AND (s.logged_at AT TIME ZONE ls.time_zone)::date BETWEEN $2 AND $3
               ORDER BY s.logged_at, s.sample_code""", P);
+        Map<Object, Map<String, Object>> tat = new LinkedHashMap<>();
+        if (!samples.isEmpty())
+            for (Map<String, Object> t : q("""
+                SELECT sample_id, day0, due_date, tests, completed_on, all_reported, hold_days, on_time, days_late
+                  FROM sample_tat_view WHERE sample_id = ANY($1::uuid[])""", samples.stream().map(x -> x.get("id")).toList())) tat.put(t.get("sample_id"), t);
+        for (Map<String, Object> x : samples) {
+            Map<String, Object> t = tat.getOrDefault(x.remove("id"), Map.of());
+            for (String k : List.of("day0", "due_date", "tests", "completed_on", "all_reported", "hold_days", "on_time", "days_late")) x.put(k, t.get(k));
+        }
         List<Map<String, Object>> tests = q("""
             SELECT t.sample_code, ls.site_code, t.order_code, t.test_name, d.department_name, t.is_rush, t.day0, t.due_date, t.received_at, t.logged_at, t.approved_at,
                 t.reported_at, t.reported_on, t.login_days, t.lab_days, t.qa_days, t.hold_days, t.on_time, t.days_late

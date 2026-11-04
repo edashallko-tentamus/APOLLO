@@ -1,6 +1,6 @@
 {
   "name": "lims3-sandbox",
-  "version": "0.36.3",
+  "version": "0.37.1",
   "private": true,
   "description": "LIMS3 Sandbox: slices 1-3 (clients, catalogue pricing, quotes, lab orders, samples, intake, due dates, inventory, login and signatures, permissions and lab groups, equipment, purchasing, Workflow Designer WD-1, chemistry execution WD-2, QC Review WD-3, micro bench WD-4, and on to invoicing I-1 and dashboards D-1)",
   "main": "frontend/server.js",
@@ -49,6 +49,7 @@
     "test:cancel": "node tests/e2e_cancel_thermometer.js http://localhost:3000",
     "test:paging": "node tests/e2e_paging.js http://localhost:3000",
     "test:charges": "node tests/e2e_charges_ordering.js http://localhost:3000",
+    "test:kpis": "node tests/e2e_kpis.js http://localhost:3000",
     "test:security": "node tests/e2e_security.js http://localhost:3000"
   },
   "engines": {

@@ -2,6 +2,7 @@ package com.tentamus.lims.dashboard.service;
 
 import com.tentamus.lims.dashboard.domain.DashboardLayout;
 import com.tentamus.lims.dashboard.domain.FinanceFigure;
+import com.tentamus.lims.dashboard.domain.LabKpis;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.access.AccessPolicy;
 import com.tentamus.lims.core.access.UserAccess;
@@ -11,6 +12,7 @@ import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.ApiExceptionHandler;
 import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
+import java.text.Collator;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -187,7 +189,7 @@ public class DashboardService {
     }
 
     /** One widget's figures; an unknown widget gives {} (Node: W[code] ? ... : {}). */
-    private Map<String, Object> widget(String code, List<String> s, RequestContext c) {
+    private Map<String, Object> widget(String code, List<String> s, RequestContext c, String board) {
         switch (code) {
             case "my_work": {
                 Map<String, Object> x = one("""
@@ -409,6 +411,12 @@ public class DashboardService {
             }
             case "network": return network(s);
             case "finance": case "lab_finance": return map("finance", financeRows(s), "note", FIN_NOTE);
+            case "lab_score": return labScore(s);
+            case "top_tests": return topTests(s);
+            case "top_clients": return topClients(s);
+            case "departments": return departmentsWidget(s, board);
+            case "staff": return staff(s);
+            case "my_numbers": return myNumbers(s, c);
             default: return new LinkedHashMap<>();
         }
     }
@@ -486,6 +494,315 @@ public class DashboardService {
     private static Object nn(Object v) { return v == null ? null : js(N(v)); }
 
     private static Object e(Object rv, Object c) { return rv == null && c == null ? null : js(N(rv) - N(c)); }
+
+    // ---------------------------------------------------------------- K-1 KPIs (0.37.0)
+    // Revenue here is the invoice lines issued (credit notes taken off), from revenue_line_view; it adds up to the
+    // Revenue widget. Periods, on the first lab's date: CM this month to date, PM last month, CY this year to date,
+    // PY YTD last year to the same date, PY the whole of last year.
+    private static final String PY0 = "(date_trunc('year', $2::date) - interval '1 year')::date";
+    private static final String PYSP = "(($2::date - interval '1 year')::date + 1)";
+    private static final String PERIODS = "\n"
+        + "      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= " + M0 + " AND r.invoice_date < " + M1 + "), 0) AS cm,\n"
+        + "      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= " + PM + " AND r.invoice_date < " + M0 + "), 0) AS pm,\n"
+        + "      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= " + Y0 + " AND r.invoice_date < " + Y1 + "), 0) AS cy,\n"
+        + "      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= " + PY0 + " AND r.invoice_date < " + PYSP + "), 0) AS pyytd,\n"
+        + "      COALESCE(sum(r.amount) FILTER (WHERE r.invoice_date >= " + PY0 + " AND r.invoice_date < " + Y0 + "), 0) AS py";
+    private static final Collator COLLATE = Collator.getInstance(Locale.US);
+
+    private double cyTotal(List<String> s, Object d) {
+        return N(one("SELECT COALESCE(sum(r.amount), 0) AS v FROM revenue_line_view r\n"
+            + "      WHERE r.site_id = ANY($1) AND r.invoice_date >= " + Y0 + " AND r.invoice_date < " + Y1, s, d).get("v"));
+    }
+
+    private static Map<String, Object> money(Object v) { return map("v", js(N(v)), "f", "money"); }
+
+    private static Map<String, Object> pctc(Double v) { return map("v", js(v), "f", "pct"); }
+
+    private static Map<String, Object> col(String t) { return map("t", t); }
+
+    private static Map<String, Object> num(String t) { return map("t", t, "num", true); }
+
+    private static Map<String, Object> num(String t, String help) { return map("t", t, "num", true, "help", help); }
+
+    private Map<String, Object> labCodes(List<String> s) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (Map<String, Object> x : q("SELECT id, site_code FROM lab_site WHERE id = ANY($1)", s)) m.put((String) x.get("id"), x.get("site_code"));
+        return m;
+    }
+
+    private record LabMonth(LabKpis.Score k, double rev) {}
+
+    private LabMonth labScoreFor(String site, Object d, boolean cur) {
+        String from = cur ? M0 : PM, to = cur ? M1 : M0;
+        Map<String, Object> x = one("SELECT\n"
+            + "        (SELECT count(*) FILTER (WHERE on_time) FROM sample_tat_view WHERE site_id = $1 AND completed_on >= " + from + " AND completed_on < " + to + ") AS ok,\n"
+            + "        (SELECT count(*) FROM sample_tat_view WHERE site_id = $1 AND completed_on >= " + from + " AND completed_on < " + to + ") AS n,\n"
+            + "        (SELECT COALESCE(sum(total), 0) FROM revenue_view WHERE site_id = $1 AND invoice_date >= " + from + " AND invoice_date < " + to + ") AS rev,\n"
+            + "        (SELECT sum(revenue) FROM finance_plan WHERE site_id = $1 AND status = 'Active' AND month = " + from + " AND plan = 'Budget forecast') AS bud,\n"
+            + "        (SELECT sum(revenue) FROM finance_plan WHERE site_id = $1 AND status = 'Active' AND month = " + from + " AND plan = 'Monthly forecast') AS fc,\n"
+            + "        extract(day FROM $2::date)::int AS day, extract(day FROM (" + M1 + " - 1))::int AS days", site, d);
+        double frac = cur ? N(x.get("day")) / N(x.get("days")) : 1;
+        return new LabMonth(LabKpis.score(N(x.get("ok")), N(x.get("n")), N(x.get("rev")), x.get("bud") == null ? null : N(x.get("bud")),
+            x.get("fc") == null ? null : N(x.get("fc")), frac), N(x.get("rev")));
+    }
+
+    private static String scoreTone(Double v) { return v == null ? "" : v >= 85 ? "good" : v < 70 ? "bad" : "warn"; }
+
+    private Map<String, Object> labScore(List<String> s) {
+        Object d = today(s);
+        Map<String, Object> codes = labCodes(s);
+        record Row(String site, LabKpis.Score cm, LabKpis.Score pm, double rev) {}
+        List<Row> rows = new ArrayList<>();
+        for (String site : s) { LabMonth cm = labScoreFor(site, d, true); rows.add(new Row(site, cm.k(), labScoreFor(site, d, false).k(), cm.rev())); }
+        rows.sort((a, b) -> Double.compare(N(b.cm().score()), N(a.cm().score())));
+        List<Object> table = new ArrayList<>();
+        for (Row r : rows)
+            table.add(List.of(map("text", codes.get(r.site())), map("v", js(r.cm().score()), "f", "score", "tone", scoreTone(r.cm().score())),
+                map("v", js(r.pm().score()), "f", "score", "tone", scoreTone(r.pm().score())),
+                pctc(r.cm().onTime()), pctc(r.cm().budget()), pctc(r.cm().forecast()), money(r.rev())));
+        Map<String, Object> out = map("table", map("columns", List.of(col("Lab"), num("Score this month"), num("Last month"), num("Samples on time", "60 % of the score"),
+                num("Revenue vs budget", "10 % of the score; this month against the budget for the days gone"),
+                num("Revenue vs forecast", "30 % of the score; this month against the monthly forecast for the days gone"), num("Revenue this month")),
+                "rows", table, "empty", "No lab to score."),
+            "note", "Score out of 100: samples on time (complete COA by the due date, this month) 60 %, revenue against the budget forecast 10 %, against the monthly forecast 30 %. "
+                + "This month is judged to date (the month's budget and forecast in proportion to the days gone); revenue counts up to 100 % of the plan. A part with nothing to judge is left out and the others scaled up.");
+        if (rows.size() == 1) {
+            LabKpis.Score cm = rows.get(0).cm(), pm = rows.get(0).pm();
+            out.put("kpis", List.of(kpi("label", "Lab Score this month", "value", js(cm.score()), "fmt", "score", "tone", scoreTone(cm.score()), "sub", cm.partial() ? "some parts not scored yet" : ""),
+                kpi("label", "Last month", "value", js(pm.score()), "fmt", "score", "tone", scoreTone(pm.score()))));
+        }
+        return out;
+    }
+
+    // The top 20 tests by orders in the last 12 months. Swing flag: last month's orders against the mean and standard
+    // deviation of the 12 months before it (outside 2 SD = flagged high or low).
+    private Map<String, Object> topTests(List<String> s) {
+        Object d = today(s);
+        Map<String, Object> codes = labCodes(s);
+        boolean many = s.size() > 1;
+        List<Map<String, Object>> top = q("SELECT o.test_id, o.test_name, o.test_code, t.site_id, count(*) AS n12,\n"
+            + "        count(*) FILTER (WHERE o.ordered_on >= " + M0 + ") AS n_cm\n"
+            + "      FROM test_order_view o JOIN test t ON t.id = o.test_id\n"
+            + "      WHERE o.site_id = ANY($1) AND o.ordered_on > ($2::date - interval '1 year')::date AND o.ordered_on <= $2::date\n"
+            + "      GROUP BY 1, 2, 3, 4 ORDER BY count(*) DESC, o.test_name LIMIT 20", s, d);
+        if (top.isEmpty()) return map("table", map("columns", List.of(col("Test")), "rows", List.of(), "empty", "No client test was ordered in the last 12 months."));
+        List<Object> ids = new ArrayList<>();
+        for (Map<String, Object> t : top) ids.add(t.get("test_id"));
+        List<Map<String, Object>> months = q("WITH m AS (SELECT generate_series((date_trunc('month', $2::date) - interval '13 months')::date, (date_trunc('month', $2::date) - interval '1 month')::date, interval '1 month')::date AS month)\n"
+            + "      SELECT t.id AS test_id, m.month, (SELECT count(*) FROM test_order_view o WHERE o.test_id = t.id AND o.site_id = ANY($1) AND date_trunc('month', o.ordered_on) = m.month) AS n\n"
+            + "        FROM unnest($3::uuid[]) t(id) CROSS JOIN m ORDER BY 1, 2", s, d, ids);
+        List<Map<String, Object>> rev = q("SELECT r.test_id, " + PERIODS + " FROM revenue_line_view r WHERE r.site_id = ANY($1) AND r.test_id = ANY($3::uuid[]) AND r.invoice_date >= " + PY0 + " GROUP BY 1", s, d, ids);
+        List<Map<String, Object>> clients = q("""
+            SELECT x.test_id, x.client_id, x.name, x.n FROM (
+                SELECT o.test_id, o.client_id, COALESCE(c.display_name, c.legal_name) AS name, count(*) AS n,
+                       row_number() OVER (PARTITION BY o.test_id ORDER BY count(*) DESC, COALESCE(c.display_name, c.legal_name)) AS rk
+                  FROM test_order_view o JOIN client c ON c.id = o.client_id
+                 WHERE o.site_id = ANY($1) AND o.test_id = ANY($3::uuid[]) AND o.ordered_on > ($2::date - interval '1 year')::date
+                 GROUP BY 1, 2, 3) x WHERE x.rk <= 3 ORDER BY x.test_id, x.rk""", s, d, ids);
+        double total = cyTotal(s, d);
+        Map<Object, Map<String, Object>> byRev = new LinkedHashMap<>();
+        for (Map<String, Object> x : rev) byRev.put(x.get("test_id"), x);
+        List<Object> rows = new ArrayList<>();
+        for (Map<String, Object> t : top) {
+            Object id = t.get("test_id");
+            List<Double> ns = new ArrayList<>();
+            for (Map<String, Object> m : months) if (id.equals(m.get("test_id"))) ns.add(N(m.get("n")));
+            LabKpis.Swing sw = LabKpis.swing(ns);
+            Map<String, Object> rv = byRev.getOrDefault(id, Map.of());
+            List<Object> links = new ArrayList<>();
+            for (Map<String, Object> cl : clients) if (id.equals(cl.get("test_id")))
+                links.add(map("text", cl.get("name") + " (" + Js.number(N(cl.get("n"))) + ")", "href", "#/clients/" + cl.get("client_id")));
+            String flagTone = tone(!sw.flag().isEmpty(), "flag");
+            List<Object> row = new ArrayList<>();
+            row.add(map("text", t.get("test_name"), "href", "#/catalog/" + id));
+            if (many) row.add(map("text", Js.orBlank(codes.get(Js.string(t.get("site_id"))))));
+            row.add(map("v", js(N(t.get("n12"))), "f", "int"));
+            row.add(map("v", js(N(t.get("n_cm"))), "f", "int"));
+            row.add(map("v", js(sw.last()), "f", "int", "tone", flagTone,
+                "title", "12 months before: average " + Js.toFixed(sw.mean(), 1) + " a month, SD " + Js.toFixed(sw.sd(), 1)));
+            row.add(map("text", sw.flag().equals("high") ? "▲ high" : sw.flag().equals("low") ? "▼ low" : "", "tone", flagTone));
+            row.add(money(rv.get("cm")));
+            row.add(money(rv.get("cy")));
+            row.add(pctc(pct(rv.get("cy"), total)));
+            row.add(map("links", links));
+            rows.add(row);
+        }
+        List<Object> cols = new ArrayList<>(List.of(col("Test")));
+        if (many) cols.add(col("Lab"));
+        cols.addAll(List.of(num("Orders, 12 months"), num("This month"), num("Last month", "Flagged when outside 2 standard deviations of the 12 months before"), col("Swing"),
+            num("Revenue this month"), num("Revenue this year"), num("% of revenue", "Share of this year's revenue of " + (many ? "the labs shown" : "the lab")),
+            col("Top 3 clients (orders, 12 months)")));
+        return map("table", map("columns", cols, "rows", rows),
+            "note", "Ranked by client tests ordered in the last 12 months (internal work left out). Swing: last month's orders outside 2 standard deviations of the monthly average of the 12 months before. Revenue = invoice lines issued, credit notes taken off.");
+    }
+
+    // The top 20 clients by revenue this year
+    private Map<String, Object> topClients(List<String> s) {
+        Object d = today(s);
+        boolean many = s.size() > 1;
+        List<Map<String, Object>> rows = q("SELECT r.client_id, COALESCE(c.display_name, c.legal_name) AS name, c.client_code, " + PERIODS + "\n"
+            + "        FROM revenue_line_view r JOIN client c ON c.id = r.client_id\n"
+            + "       WHERE r.site_id = ANY($1) AND r.invoice_date >= " + PY0 + " AND NOT c.is_internal\n"
+            + "       GROUP BY 1, 2, 3 ORDER BY 6 DESC, 8 DESC, 2 LIMIT 20", s, d);
+        double total = cyTotal(s, d);
+        List<Object> out = new ArrayList<>();
+        for (Map<String, Object> x : rows)
+            out.add(List.of(map("text", x.get("name"), "href", "#/clients/" + x.get("client_id")), money(x.get("cm")), money(x.get("pm")), money(x.get("cy")), money(x.get("pyytd")), money(x.get("py")),
+                map("v", js(dev(N(x.get("cy")), N(x.get("pyytd")))), "f", "dev"), pctc(pct(x.get("cy"), total))));
+        return map("table", map("columns", List.of(col("Client"), num("CM", "This month to date"), num("PM", "Last month"), num("CY", "This year to date"),
+                num("PY to date", "Last year to the same date"), num("PY", "The whole of last year"), num("CY vs PY to date"),
+                num(many ? "% of group" : "% of lab", "Share of this year's revenue")), "rows", out, "empty", "No revenue from clients since the start of last year."),
+            "note", "Ranked by revenue this year to date (invoice lines issued, credit notes taken off, kits and other charges included). % of "
+                + (many ? "the revenue of every lab shown" : "the lab's revenue") + " this year.");
+    }
+
+    // Departments. GM (and any board with one lab or a few): every department of the labs, with revenue and work.
+    // Executive: the top 10 departments across all labs by revenue this year, with their share of the lab and the group.
+    private Map<String, Object> departmentsWidget(List<String> s, String board) {
+        Object d = today(s);
+        Map<String, Object> codes = labCodes(s);
+        boolean exec = "executive".equals(board);
+        List<Map<String, Object>> rev = new ArrayList<>(q("SELECT dp.id, dp.site_id, dp.department_name, " + PERIODS + "\n"
+            + "        FROM department dp LEFT JOIN revenue_line_view r ON r.department_id = dp.id AND r.invoice_date >= " + PY0 + "\n"
+            + "       WHERE dp.site_id = ANY($1) AND dp.status = 'Active' GROUP BY 1, 2, 3", s, d));
+        Map<Object, Double> labTot = new LinkedHashMap<>();
+        for (Map<String, Object> x : q("SELECT r.site_id, COALESCE(sum(r.amount), 0) AS v FROM revenue_line_view r WHERE r.site_id = ANY($1)\n"
+            + "        AND r.invoice_date >= " + Y0 + " AND r.invoice_date < " + Y1 + " GROUP BY 1", s, d)) labTot.put(x.get("site_id"), N(x.get("v")));
+        double group = 0;
+        for (double v : labTot.values()) group += v;
+        // shortcut: java.text.Collator stands in for JavaScript's localeCompare; differs only on unusual names
+        rev.sort((a, b) -> { int c = Double.compare(N(b.get("cy")), N(a.get("cy"))); return c != 0 ? c : COLLATE.compare(Js.string(a.get("department_name")), Js.string(b.get("department_name"))); });
+        List<Object> revCols = List.of(num("CM", "This month to date"), num("PM", "Last month"), num("CY", "This year to date"),
+            num("PY to date", "Last year to the same date"), num("PY", "The whole of last year"), num("% of lab", "Share of the lab's revenue this year"));
+        java.util.function.Function<Map<String, Object>, List<Object>> revCells = x -> List.of(money(x.get("cm")), money(x.get("pm")), money(x.get("cy")), money(x.get("pyytd")), money(x.get("py")),
+            pctc(pct(x.get("cy"), labTot.get(x.get("site_id")))));
+        if (exec) {
+            List<Object> rows = new ArrayList<>();
+            for (Map<String, Object> x : rev.subList(0, Math.min(10, rev.size()))) {
+                List<Object> row = new ArrayList<>(List.of(map("text", codes.get(Js.string(x.get("site_id")))), map("text", x.get("department_name"))));
+                row.addAll(revCells.apply(x));
+                row.add(pctc(pct(x.get("cy"), group)));
+                rows.add(row);
+            }
+            List<Object> cols = new ArrayList<>(List.of(col("Lab"), col("Department")));
+            cols.addAll(revCols);
+            cols.add(num("% of group", "Share of every lab's revenue this year"));
+            return map("table", map("columns", cols, "rows", rows, "empty", "No department has revenue."),
+                "note", "The 10 departments with the most revenue this year across every lab (a test's revenue counts to its department; kits and other charges have none). For each lab's departments in detail, open the GM dashboard.");
+        }
+        List<Object> ids = new ArrayList<>();
+        for (Map<String, Object> x : rev) ids.add(x.get("id"));
+        Map<Object, Map<String, Object>> byOps = new LinkedHashMap<>();
+        for (Map<String, Object> x : q("SELECT dp.id,\n"
+            + "        (SELECT count(*) FROM test_tat_view v WHERE v.department_id = dp.id AND v.reported_on >= " + M0 + ") AS reported,\n"
+            + "        (SELECT count(*) FILTER (WHERE q.on_time) FROM test_qc_tat_view q JOIN requested_test rt ON rt.id = q.requested_test_id JOIN test t ON t.id = rt.test_id\n"
+            + "          WHERE t.department_id = dp.id AND q.approved_on >= " + M0 + ") AS ot_ok,\n"
+            + "        (SELECT count(*) FROM test_qc_tat_view q JOIN requested_test rt ON rt.id = q.requested_test_id JOIN test t ON t.id = rt.test_id\n"
+            + "          WHERE t.department_id = dp.id AND q.approved_on >= " + M0 + ") AS ot_n,\n"
+            + "        (SELECT count(*) FROM test_pool_view p WHERE p.department_id = dp.id AND NOT p.is_media) AS backlog,\n"
+            + "        (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY v.lab_days) FROM test_tat_view v WHERE v.department_id = dp.id AND v.reported_at > now() - interval '30 days') AS lab_med,\n"
+            + "        (SELECT count(*) FROM test_batch b JOIN test t ON t.id = b.test_id JOIN lab_site si ON si.id = b.site_id\n"
+            + "          WHERE t.department_id = dp.id AND NOT b.is_verification AND b.returned_at IS NOT NULL AND (b.returned_at AT TIME ZONE si.time_zone)::date >= " + M0 + ") AS returned\n"
+            + "      FROM department dp WHERE dp.site_id = ANY($1) AND dp.id = ANY($3::uuid[])", s, d, ids)) byOps.put(x.get("id"), x);
+        boolean many = s.size() > 1;
+        List<Object> rows = new ArrayList<>();
+        for (Map<String, Object> x : rev) {
+            Map<String, Object> o = byOps.getOrDefault(x.get("id"), Map.of());
+            List<Object> row = new ArrayList<>();
+            if (many) row.add(map("text", codes.get(Js.string(x.get("site_id")))));
+            row.add(map("text", x.get("department_name")));
+            row.addAll(revCells.apply(x));
+            row.add(map("v", js(N(o.get("reported"))), "f", "int"));
+            row.add(pctc(pct(o.get("ot_ok"), o.get("ot_n"))));
+            row.add(map("v", js(N(o.get("backlog"))), "f", "int"));
+            row.add(map("v", o.get("lab_med") == null ? null : js(Math.round(N(o.get("lab_med")) * 10) / 10.0), "f", "dec"));
+            row.add(map("v", js(N(o.get("returned"))), "f", "int"));
+            rows.add(row);
+        }
+        List<Object> cols = new ArrayList<>();
+        if (many) cols.add(col("Lab"));
+        cols.add(col("Department"));
+        cols.addAll(revCols);
+        cols.addAll(List.of(num("Tests reported (CM)"), num("On time (CM)", "Tests approved in QC Review by their due date this month"),
+            num("Backlog now", "Tests waiting to be batched"), num("Median lab days", "Logged to QC Review approval, tests reported in the last 30 days"),
+            num("Batches returned (CM)", "Batches returned to the analyst from QC Review this month")));
+        return map("table", map("columns", cols, "rows", rows, "empty", "The lab has no departments."),
+            "note", "Revenue: invoice lines issued for the department's tests (kits and other charges have no department). Work: this month unless stated.");
+    }
+
+    // People: each person's work and quality figures at the labs, this month and last month (Alex: work + quality,
+    // seen by General Managers and Lab Supervisors; each person sees their own on Home, My numbers).
+    private Map<String, List<Map<String, Object>>> peopleFigures(List<String> s, Object d, String onlyUser) {
+        Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();
+        String[][] periods = { { "cm", M0, M1 }, { "pm", PM, M0 } };
+        for (String[] p : periods) {
+            String a = p[1], b = p[2];
+            out.put(p[0], q("WITH steps AS (\n"
+                + "          SELECT sr.performed_by AS u, sr.batch_id FROM step_run sr JOIN test_batch b ON b.id = sr.batch_id JOIN lab_site si ON si.id = b.site_id JOIN workflow_step ws ON ws.id = sr.step_id\n"
+                + "           WHERE b.site_id = ANY($1) AND NOT b.is_verification AND sr.status = 'Completed' AND sr.performed_by IS NOT NULL AND ws.step_type <> 'QC Review'\n"
+                + "             AND (sr.completed_at AT TIME ZONE si.time_zone)::date >= " + a + " AND (sr.completed_at AT TIME ZONE si.time_zone)::date < " + b + " AND ($3::uuid IS NULL OR sr.performed_by = $3)),\n"
+                + "        worked AS (SELECT DISTINCT u, batch_id FROM steps),\n"
+                + "        tests AS (SELECT DISTINCT w.u, e.requested_test_id FROM worked w JOIN batch_entry e ON e.batch_id = w.batch_id AND e.entry_type = 'Sample' AND e.status = 'Active'),\n"
+                + "        rv AS (SELECT b.reviewed_by AS u, count(*) AS n FROM test_batch b JOIN lab_site si ON si.id = b.site_id\n"
+                + "           WHERE b.site_id = ANY($1) AND NOT b.is_verification AND b.reviewed_by IS NOT NULL AND (b.reviewed_at AT TIME ZONE si.time_zone)::date >= " + a + "\n"
+                + "             AND (b.reviewed_at AT TIME ZONE si.time_zone)::date < " + b + " AND ($3::uuid IS NULL OR b.reviewed_by = $3) GROUP BY 1),\n"
+                + "        fz AS (SELECT rf.finalized_by AS u, count(*) AS n FROM result_finalization rf JOIN requested_test rt ON rt.id = rf.requested_test_id JOIN sample sm ON sm.id = rt.sample_id\n"
+                + "             JOIN lab_order o ON o.id = sm.lab_order_id JOIN lab_site si ON si.id = o.site_id\n"
+                + "           WHERE o.site_id = ANY($1) AND (rf.finalized_at AT TIME ZONE si.time_zone)::date >= " + a + " AND (rf.finalized_at AT TIME ZONE si.time_zone)::date < " + b + "\n"
+                + "             AND ($3::uuid IS NULL OR rf.finalized_by = $3) GROUP BY 1),\n"
+                + "        people AS (SELECT u FROM steps UNION SELECT u FROM rv UNION SELECT u FROM fz)\n"
+                + "        SELECT p.u, au.full_name,\n"
+                + "          (SELECT count(*) FROM steps x WHERE x.u = p.u) AS steps,\n"
+                + "          (SELECT count(*) FROM worked x WHERE x.u = p.u) AS batches,\n"
+                + "          (SELECT count(*) FROM tests x WHERE x.u = p.u) AS tests,\n"
+                + "          (SELECT count(*) FROM worked x JOIN test_batch b ON b.id = x.batch_id WHERE x.u = p.u AND b.returned_at IS NOT NULL) AS returned,\n"
+                + "          (SELECT count(*) FILTER (WHERE qv.on_time) FROM tests x JOIN test_qc_tat_view qv ON qv.requested_test_id = x.requested_test_id WHERE x.u = p.u) AS ot_ok,\n"
+                + "          (SELECT count(*) FROM tests x JOIN test_qc_tat_view qv ON qv.requested_test_id = x.requested_test_id WHERE x.u = p.u) AS ot_n,\n"
+                + "          COALESCE((SELECT n FROM rv WHERE rv.u = p.u), 0) AS reviews,\n"
+                + "          COALESCE((SELECT n FROM fz WHERE fz.u = p.u), 0) AS finalized,\n"
+                + "          (SELECT string_agg(DISTINCT dp.department_name, ', ') FROM group_member m JOIN lab_group g ON g.id = m.group_id JOIN department dp ON dp.id = g.department_id\n"
+                + "            WHERE m.user_id = p.u AND m.status = 'Active' AND g.status = 'Active' AND g.site_id = ANY($1)) AS departments\n"
+                + "        FROM people p JOIN app_user au ON au.id = p.u WHERE NOT au.is_automated ORDER BY au.full_name", s, d, onlyUser));
+        }
+        return out;
+    }
+
+    private static final List<Object> PEOPLE_COLS = List.of(col("Person"), col("Departments"), num("Steps signed", "Bench steps completed and signed (QC Review not counted)"),
+        num("Batches", "Batches in which the person signed a bench step"), num("Tests", "Client tests in those batches"),
+        num("Batches returned", "Of those batches, returned to the analyst from QC Review at least once"),
+        num("On time", "Of those tests approved in QC Review, the share approved by their due date"),
+        num("Batches reviewed"), num("Tests finalized", "Tests released on a COA in Report Finalization"));
+    private static final String PEOPLE_NOTE = "Work signed at the lab this month or last month (verification runs left out). On time is judged on the tests of the batches the person worked on, so it is shared by everyone on those batches.";
+
+    private static List<Object> peopleRow(Map<String, Object> x) {
+        return List.of(map("text", x.get("full_name")), map("text", Js.orBlank(x.get("departments"))), map("v", js(N(x.get("steps"))), "f", "int"),
+            map("v", js(N(x.get("batches"))), "f", "int"), map("v", js(N(x.get("tests"))), "f", "int"),
+            map("v", js(N(x.get("returned"))), "f", "int", "tone", tone(N(x.get("returned")) != 0, "flag")), pctc(pct(x.get("ot_ok"), x.get("ot_n"))),
+            map("v", js(N(x.get("reviews"))), "f", "int"), map("v", js(N(x.get("finalized"))), "f", "int"));
+    }
+
+    private Map<String, Object> staff(List<String> s) {
+        Map<String, List<Map<String, Object>>> f = peopleFigures(s, today(s), null);
+        Map<String, Object> tables = new LinkedHashMap<>();
+        for (String k : List.of("cm", "pm")) {
+            List<Object> rows = new ArrayList<>();
+            for (Map<String, Object> x : f.get(k)) rows.add(peopleRow(x));
+            tables.put(k, map("columns", PEOPLE_COLS, "rows", rows, "empty", "Nobody signed work in this period."));
+        }
+        return map("tabbed", map("tabs", List.of(List.of("cm", "This month"), List.of("pm", "Last month")), "tables", tables), "note", PEOPLE_NOTE);
+    }
+
+    private Map<String, Object> myNumbers(List<String> s, RequestContext c) {
+        Map<String, List<Map<String, Object>>> f = peopleFigures(s, today(s), c.userId());
+        Map<String, Object> cm = f.get("cm").isEmpty() ? Map.of() : f.get("cm").get(0), pm = f.get("pm").isEmpty() ? Map.of() : f.get("pm").get(0);
+        java.util.function.BiFunction<String, String, Map<String, Object>> k = (label, field) ->
+            kpi("label", label, "value", js(N(cm.get(field))), "sub", "last month " + Js.number(N(pm.get(field))));
+        Double otCm = pct(cm.get("ot_ok"), cm.get("ot_n")), otPm = pct(pm.get("ot_ok"), pm.get("ot_n"));
+        return map("kpis", List.of(k.apply("Steps signed this month", "steps"), k.apply("Batches this month", "batches"), k.apply("Tests this month", "tests"),
+                kpi("label", "On time this month", "value", js(otCm), "fmt", "pct", "sub", "last month " + (otPm == null ? "–" : Js.number(otPm) + " %")),
+                k.apply("Batches returned", "returned"), k.apply("Batches reviewed", "reviews"), k.apply("Tests finalized", "finalized")),
+            "note", PEOPLE_NOTE);
+    }
 
     // ---------------------------------------------------------------- the lists behind the numbers
     private record Detail(String title, String sql, boolean today) {}
@@ -567,8 +884,8 @@ public class DashboardService {
     // ---------------------------------------------------------------- boards
     private List<Map<String, Object>> widgetsFor(RequestContext c, String board, List<String> sites) {
         if (board.equals("home")) return q("SELECT * FROM my_home_widgets($1, $2)", sites.get(0), c.userId());
-        List<String> order = board.equals("executive") ? List.of("network", "finance", "revenue", "projection", "wip", "samples", "on_time_samples", "on_time", "tat")
-            : List.of("lab_finance", "revenue", "projection", "wip", "samples", "on_time_samples", "on_time", "tat", "network", "overdue", "rush", "quotes");
+        List<String> order = board.equals("executive") ? List.of("lab_score", "network", "finance", "top_clients", "top_tests", "departments", "revenue", "projection", "wip", "samples", "on_time_samples", "on_time", "tat")
+            : List.of("lab_score", "lab_finance", "revenue", "projection", "wip", "samples", "on_time_samples", "on_time", "tat", "top_clients", "top_tests", "departments", "staff", "network", "overdue", "rush", "quotes");
         List<Map<String, Object>> ws = new ArrayList<>(q("SELECT * FROM dashboard_widget WHERE $1 = ANY (boards) ORDER BY sort_order", board));
         ws.sort((a, b) -> rank(order, a) - rank(order, b));
         return ws;
@@ -615,7 +932,7 @@ public class DashboardService {
             Map<String, Object> got = live || refresh ? null : cache.get(key);
             if (got == null) {
                 got = new LinkedHashMap<>();
-                try { got.put("data", widget(code, sites, c)); got.put("error", null); }
+                try { got.put("data", widget(code, sites, c, board)); got.put("error", null); }
                 catch (RuntimeException e) { got.put("error", errorText(e)); }   // Node leaves data undefined: the key is not sent
                 got.put("at", now());
                 if (!live && got.get("error") == null) remember(key, got);

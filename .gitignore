@@ -2,6 +2,7 @@
 data/
 backup*/
 node_modules/
+frontend/app/dist/
 tests/screens/
 *.log
 docs/ontology_vault/.obsidian/

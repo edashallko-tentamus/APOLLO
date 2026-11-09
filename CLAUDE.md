@@ -9,16 +9,32 @@ Writing style for Alex: lead with the answer, keep it short, push back directly 
 - A **Sandbox** (non-GxP) build of LIMS3. Demo data is fictional. It is a working prototype that will later be promoted, under change control, through Test/Validation to Production (first lab: CFL). Validation is GAMP 5 Category 5 (bespoke), documented per module (URS, FS, RTM, risk assessment, IQ/OQ/PQ).
 - The design source of truth is the ontology vault in `docs/ontology_vault/` (Obsidian format). Read the relevant Business Objects, Rules and Decisions there before designing anything. When Alex makes a new design decision, add a decision note in `docs/ontology_vault/08 Decisions/` in the same format as the existing ones, and update the affected objects and rules.
 
+## Project layout: backend and front end (read this first)
+
+Two programs, and **no Node backend** (Edashall Konah, 2026-10-30). **Every path in the rest of this file and in the build log is an old one; read it through this map:**
+
+| Old path | Now |
+|---|---|
+| `server/`, later `backend/server/` (the Node backend) | gone: `backend/` (Java, Spring Boot) answers every route |
+| `db/` (migrations, seeds, rule tests) | `backend/db/` (the Java backend applies and runs them) |
+| `public/` (the screens) | `frontend/public/` |
+| `server/xlsx.js` (used by two browser tests) | `tests/lib/xlsx.js` |
+| `start.js` | `npm run start:backend` (Maven, Java only) and `frontend/server.js` (the screens, Node) |
+
+- **Backend** (`backend`): the JSON API only, on `127.0.0.1:3001` (`LIMS_API_PORT`). It migrates the database at start and runs the background jobs. It reads `backend/.env` itself (`core/config/Env`) and trusts the front end's X-Forwarded-For by default (`LIMS_TRUST_PROXY`, default 1). The backend is Java only: no Node file belongs in `backend/`. Security headers for API answers and files are set there.
+- **Front end** (`frontend/server.js`, Node, not a backend): serves the screens on port 3000 (`PORT`) and forwards every `/api` request unchanged to `LIMS_API_URL` (default `http://127.0.0.1:3001`), so the browser sees one address (same cookie, same security policy, no CORS). Security headers for pages are set here. `PORT` also tells the backend the address people open (links in emails and PDFs).
+- **For Claude in the cloud:** deliver files to the new paths. Backend code goes into `backend`, never as Node files.
+
 ## How to run it (do this for Alex)
 
-1. `npm install` (installs the embedded PostgreSQL, PGlite; no admin rights or database server needed)
-2. `npm test` (builds a fresh in-memory database and runs every rule test; all must pass)
-3. `npm start`, then open http://localhost:3000 in the Browser pane
-4. `npm run reset` deletes the local database (`data/pgdata`) so the next start rebuilds it with demo data. Use it after changing migrations or the seed.
+The app connects to an existing PostgreSQL database; nothing creates a database. Every command, the front end included, reads `backend/.env` (copy `backend/.env.example`; it holds the password, never committed). The backend needs Java 21 and Maven.
 
-Alternative engine: set `DATABASE_URL=postgres://user:pass@host:port/db` to use a real PostgreSQL server instead of PGlite. Both engines are supported by `server/db.js`.
+1. Once per server, as `postgres`: `psql -h localhost -U postgres -v pw='...' -f backend/db/create_database.sql` (makes the `lims` account and the empty databases `lims3` and `lims3_test`). Put the password in `backend/.env` (`DATABASE_URL`, `LIMS_TEST_DATABASE_URL`).
+2. `npm run start:backend` (the Java backend; its migrations make any missing tables, rules and demo data), then `npm start` in a second terminal (the front end), then open http://localhost:3000 in the Browser pane.
+3. `npm test` (run by Java through Maven) empties `lims3_test` (drops the `lims` and `public` schemas), applies every migration without demo data and runs every rule test in `backend/db/tests`; all must pass. It refuses to run on `DATABASE_URL`.
+4. `npm run reset` (Java, through Maven) empties `lims3` the same way so the next start rebuilds it with demo data.
 
-**First run on a new machine:** this slice was built and tested against PostgreSQL 16 through the wire-protocol client. The PGlite path (`server/db.js`, the `pglite` engine) was written but could not be exercised where it was built. If `npm test` or `npm start` fails on PGlite, fix the adapter in `server/db.js` (result normalization, numeric types, dates) rather than changing the SQL. Then run `npm test` and `npm run test:browser` (needs Playwright: `npx playwright install chromium` if missing) until both pass.
+GxP server: `backend/db/roles_setup.sql` and `LIMS_MIGRATE_URL` as before. Older notes below about PGlite, the Node backend, `data/pgdata` and `backend/data` describe the history, not how it runs now.
 
 ## Architecture (keep it this simple)
 

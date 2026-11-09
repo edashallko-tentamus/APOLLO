@@ -1,0 +1,135 @@
+package com.tentamus.lims.orders.service;
+
+import com.tentamus.lims.core.access.AccessPolicy;
+import com.tentamus.lims.core.db.Db;
+import com.tentamus.lims.core.db.RecordWriter;
+import com.tentamus.lims.core.db.UnitOfWork;
+import com.tentamus.lims.core.paging.PagedList;
+import com.tentamus.lims.core.web.RequestContext;
+import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.orders.domain.EmailTemplate;
+import com.tentamus.lims.orders.domain.RushDecision;
+import com.tentamus.lims.orders.repo.OutboxRepository;
+import com.tentamus.lims.orders.repo.RequestedTestRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+
+/**
+ * Intake: the dashboard (rush waiting for approval, incoming rush work, expected samples, samples logged in the last day),
+ * intake's rush decisions ({@link RushDecision}), and the Outbox with its email templates (nothing is sent in the Sandbox).
+ */
+@Service
+public class IntakeService {
+    private static final RecordWriter RUSH_DECISION = new RecordWriter("rush_decision",
+        List.of("requested_test_id", "decision", "requested_tier_id", "replacement_tier_id", "reason"));
+    private static final String OUTBOX_SQL = """
+        SELECT e.*, o.order_code, u.full_name AS triggered_by, p.project_code AS quote_code, p.id AS quote_project_id
+          FROM email_outbox e LEFT JOIN lab_order o ON o.id = e.lab_order_id JOIN app_user u ON u.id = e.created_by
+          LEFT JOIN project_version pv ON pv.id = e.project_version_id LEFT JOIN project p ON p.id = pv.project_id
+         WHERE COALESCE(o.site_id, e.site_id) = ?::uuid""";
+    private final Db db;
+    private final AccessPolicy access;
+    private final UnitOfWork uow;
+    private final RequestedTestRepository tests;
+    private final OutboxRepository outbox;
+
+    public IntakeService(Db db, AccessPolicy access, UnitOfWork uow, RequestedTestRepository tests, OutboxRepository outbox) {
+        this.db = db;
+        this.access = access;
+        this.uow = uow;
+        this.tests = tests;
+        this.outbox = outbox;
+    }
+
+    public Map<String, Object> dashboard(RequestContext ctx) {
+        String site = access.currentSite(ctx);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("pending", db.rows("""
+            SELECT r.*, (SELECT client_name FROM lab_order_view o WHERE o.id = r.lab_order_id) AS client_name,
+              r.approval_due_at < now() AS overdue FROM requested_test_view r WHERE r.rush_status = 'Pending Approval' AND r.status <> 'Cancelled' AND r.site_id = ?::uuid
+             ORDER BY r.rush_requested_at""", site));
+        out.put("incoming", db.rows("""
+            SELECT r.*, (SELECT client_name FROM lab_order_view o WHERE o.id = r.lab_order_id) AS client_name
+              FROM requested_test_view r WHERE r.rush_status IN ('Auto-accepted','Approved') AND r.status <> 'Cancelled' AND r.site_id = ?::uuid
+             ORDER BY r.due_date NULLS FIRST, r.rush_requested_at""", site));
+        out.put("expected", db.rows("""
+            SELECT o.id AS lab_order_id, o.order_code, o.client_name, o.site_code, o.submission_channel,
+              count(*) FILTER (WHERE s.status = 'Expected') AS expected_samples, o.account_status
+              FROM lab_order_view o JOIN sample s ON s.lab_order_id = o.id WHERE s.status = 'Expected' AND o.site_id = ?::uuid
+             GROUP BY o.id, o.order_code, o.client_name, o.site_code, o.submission_channel, o.account_status ORDER BY o.order_code""", site));
+        out.put("today", db.rows("""
+            SELECT s.id AS sample_id, s.sample_code, s.client_sample_id, s.description, s.logged_at, s.due_date, s.test_count, o.order_code, o.client_name, o.id AS lab_order_id
+              FROM sample_view s JOIN lab_order_view o ON o.id = s.lab_order_id
+             WHERE s.logged_at >= now() - interval '24 hours' AND o.site_id = ?::uuid AND o.origin::text <> 'Workflow Verification' ORDER BY s.logged_at DESC""", site));
+        out.put("tiers", db.rows("SELECT rt.id, rt.schedule_id, rt.tier_name, rt.rush_tat, rt.tat_unit FROM rush_fee_tier rt WHERE rt.status = 'Active' ORDER BY rt.rush_tat"));
+        return out;
+    }
+
+    /** Intake approves a rush, or does not accept it: then the fixed email naming the staff member goes to the ordering contact. */
+    public List<Map<String, Object>> rushDecision(RequestContext ctx, Map<String, Object> b) {
+        Object reason = b.get("reason");
+        String r = reason != null && !"".equals(reason) && !Boolean.FALSE.equals(reason) ? reason.toString()
+            : "Approved".equals(b.get("decision")) ? "Rush approved by intake" : "";
+        return uow.run(ctx, r, d -> {
+            Map<String, Object> vals = RUSH_DECISION.pick(b);
+            Object testId = vals.get("requested_test_id");
+            RushDecision decision = new RushDecision(str(vals.get("decision")), tests.tier(vals.get("requested_tier_id")), tests.tier(vals.get("replacement_tier_id")),
+                str(vals.get("reason")));
+            Map<String, Object> lab = d.one("""
+                SELECT o.site_id FROM requested_test rt JOIN sample s ON s.id = rt.sample_id JOIN lab_order o ON o.id = s.lab_order_id
+                 WHERE rt.id::text = ?""", String.valueOf(testId));
+            access.requireAt(ctx, "intake.rush", lab == null ? null : (String) lab.get("site_id"));
+            Map<String, Object> saved = tests.insertDecision(vals);
+            Map<String, Object> before = tests.rushFacts(testId);
+            if (before == null) throw RuleException.database("There is no open rush request for that tier on this test");
+            decision.check(new RushDecision.Rush((String) before.get("rush_tier_id"), (String) before.get("rush_status")));
+            if (decision.approves()) tests.setRush(testId, null, decision.newStatus(), false);
+            else {
+                tests.setRush(testId, decision.replacement() == null ? null : decision.replacement().id(), decision.newStatus(), true);
+                Map<String, Object> after = tests.rushFacts(testId);
+                Map<String, Object> v = decision.emailValues((String) after.get("first_name"), (String) after.get("test_name"), (String) after.get("sample_code"),
+                    (String) after.get("client_sample_id"), (String) after.get("order_code"), dec(before.get("rush_fee")), dec(after.get("rush_fee")),
+                    after.get("due_date") == null ? null : LocalDate.parse(after.get("due_date").toString()), str(tests.staffName(ctx.userId())), (String) after.get("site_name"));
+                EmailTemplate.Email e = EmailTemplate.required(outbox.template("Rush Not Accepted"), "Rush Not Accepted")
+                    .email((String) after.get("email"), after.get("first_name") + " " + after.get("last_name"), v);
+                if (e != null) outbox.queue(e, after.get("order_id"));
+            }
+            List<Map<String, Object>> out = new ArrayList<>();
+            out.add(saved);
+            return out;
+        });
+    }
+
+    private static String str(Object v) { return v == null ? null : v.toString(); }
+
+    private static BigDecimal dec(Object v) { return v == null ? null : new BigDecimal(v.toString()); }
+
+    public Object outbox(RequestContext ctx, Map<String, String> query) {
+        String site = access.currentSite(ctx);
+        if (!PagedList.wanted(query)) return db.rows(OUTBOX_SQL + " ORDER BY e.created_at DESC LIMIT 200", site);
+        return PagedList.of(OUTBOX_SQL, site).search("subject", "to_address", "to_name", "order_code", "quote_code", "template", "triggered_by")
+            .ids("order_code", "quote_code").order("ORDER BY created_at DESC").run(db, query);
+    }
+
+    public Map<String, Object> templates(RequestContext ctx) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", db.rows("SELECT * FROM email_template ORDER BY template_name"));
+        out.put("can_edit", access.has(ctx, "outbox.templates"));
+        return out;
+    }
+
+    /** Templates are only changed, never added here (rows without an id are ignored), and their code never changes. */
+    public List<Map<String, Object>> saveTemplates(RequestContext ctx, List<Map<String, Object>> rows) {
+        List<Map<String, Object>> existing = rows.stream().filter(r -> r.get("id") != null && !"".equals(r.get("id"))).toList();
+        return uow.run(ctx, d -> {
+            for (Map<String, Object> r : existing) EmailTemplate.checkChange(outbox.codeOf(r.get("id")), r);
+            if (OutboxRepository.TEMPLATES.writesAny(existing)) access.requireToChange(ctx, "email_template", "outbox.templates");
+            return OutboxRepository.TEMPLATES.upsert(d, existing, Map.of());
+        });
+    }
+}

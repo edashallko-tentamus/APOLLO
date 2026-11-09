@@ -41,6 +41,11 @@ async function as(who, lab = 'CFL') {
   check('Pages: no type sniffing, same-origin framing and referrer', home.headers.get('x-content-type-options') === 'nosniff'
     && home.headers.get('x-frame-options') === 'SAMEORIGIN' && home.headers.get('referrer-policy') === 'same-origin');
   check('No HSTS when the app is not served over HTTPS', !home.headers.get('strict-transport-security'));
+  const bad = await fetch(BASE + '/%E0%A4%A');
+  check('A broken address is refused and the server keeps running', bad.status === 400 && (await fetch(BASE + '/')).status === 200, bad.status);
+  check('Nothing outside the page folder is served', (await fetch(BASE + '/..%2Fpackage.json')).status === 403);
+  const big = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'x'.repeat(6e6) }).then((r) => r.status, () => 'closed');
+  check('An upload over 5 MB is refused and the server keeps running', big !== 200 && (await fetch(BASE + '/')).status === 200, big);
   const st = await fetch(BASE + '/api/auth/state');
   check('API answers carry the same headers', st.headers.get('x-content-type-options') === 'nosniff' && st.headers.get('x-frame-options') === 'SAMEORIGIN');
   const lr = await fetch(BASE + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'labsup', password: PASSWORD }) });

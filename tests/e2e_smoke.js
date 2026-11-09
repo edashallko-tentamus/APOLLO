@@ -29,6 +29,9 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   const cell = (host, row, col) => page.locator(`${host} tbody tr:nth-child(${row}) td:nth-child(${col})`);
   const paste = (text) => page.evaluate((t) => { const dt = new DataTransfer(); dt.setData('text/plain', t); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true })); }, text);
   const reason = async (text) => { await page.waitForSelector('.modal textarea'); await page.fill('.modal textarea', text); await page.click('.modal [data-ok]'); };
+  // Reads again until the condition holds (or 10 s pass), then the check judges what was read: a check waits for what it
+  // checks, not a fixed time (a save's redraw can take longer than a fixed pause, e.g. on a just-started server)
+  const until = async (read, ok, ms = 10000) => { const end = Date.now() + ms; for (;;) { const v = await read(); if (ok(v) || Date.now() > end) return v; await page.waitForTimeout(100); } };
 
   // Home
   await go('#/'); await shot('01_home');
@@ -54,15 +57,14 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   await paste('Active'); await page.waitForTimeout(100);
   await shot('02_analytes_pasted');
   await page.click('.savebar [data-save]'); await reason('Added elements for ICP panel expansion');
-  await page.waitForTimeout(600);
-  check('Analytes saved', (await page.locator('.toast').allInnerTexts()).some((t) => t.includes('Saved 3')));
+  const savedToasts = await until(() => page.locator('.toast').allInnerTexts(), (t) => t.some((x) => x.includes('Saved 3')));
+  check('Analytes saved', savedToasts.some((t) => t.includes('Saved 3')), savedToasts.join(' | '));
   // bad CAS
   await go('#/analytes');
   const nrows = await page.locator('#g tbody tr').count();
   await page.click('#g [data-add="1"]'); await cell('#g', nrows + 1, 2).click();
   await paste('Fakeium\t\tChemical\t1234-56-7'); await page.click('.savebar [data-save]'); await reason('test');
-  await page.waitForTimeout(500);
-  const toasts = (await page.locator('.toast.err').allInnerTexts()).join(' ');
+  const toasts = await until(async () => (await page.locator('.toast.err').allInnerTexts()).join(' '), (t) => /CAS Number is not valid/.test(t));
   check('Invalid CAS rejected by database', /CAS Number is not valid/.test(toasts), toasts);
   await shot('03_analytes_bad_cas');
   await page.click('.savebar [data-undo]');
@@ -83,11 +85,10 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   const mi = names.findIndex((n) => n.includes('Maria')) + 1;
   await cell('#cg', mi, 4).locator('.chk').click();
   await page.click('#cg .savebar [data-save]'); await reason('Testing primary rule');
-  await page.waitForTimeout(500);
-  const t2 = (await page.locator('.toast.err').allInnerTexts()).join(' ');
+  const t2 = await until(async () => (await page.locator('.toast.err').allInnerTexts()).join(' '), (t) => /already has an active PRIMARY|both Primary and Secondary/.test(t));
   check('Second Primary contact rejected (Maria is already Secondary here)', /already has an active PRIMARY|both Primary and Secondary/.test(t2), t2.slice(-90));
   await page.click('#cg .savebar [data-undo]');
-  check('Orderable tests listed for Acme Irvine', (await page.locator('#og tbody tr').count()) >= 3);
+  check('Orderable tests listed for Acme Irvine', (await until(() => page.locator('#og tbody tr').count(), (n) => n >= 3)) >= 3);
   void rowsC;
 
   // Catalogue and designer step 1
@@ -99,13 +100,12 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   await cell('#ag', 1, 3).click(); await page.keyboard.type('25'); await page.keyboard.press('Enter');
   const an = await page.locator('#ag tbody tr').count();
   await cell('#ag', 1, 3).click(); await cell('#ag', an, 3).click({ modifiers: ['Shift'] }); await page.keyboard.press('Control+d');
-  await page.waitForTimeout(150);
-  const lp1 = await page.locator('#lp').innerText();
+  const lp1 = await until(() => page.locator('#lp').innerText(), (t) => t.includes('$325.00'));
   check('Fill down analyte prices updates list price live ($325)', lp1.includes('$325.00'), lp1);
   await shot('08_designer_step1');
   await page.click('#save'); await reason('Annual price update for ICP-MS');
-  await page.waitForTimeout(700);
-  check('Catalogue saved', (await page.locator('#lp').innerText()).includes('$325.00'));
+  const savedToast = await until(() => page.locator('.toast').allInnerTexts(), (t) => t.some((x) => /saved/i.test(x)));
+  check('Catalogue saved', savedToast.some((x) => /saved/i.test(x)) && (await page.locator('#lp').innerText()).includes('$325.00'), savedToast.join(' | '));
 
   // Projects: open Acme quote, start new version, trim analytes, check discount kept
   await go('#/projects'); await shot('09_projects');
@@ -126,23 +126,24 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   check('Space toggles a block of checkboxes', Math.abs(inclBefore - inclAfter) === 2, `${inclBefore} -> ${inclAfter}`);
   await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(OUT, '11_analyte_trim.png') });
-  await page.click('.modal [data-ok]'); await page.waitForTimeout(700);
+  await page.click('.modal [data-ok]');
+  const btnAfter = (await until(() => cell('#lg', metalsRow, 4).innerText(), (t) => t.trim() !== '7 of 10')).trim();
   const pctAfter = (await cell('#lg', metalsRow, 9).innerText()).trim();
-  const btnAfter = (await cell('#lg', metalsRow, 4).innerText()).trim();
   check('Analyte trim keeps discount % and changes the analyte count', pctBefore === pctAfter && btnAfter !== '7 of 10', `${pctBefore} -> ${pctAfter}, ${btnAfter}`);
   // type a final price above list to see the check flag live
   const mo = (await page.locator('#lg tbody tr td:nth-child(2)').allInnerTexts()).findIndex((t) => t.includes('Moisture')) + 1;
   await cell('#lg', mo, 7).click(); await page.keyboard.type('99'); await page.keyboard.press('Enter');
-  const flag = (await cell('#lg', mo, 13).innerText()).trim();
+  const flag = (await until(() => cell('#lg', mo, 13).innerText(), (t) => t.trim() === 'Above list price')).trim();
   check('Live check flags price above list', flag === 'Above list price', flag);
   await shot('12_quote_flag');
   await page.click('#lundo'); await page.waitForTimeout(400);
   // issue and accept
-  await page.click('[data-act="Quoted"]'); await page.waitForSelector('.modal'); await page.click('.modal [data-ok]'); await page.waitForTimeout(600);
-  check('Quote issued', (await page.locator('.phead .badge').first().innerText()).includes('Quoted'));
+  const badge = () => page.locator('.phead .badge').first().innerText();
+  await page.click('[data-act="Quoted"]'); await page.waitForSelector('.modal'); await page.click('.modal [data-ok]');
+  check('Quote issued', (await until(badge, (t) => t.includes('Quoted'))).includes('Quoted'));
   await page.click('[data-act="Accepted"]'); await page.waitForSelector('.modal select');
-  await page.selectOption('.modal select', { index: 1 }); await page.click('.modal [data-ok]'); await page.waitForTimeout(600);
-  check('Quote accepted', (await page.locator('.phead .badge').first().innerText()).includes('Accepted'));
+  await page.selectOption('.modal select', { index: 1 }); await page.click('.modal [data-ok]');
+  check('Quote accepted', (await until(badge, (t) => t.includes('Accepted'))).includes('Accepted'));
   await shot('13_quote_accepted');
   const vid = page.url().split('/').pop();
   await go('#/print/' + vid); await page.waitForSelector('.quote'); await shot('14_quote_print');
@@ -151,7 +152,8 @@ const check = (label, ok, extra = '') => { results.push([label, ok]); console.lo
   // Rush schedules and audit trail
   await go('#/rush'); await shot('15_rush');
   await go('#/audit'); await shot('16_audit');
-  check('Audit trail shows reasons', (await page.locator('#g tbody').innerText()).includes('Annual price update for ICP-MS'));
+  const auditText = await until(() => page.locator('#g tbody').innerText(), (t) => t.includes('Annual price update for ICP-MS'));
+  check('Audit trail shows reasons', auditText.includes('Annual price update for ICP-MS'));
 
   check('No browser errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

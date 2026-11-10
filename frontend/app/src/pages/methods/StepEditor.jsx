@@ -9,6 +9,7 @@ import BatchingConfig from './BatchingConfig.jsx';
 import CalculationConfig from './CalculationConfig.jsx';
 import { DataEntryConfig, DilutionConfig, IncubationConfig, PlatingConfig, PreparationConfig, QcReviewConfig, SplitHoldConfig, WeighingConfig } from './ConfigEditors.jsx';
 import { Field, Pick, stepKey, STEP_TYPES, TYPE_HELP, useSigned } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const EDITORS = { Batching: BatchingConfig, Weighing: WeighingConfig, Preparation: PreparationConfig, 'Plating/Inoculation': PlatingConfig, Incubation: IncubationConfig,
   Dilution: DilutionConfig, 'Split off Test': SplitHoldConfig, 'Hold Point': SplitHoldConfig, Calculation: CalculationConfig, 'Data Entry': DataEntryConfig, 'QC Review': QcReviewConfig };
@@ -110,10 +111,10 @@ export default function StepEditor({ d, step, afterId = null, onClose, onSaved, 
         <div id="s_cfg"><Editor key={type} type={type} cfg={cfg} d={d} step={step} anc={anc} ed={ed} readRef={readRef} stepKey={key} /></div>
         <div className="merr" id="s_err">{err}</div>
         {ed && <div className="wdbar">
-          <button type="button" className="btn ghost" id="s_cancel" onClick={onClose}>Close</button>
-          {step && <button type="button" className="btn" id="s_remove" onClick={remove}>Remove step</button>}
+          <Button type="button" variant="light" id="s_cancel" onClick={onClose}>Close</Button>
+          {step && <Button type="button" variant="outline-secondary" id="s_remove" onClick={remove}>Remove step</Button>}
           <span className="sp" />
-          <button type="button" className="btn primary" id="s_save" disabled={busy} onClick={save}>{step ? 'Save step' : 'Add step'}</button>
+          <Button type="button" variant="primary" id="s_save" disabled={busy} onClick={save}>{step ? 'Save step' : 'Add step'}</Button>
         </div>}
       </div>
     </Section>

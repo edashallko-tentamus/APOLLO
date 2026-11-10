@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi.js';
 import { confirmLeave, replaceHash } from '../router/useHashRoute.js';
 import { useToast } from './Toasts.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const SEARCH_DELAY_MS = 350;
 
@@ -73,12 +74,12 @@ export default function PagedList({ load, query = '', filters = [], filterParam 
         <input className="pgsearch" type="search" autoComplete="off" placeholder={placeholder || 'Search, or type or scan an ID and press Enter'}
           value={typed} onChange={(e) => setTyped(e.target.value)} onKeyDown={searchNow} />
         <span className="pginfo">{info}</span><span className="sp" />
-        <button type="button" className="btn ghost pgprev" disabled={!data || data.page <= 1} onClick={() => go(() => setPage((p) => p - 1))}>‹ Previous</button>
+        <Button type="button" variant="light" className="pgprev" disabled={!data || data.page <= 1} onClick={() => go(() => setPage((p) => p - 1))}>‹ Previous</Button>
         <span className="pgof">{data ? `Page ${data.page} of ${data.pages}` : ''}</span>
-        <button type="button" className="btn ghost pgnext" disabled={!data || data.page >= data.pages} onClick={() => go(() => setPage((p) => p + 1))}>Next ›</button>
+        <Button type="button" variant="light" className="pgnext" disabled={!data || data.page >= data.pages} onClick={() => go(() => setPage((p) => p + 1))}>Next ›</Button>
       </div>
       <div className="pgbody">
-        {error && !data ? <div className="card err">{error.message}</div>
+        {error && !data ? <Card body className="err">{error.message}</Card>
           : !data ? <div className="loading">Loading…</div>
             : children(data.rows, data, reload)}
         {loading && data && <div className="help">Loading…</div>}

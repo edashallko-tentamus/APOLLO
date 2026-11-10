@@ -15,6 +15,7 @@ import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { decideQuote, sendQuote } from '../quotes/quoteDialogs.js';
 import { d8, ext, Failed, iso, Loading, newKey } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 export default function QuotePage({ params: [pid] }) {
   const { data: d, error, reload } = useApi(() => stabilityQuote(pid), [pid]);
@@ -160,12 +161,12 @@ function QuoteDesign({ d, pid, reload }) {
   };
 
   const actions = <>
-    <a className="btn ghost" href={quotePdfUrl(v.id)} {...ext}>Quotation PDF</a>
-    {ed && <> <button type="button" className="btn primary" id="save" disabled={!dirty || saving} onClick={save}>Save design</button></>}
-    {d.can_edit && ['Draft', 'Submitted for Quote', 'Quoted'].includes(v.status) && <> <button type="button" className="btn" id="send" onClick={send}>{v.status === 'Quoted' ? 'Send again…' : 'Issue and send to client…'}</button></>}
-    {d.can_edit && v.status === 'Quoted' && <> <button type="button" className="btn" id="acc" onClick={() => decide('Accepted')}>Accept…</button><button type="button" className="btn ghost" id="rej" onClick={() => decide('Rejected')}>Reject…</button></>}
-    {d.can_edit && !d.study && ['Quoted', 'Rejected', 'Expired'].includes(v.status) && <> <button type="button" className="btn ghost" id="newv" onClick={newVersion}>New version</button></>}
-    {d.can_edit && d.study && d.study.status !== 'Cancelled' && ['Accepted', 'Rejected', 'Expired'].includes(v.status) && <> <button type="button" className="btn ghost" id="newv" onClick={newVersion}>Amend the study…</button></>}
+    <Button variant="light" href={quotePdfUrl(v.id)} {...ext}>Quotation PDF</Button>
+    {ed && <> <Button type="button" variant="primary" id="save" disabled={!dirty || saving} onClick={save}>Save design</Button></>}
+    {d.can_edit && ['Draft', 'Submitted for Quote', 'Quoted'].includes(v.status) && <> <Button type="button" variant="outline-secondary" id="send" onClick={send}>{v.status === 'Quoted' ? 'Send again…' : 'Issue and send to client…'}</Button></>}
+    {d.can_edit && v.status === 'Quoted' && <> <Button type="button" variant="outline-secondary" id="acc" onClick={() => decide('Accepted')}>Accept…</Button><Button type="button" variant="light" id="rej" onClick={() => decide('Rejected')}>Reject…</Button></>}
+    {d.can_edit && !d.study && ['Quoted', 'Rejected', 'Expired'].includes(v.status) && <> <Button type="button" variant="light" id="newv" onClick={newVersion}>New version</Button></>}
+    {d.can_edit && d.study && d.study.status !== 'Cancelled' && ['Accepted', 'Rejected', 'Expired'].includes(v.status) && <> <Button type="button" variant="light" id="newv" onClick={newVersion}>Amend the study…</Button></>}
   </>;
   const subtitle = <>
     Stability quote for <a href={'#/clients/' + p.client_id}>{p.client_name}</a>{p.quote_contact_name ? ', attn. ' + p.quote_contact_name : ''} · prepared by {p.owner_name || ''} · <Badge status={statusText} />
@@ -182,12 +183,12 @@ function QuoteDesign({ d, pid, reload }) {
   return <>
     <PageHeader title={`${p.project_code}${v.version_no > 1 ? ' v' + v.version_no : ''}: ${p.project_name}`} subtitle={subtitle} actions={actions} audit={{ kind: 'stability_quote', id: p.id }} />
     {d.study && v.id !== d.study.project_version_id && ['Draft', 'Submitted for Quote', 'Quoted'].includes(v.status)
-      ? <div className="notice stb-amd"><b>Amendment of study {studyLink}</b> (it runs to an earlier version until this one is accepted).
+      ? <div className="alert alert-warning stb-amd"><b>Amendment of study {studyLink}</b> (it runs to an earlier version until this one is accepted).
         Change what the client asked for: add timepoints, tests or conditions, or untick what stops. Pulls already ordered or taken do not change, and T0 cannot change.
         When the client accepts, scheduled pulls follow the new design and new ones are scheduled; a new condition is placed in a chamber from the study page.</div>
-      : d.study ? <div className="notice">Accepted: this quote is study {studyLink} ({d.study.status}{d.study.amendment_no ? `, amendment ${d.study.amendment_no}` : ''}).</div> : null}
+      : d.study ? <div className="alert alert-warning">Accepted: this quote is study {studyLink} ({d.study.status}{d.study.amendment_no ? `, amendment ${d.study.amendment_no}` : ''}).</div> : null}
     {d.link && v.status === 'Quoted' && <div className="qsent">The client can accept or decline online: <input readOnly value={d.link} /></div>}
-    {!ed && !d.study && <div className="notice">{v.status === 'Draft' ? 'You can view this quote; quotes.edit is needed to change it.' : 'This version is issued: its design is locked. "New version" starts a changed one.'}</div>}
+    {!ed && !d.study && <div className="alert alert-warning">{v.status === 'Draft' ? 'You can view this quote; quotes.edit is needed to change it.' : 'This version is issued: its design is locked. "New version" starts a changed one.'}</div>}
 
     <Section title="The study" help="Which lab stores and tests it, the product, and how prices move over the years. A planned placement date puts real dates on the quotation (weekends and holidays moved inside each window).">
       <div className="stb-facts" id="facts">

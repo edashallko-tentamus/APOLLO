@@ -18,7 +18,7 @@ table.grid td.cwarn { background: #FFF4DE; color: var(--warn-ink); font-weight: 
 .statcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 .statcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fff; }
 .statcard span { display: block; color: var(--muted); font-size: 12.5px; } .statcard b { font-size: 16px; }
-.statcard.alert { background: #FFF4DE; border-color: #F3D19C; } .statcard.alert b, .statcard.alert span { color: var(--warn-ink); }
+.statcard.calert { background: #FFF4DE; border-color: #F3D19C; } .statcard.calert b, .statcard.calert span { color: var(--warn-ink); }
 .statcard.deficient { background: #FDECEA; border-color: #F5B5AE; } .statcard.deficient b, .statcard.deficient span { color: var(--err-ink); }
 .statcard.conforms b { color: var(--green-700); }
 .rulelist .rule { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; }

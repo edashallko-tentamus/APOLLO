@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import PagedList from '../../components/PagedList.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { d8, dt, Failed, Loading, PHASE1 } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const FILTERS = [['open', 'Open'], ['overdue', 'Overdue'], ['closed', 'Closed'], ['all', 'All']];
 const COLUMNS = [
@@ -31,14 +32,14 @@ const openOne = (r) => { window.location.hash = '#/oos/' + r.id; };
 export function OosListPage({ query }) {
   const load = useCallback((params, opts) => listOos(params, opts), []);
   return <>
-    <PageHeader title="OOS investigations" audit={{ kind: 'oos_list' }} actions={<a className="btn ghost" href="#/oos/config">Checklists and target times</a>}
+    <PageHeader title="OOS investigations" audit={{ kind: 'oos_list' }} actions={<Button variant="light" href="#/oos/config">Checklists and target times</Button>}
       subtitle={'Out-of-specification results under investigation in this lab. An investigation is opened from QC Review or the sample page ("Open OOS…"); GMP samples follow Full Phase I, the others Check and Acknowledge. A result under investigation is held from the COA until it is concluded.'} />
-    <div className="card">
+    <Card body>
       <PagedList load={load} query={query} filters={FILTERS} open={openOne}
         placeholder="Search by investigation, sample, client, test, analyte or batch; type an OOS code and press Enter to open it">
         {(rows) => <ReadGrid rows={rows} columns={COLUMNS} rowClass={listRow} emptyText="No OOS investigations here." />}
       </PagedList>
-    </div>
+    </Card>
   </>;
 }
 
@@ -57,15 +58,15 @@ const H2 = { fontSize: 15, margin: '0 0 6px' };
 export function OosConfigPage() {
   const { data: d, error, reload } = useApi(() => oosConfig(), []);
   return <>
-    <PageHeader title="OOS checklists and target times" audit={{ kind: 'oos_config' }} actions={<a className="btn ghost" href="#/oos">OOS investigations</a>}
+    <PageHeader title="OOS checklists and target times" audit={{ kind: 'oos_config' }} actions={<Button variant="light" href="#/oos">OOS investigations</Button>}
       subtitle={`The questions each investigation answers and how many days it has to close. The wording belongs to QA's OOS SOP. ${d && !d.can_edit ? 'QA keeps them (oos.configure).' : ''}`} />
     {error && !d ? <Failed error={error} /> : !d ? <Loading /> : <>
-      <div className="card"><h2 style={H2}>Target times</h2>
-        <EditableGrid rows={d.settings} columns={SETTING_COLS} readOnly={!d.can_edit} what="the OOS target times" save={saveOosSettings} afterSave={reload} /></div>
-      <div className="card"><h2 style={H2}>Checklist items</h2>
+      <Card body><h2 style={H2}>Target times</h2>
+        <EditableGrid rows={d.settings} columns={SETTING_COLS} readOnly={!d.can_edit} what="the OOS target times" save={saveOosSettings} afterSave={reload} /></Card>
+      <Card body><h2 style={H2}>Checklist items</h2>
         <div className="help">Full Phase I has an Analyst and a Supervisor section; Check and Acknowledge a Reviewer section. Set an item Inactive to retire it (investigations keep the answers they gave).</div>
         <EditableGrid rows={d.items} columns={ITEM_COLS} allowAdd={d.can_edit} readOnly={!d.can_edit} search what="the OOS checklists"
-          newRow={newItem} rowClass={inactiveRow} save={saveOosItems} afterSave={reload} /></div>
+          newRow={newItem} rowClass={inactiveRow} save={saveOosItems} afterSave={reload} /></Card>
     </>}
   </>;
 }

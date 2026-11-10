@@ -6,6 +6,7 @@ import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import {
   alertText, benchEntries, eqLink, fieldKey, forWhat, incubationWindowOf, isoOf, isPast, kindOf, loc, nfmt, reprepCol, sampleHref, SelGrid,
 } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 // ---------------------------------------------------------------- Preparation
 export function PreparationForm({ ctx, s, canWork }) {
@@ -28,7 +29,7 @@ export function PreparationForm({ ctx, s, canWork }) {
       return <div className="field" key={k}><label htmlFor={'pf_' + k}>{f.label}</label>
         <input id={'pf_' + k} data-k={k} type={t} step={t === 'number' ? 'any' : undefined} value={form[k] ?? ''} disabled={!canWork} onChange={(e) => setForm((x) => ({ ...x, [k]: e.target.value }))} /></div>;
     })}</div>
-    {canWork && <button type="button" className="btn primary" id="pf_save" disabled={busy} onClick={save}>Save</button>}
+    {canWork && <Button type="button" variant="primary" id="pf_save" disabled={busy} onClick={save}>Save</Button>}
     <div className="help" style={{ marginTop: 6 }}>Filled once for the whole batch. Number fields feed the calculation.</div>
   </>;
 }
@@ -109,7 +110,7 @@ export function IncubationPanel({ ctx, s, canWork, apiRef, onMenu }) {
   return <>
     <h3 style={{ margin: '4px 0 6px' }}>Entries</h3>
     <SelGrid rows={ents} columns={entCols} keyField="key" apiRef={apiRef} rowClass={pastRow} onContextMenu={onMenu}
-      toolbar={canWork ? <button type="button" className="mini" data-inc="new" onClick={newLoad}>Put in an incubator (the selected rows, or all)</button> : null} />
+      toolbar={canWork ? <Button type="button" variant="outline-secondary" size="sm" className="mini" data-inc="new" onClick={newLoad}>Put in an incubator (the selected rows, or all)</Button> : null} />
     <h3 style={{ margin: '16px 0 6px' }}>Incubator loads</h3>
     <EditableGrid rows={loadRows} columns={loadCols} keyField="key" readOnly={!canWork} needReason={false} emptyText="No loads yet." save={saveLoads} afterSave={reload} />
   </>;

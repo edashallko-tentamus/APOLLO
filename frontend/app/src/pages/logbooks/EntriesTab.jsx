@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import { dt, fmtN, loc, needsReason, resultClass, sensorWhen } from './calc.js';
+import { Button, Card } from 'react-bootstrap';
 
 const STATUSES = ['', 'Recorded', 'Approved', 'Returned', 'Voided', 'All'].map((s) => ({ value: s, label: s || 'All but voided' }));
 const entryRowClass = (x) => (x.result === 'Fail' ? 'lb-fail' : x.status === 'Voided' ? 'mutedrow' : '');
@@ -44,7 +45,7 @@ export default function EntriesTab({ d, l, filt }) {
   const per = l.entry_frequency === 'Daily' ? 'today' : l.entry_frequency === 'Weekly' ? 'this week' : 'this month';
 
   return (
-    <div className="card">
+    <Card body>
       {d.due.length > 0 && <div className="lb-due">{d.due.map((x, i) => (
         <span key={i} className={x.due ? '' : 'ok'}>{x.equipment_code ? x.equipment_code + ' ' + x.equipment_name : l.logbook_code}: {x.due ? 'due ' + per : 'done'}</span>
       ))}</div>}
@@ -53,10 +54,10 @@ export default function EntriesTab({ d, l, filt }) {
         <label>To <input type="date" value={f.to} onChange={(e) => set('to')(e.target.value)} /></label>
         {l.subject === 'Equipment' && <label>Equipment <SmartSelect value={f.equipment} options={eqOpts} onChange={set('equipment')} /></label>}
         <label>Status <SmartSelect value={f.status} options={STATUSES} onChange={set('status')} /></label>
-        <button type="button" className="btn" onClick={show}>Show</button>
-        {due.length > 0 && d.can_record && <a className="btn primary" href={`#/logbooks/${l.id}?tab=record`}>Record entries ({due.length} due)</a>}
+        <Button type="button" variant="outline-secondary" onClick={show}>Show</Button>
+        {due.length > 0 && d.can_record && <Button variant="primary" href={`#/logbooks/${l.id}?tab=record`}>Record entries ({due.length} due)</Button>}
       </div>
       <ReadGrid rows={d.entries} columns={columns} search emptyText="No entries." rowClass={entryRowClass} />
-    </div>
+    </Card>
   );
 }

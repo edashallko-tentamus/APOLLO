@@ -1,6 +1,7 @@
 // Parts every purchasing screen uses: formats, the tabs, the request columns, the colours of status cells.
 import { useHashRoute } from '../../router/useHashRoute.js';
 import './purchasing.css';
+import { Card } from 'react-bootstrap';
 
 export const d8 = (v) => (v ? String(v).slice(0, 10) : '');
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -39,9 +40,9 @@ export function PuTabs() {
   return <div className="putabs">{TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}</a>)}</div>;
 }
 
-export const NeedLab = () => <div className="card err">Choose your lab (top right) first.</div>;
+export const NeedLab = () => <Card body className="err">Choose your lab (top right) first.</Card>;
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 export const openRequest = (r) => { window.location.hash = '#/purchasing/requests/' + r.id; };
 export const closedRow = (r) => (['Cancelled', 'Rejected', 'Received'].includes(r.status) ? 'mutedrow' : '');
 

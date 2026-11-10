@@ -16,6 +16,7 @@ import { money } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { SelectGrid } from '../reports/shared.jsx';
 import { d8, dt, Failed, issueDrafts, Loading, pdfOf } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const TABS = [['ready', 'Ready to invoice'], ['mine', 'My draft invoices'], ['drafts', 'All drafts'], ['issued', 'Invoices and credit notes'], ['queue', 'QuickBooks queue'], ['settings', 'Settings']];
 const INTRO = {
@@ -35,7 +36,7 @@ export default function BillingPage({ query }) {
   return <>
     <PageHeader title="Billing" subtitle={INTRO[tab]} audit={{ kind: 'billing' }} />
     <div className="bltabs">{TABS.map(([k, l]) => <a key={k} href={`#/billing?tab=${k}`} className={k === tab ? 'on' : ''}>{l}</a>)}</div>
-    {!can('invoicing.issue') && <div className="notice">You can see invoicing here. Claiming, checking and issuing invoices needs the invoicing.issue permission (Accounting and General Managers).</div>}
+    {!can('invoicing.issue') && <div className="alert alert-warning">You can see invoicing here. Claiming, checking and issuing invoices needs the invoicing.issue permission (Accounting and General Managers).</div>}
     {tab === 'ready' ? <ReadyTab /> : tab === 'settings' ? <SettingsTab /> : tab === 'queue' ? <QueueTab />
       : tab === 'issued' ? <IssuedTab query={query} /> : <DraftsTab key={tab} tab={tab} />}
   </>;
@@ -105,7 +106,7 @@ function ReadyTab() {
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   }
   return <>
-    <Section title="Completed work not yet invoiced" actions={<button type="button" className="btn primary" disabled={!d.can_issue || busy} onClick={claim}>Claim selected into my drafts</button>}>
+    <Section title="Completed work not yet invoiced" actions={<Button type="button" variant="primary" disabled={!d.can_issue || busy} onClick={claim}>Claim selected into my drafts</Button>}>
       <div className="blsum"><div><b>{money(sum(d.rows))}</b><span>{d.rows.length} test{s(d.rows.length)} ready</span></div>
         <div><b>{new Set(d.rows.map((r) => r.order_code)).size}</b><span>lab orders</span></div>
         <div><b>{d.rows.filter(lateRush).length}</b><span>late rushes to check</span></div>
@@ -157,7 +158,7 @@ function IssuedTab({ query }) {
   const columns = useMemo(() => invoiceCols('issued', null, siteId), [siteId]);
   const load = useCallback((params, opts) => listIssuedInvoices(params, opts), []);
   // one page at a time from the server (0.35.0), newest first; the totals cover every invoice matching the tab and search
-  return <div className="card">
+  return <Card body>
     <PagedList load={load} query={query} filters={ISSUED_FILTERS} filterParam="f" open={openInvoice}
       placeholder="Search by number, client, order, PO or who issued it; type or scan an invoice number and press Enter to open it">
       {(rows, x) => { const a = x.agg || {}; return <>
@@ -165,7 +166,7 @@ function IssuedTab({ query }) {
         <ReadGrid rows={rows} columns={columns} emptyText="Nothing issued here." />
       </>; }}
     </PagedList>
-  </div>;
+  </Card>;
 }
 
 function DraftsTab({ tab }) {
@@ -199,8 +200,8 @@ function DraftsTab({ tab }) {
     catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   }
   return <Section title={mine ? 'My drafts' : 'All drafts at this lab'} actions={mine && <>
-    <button type="button" className="btn primary" disabled={!d.rows.length || !d.can_issue} onClick={issue}>Issue selected…</button>{' '}
-    <button type="button" className="btn" disabled={!d.rows.length || busy} onClick={release}>Release selected</button></>}>
+    <Button type="button" variant="primary" disabled={!d.rows.length || !d.can_issue} onClick={issue}>Issue selected…</Button>{' '}
+    <Button type="button" variant="outline-secondary" disabled={!d.rows.length || busy} onClick={release}>Release selected</Button></>}>
     <div className="blsum"><div><b>{money(d.rows.reduce((x, r) => x + Number(r.total), 0))}</b><span>{d.rows.length} draft{s(d.rows.length)}</span></div></div>
     <SelectGrid gridRef={g} rows={d.rows} columns={columns} search
       emptyText={mine ? 'You hold no draft invoices. Claim completed work on the Ready to invoice tab.' : 'No draft invoices at this lab.'} />
@@ -221,8 +222,8 @@ const QUEUE_COLS = [
 ];
 function QueueTab() {
   const { data: d, error } = useApi(() => billingInvoices('queue'), []);
-  return <div className="card">{error && !d ? <Failed error={error} /> : !d ? <Loading />
-    : <ReadGrid rows={d.rows} columns={QUEUE_COLS} search emptyText="Nothing queued yet: issued invoices and credit notes are queued here (catch-up invoices are not)." />}</div>;
+  return <Card body>{error && !d ? <Failed error={error} /> : !d ? <Loading />
+    : <ReadGrid rows={d.rows} columns={QUEUE_COLS} search emptyText="Nothing queued yet: issued invoices and credit notes are queued here (catch-up invoices are not)." />}</Card>;
 }
 
 const TERMS_COLS = [
@@ -251,7 +252,7 @@ function SettingsTab() {
     try { await saveConnection({ ...v, reason }); toast('Saved.'); reload(); } catch (e) { toast(e.message, 'err'); }
   }
   return <>
-    <Section title={`${d.lab.site_code}: accounting company`} actions={d.is_admin && <button type="button" className="btn" onClick={edit}>Change…</button>}
+    <Section title={`${d.lab.site_code}: accounting company`} actions={d.is_admin && <Button type="button" variant="outline-secondary" onClick={edit}>Change…</Button>}
       help="Each lab is its own QuickBooks Online company. Invoices are queued for it when issued and sent once a system administrator connects it (the connection itself is built with IT when the company and its access are ready).">
       <dl className="kv"><dt>Accounting system</dt><dd>{c.provider || 'QuickBooks Online'}</dd><dt>Status</dt><dd><b>{c.status || 'Not connected'}</b></dd>
         <dt>Company</dt><dd>{c.company_name || 'not set'}{c.company_id ? ` (company ID ${c.company_id})` : ''}</dd><dt>Environment</dt><dd>{c.environment || ''}</dd>

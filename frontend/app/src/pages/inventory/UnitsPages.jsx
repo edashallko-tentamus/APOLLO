@@ -9,8 +9,9 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { Failed, fmtN, inactiveRow, Loading, opts } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
-const UnitsNote = () => <div className="notice">You can view this list. People with the Units permission (QA and administrators by default) maintain it.</div>;
+const UnitsNote = () => <div className="alert alert-warning">You can view this list. People with the Units permission (QA and administrators by default) maintain it.</div>;
 const findOf = (query) => new URLSearchParams(query).get('find') || '';
 
 // ---------------------------------------------------------------- Units
@@ -35,7 +36,7 @@ export function UnitsPage({ query }) {
     <PageHeader title="Units" audit={{ kind: 'units' }}
       subtitle="Admin. The controlled list of units used for quantities and concentrations everywhere in the system. Maintained by QA and administrators; every change is audited. A unit already used on inventory keeps its code: set it Inactive and add a new one instead." />
     {!canUnits && <UnitsNote />}
-    <div className="invbar"><a className="btn ghost" href="#/admin/conversions">Unit conversions</a><span className="sp" /><BulkButtons kind="units" onDone={reload} /></div>
+    <div className="invbar"><Button variant="light" href="#/admin/conversions">Unit conversions</Button><span className="sp" /><BulkButtons kind="units" onDone={reload} /></div>
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : (
       <EditableGrid rows={data[1]} columns={cols} allowAdd={canUnits} readOnly={!canUnits} search filter={findOf(query)} what="the Units list"
         newRow={newUnit} rowClass={inactiveRow} sign={signUnits} save={saveUnits} afterSave={reload} />)}
@@ -61,11 +62,11 @@ function TryConversion({ units }) {
   }
   const set = (k) => (x) => setT((s) => ({ ...s, [k]: x }));
   return (
-    <div className="card"><h2>Try a conversion</h2><div className="invbar">
+    <Card body><h2>Try a conversion</h2><div className="invbar">
       <input id="c_v" type="number" step="any" value={t.v} onChange={(e) => set('v')(e.target.value)} style={{ width: 90 }} className="gsearch" />
       <SmartSelect id="c_f" value={t.from} options={codes} onChange={set('from')} /> to <SmartSelect id="c_t" value={t.to} options={codes} onChange={set('to')} />
-      <SmartSelect id="c_form" value={t.form} options={FORMS} onChange={set('form')} /><button type="button" className="btn" onClick={go}>Convert</button><b id="c_out">{out}</b>
-    </div></div>
+      <SmartSelect id="c_form" value={t.form} options={FORMS} onChange={set('form')} /><Button type="button" variant="outline-secondary" onClick={go}>Convert</Button><b id="c_out">{out}</b>
+    </div></Card>
   );
 }
 
@@ -89,7 +90,7 @@ export function ConversionsPage() {
     <PageHeader title="Unit conversions" audit={{ kind: 'conversions' }}
       subtitle="Admin. How units convert: 1 [From] = Factor × [To]. Conversions work in both directions and can be chained (for example µg/mL → mg/L → g/L), so only one conversion per pair is needed. ppm-type conversions apply to liquids or to solids only. Maintained by QA and administrators; every change is audited." />
     {!canUnits && <UnitsNote />}
-    <div className="invbar"><a className="btn ghost" href="#/admin/units">Units</a><span className="sp" /><BulkButtons kind="conversions" onDone={reload} /></div>
+    <div className="invbar"><Button variant="light" href="#/admin/units">Units</Button><span className="sp" /><BulkButtons kind="conversions" onDone={reload} /></div>
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : <>
       <TryConversion units={data[1]} />
       <EditableGrid rows={data[0]} columns={cols} allowAdd={canUnits} readOnly={!canUnits} search what="unit conversions"

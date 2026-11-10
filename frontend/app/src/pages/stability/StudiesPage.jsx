@@ -7,6 +7,7 @@ import PagedList from '../../components/PagedList.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import PullsGrid from './PullsGrid.jsx';
 import { d8, Failed, iso, Loading } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const FILTERS = [['current', 'Current'], ['finished', 'Finished'], ['all', 'All']];
 const COLS = [
@@ -35,15 +36,15 @@ export default function StudiesPage({ query }) {
   return <>
     <PageHeader title="Stability studies" audit={{ kind: 'stability_studies' }}
       subtitle={'Each accepted stability quote is a study. Place the material in the chambers when it arrives (the T0 sample is logged in then, if intake has not); each pull gets its lab order on its date, then "Record pull" takes the units out of storage and logs the sample.'}
-      actions={<a className="btn ghost" href="#/stability/quotes">Stability quotes</a>} />
+      actions={<Button variant="light" href="#/stability/quotes">Stability quotes</Button>} />
     <div className="tabs"><a className={`tab${tab === 'studies' ? ' on' : ''}`} href="#/stability/studies">Studies</a><a className={`tab${tab === 'pulls' ? ' on' : ''}`} href="#/stability/studies?tab=pulls" id="tpulls">Pulls due ({due})</a></div>
-    <div className="card">
+    <Card body>
       {tab === 'studies'
         ? <PagedList load={load} query={query} filters={FILTERS} open={openStudy}
           placeholder="Search by study, client, product, quote or condition; type a study code and press Enter to open it">
           {(rows) => <ReadGrid rows={rows} columns={COLS} rowClass={studyRow} onRowOpen={openStudy} emptyText="No studies here: a stability quote becomes a study when the client accepts it." />}
         </PagedList>
         : error && !d ? <Failed error={error} /> : !d ? <Loading /> : <PullsGrid rows={d.pulls} canManage={d.can_manage} reload={reload} withStudy />}
-    </div>
+    </Card>
   </>;
 }

@@ -8,6 +8,8 @@ import DataGrid from './grid/DataGrid.jsx';
 import { useGrid } from './grid/useGrid.js';
 import { useDialogs } from './dialogs/DialogProvider.jsx';
 import { useToast } from './Toasts.jsx';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from './Modal.jsx';
 
 const COLUMNS = [
   { field: 'analyte_name', title: 'Analyte', type: 'readonly', width: 210 },
@@ -72,24 +74,24 @@ function SpecDialog({ owner, onDone }) {
   }
 
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(false); }}>
-      <div className="modal xwide" role="dialog" aria-modal="true" aria-label="Specifications">
-        {error ? <><h3>Specifications</h3><div className="card err">{error.message}</div></> : !data ? <div className="loading">Loading…</div> : <>
+    <Dialog label="Specifications" xwide onClose={() => onDone(false)}>
+      <div className="modal-body">
+        {error ? <><h3>Specifications</h3><Card body className="err">{error.message}</Card></> : !data ? <div className="loading">Loading…</div> : <>
           <h3>Specifications: {o.test_code} {o.test_name}{o.sample_code ? ' on ' + o.sample_code : ''}</h3>
           <p className="intro">Limits for each analyte. Leave a row empty for <b>unspecified</b>: the client then receives the result as it is, without a pass or fail.{' '}
             {o.kind === 'quoted_line' ? 'Limits set on the quote are copied to every test ordered from it.' : 'Limits set here apply to this ordered test only.'}
             {!ed && <><br /><b>Read only</b> ({o.kind === 'quoted_line' ? 'the quote is issued, or you cannot change quotes' : 'you cannot change this order\'s tests'}).</>}</p>
-          {!data.analytes.length && <div className="notice">This test has no analytes in its effective version yet, so no limits can be set.</div>}
-          {ed && <div className="actbar"><button type="button" className="btn" onClick={fillSuggested}>Use the lab&apos;s suggested limits for empty rows</button></div>}
+          {!data.analytes.length && <div className="alert alert-warning">This test has no analytes in its effective version yet, so no limits can be set.</div>}
+          {ed && <div className="actbar"><Button type="button" variant="outline-secondary" onClick={fillSuggested}>Use the lab&apos;s suggested limits for empty rows</Button></div>}
           <DataGrid grid={grid} emptyText="No analytes." />
         </>}
         <div className="merr" role="alert">{err}</div>
         <div className="mbtns">
-          <button type="button" className="btn ghost" onClick={() => onDone(false)}>{ed ? 'Cancel' : 'Close'}</button>
-          {ed && <button type="button" className="btn primary" onClick={save} disabled={busy}>Save</button>}
+          <Button type="button" variant="light" onClick={() => onDone(false)}>{ed ? 'Cancel' : 'Close'}</Button>
+          {ed && <Button type="button" variant="primary" onClick={save} disabled={busy}>Save</Button>}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

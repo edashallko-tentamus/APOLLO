@@ -7,6 +7,7 @@ import { auditColumns } from '../../components/audit/auditColumns.js';
 import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useApi } from '../../hooks/useApi.js';
+import { Card } from 'react-bootstrap';
 
 const COLUMNS = (() => {
   const cols = auditColumns();
@@ -33,7 +34,7 @@ export default function AuditPage() {
       <label>Record type <SmartSelect value={table} options={options} onChange={(v) => { lastTable = v; setTable(v); }} /></label>
       <span className="help">Latest 300 entries</span>
     </div>
-    {error ? <div className="card err">{error.message}</div> : loading && !data ? <div className="loading">Loading…</div>
+    {error ? <Card body className="err">{error.message}</Card> : loading && !data ? <div className="loading">Loading…</div>
       : <DataGrid grid={grid} search />}
   </>;
 }

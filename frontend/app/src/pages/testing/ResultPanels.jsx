@@ -4,6 +4,7 @@ import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import Section from '../../components/Section.jsx';
 import { reprep } from './actions.jsx';
 import { humanWaiting, kindOf, lastReadingStep, nfmt, rlabel, runOfReading, sampleHref, SelGrid, verdictClass } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const notAnalytical = (d) => (x) => d.entries.find((e) => e.id === x.entry_id)?.qc_class !== 'Analytical';
 const rerunRow = (r) => (r.run_no > 1 ? 'tbrerun' : '');
@@ -67,7 +68,7 @@ export function ResultsPanel({ ctx }) {
   return <>
     {b.status === 'Awaiting Review' && <div className="tbnote">Every bench step is completed: this batch is <b>waiting for QC Review</b> (WD-3).</div>}
     <Section title="Results" help="Final results, calculated live from the bench data and reported as the test says (rounding, LOQ and LOD). Readings 2 and up (RA1-, RA2-...) are re-analyses in added analytical runs; the reviewer chooses what is reported, or the average."
-      actions={editable && <button type="button" className="btn" id="rp" onClick={() => reprep(ctx, [...new Set((gridRef.current?.selectedRows() || []).map((r) => r.entry_id))])}>Re-prep selected samples</button>}>
+      actions={editable && <Button type="button" variant="outline-secondary" id="rp" onClick={() => reprep(ctx, [...new Set((gridRef.current?.selectedRows() || []).map((r) => r.entry_id))])}>Re-prep selected samples</Button>}>
       <ResultTable d={d} res={res} show="reported" apiRef={gridRef} />
     </Section>
     <Section title="QC verdicts" help="Each QC entry judged per analyte against the test's acceptance criteria: recoveries (check standards against the standard used, spikes against the amount spiked), RPD of the spike duplicate, blanks. Waiting means data is still missing.">

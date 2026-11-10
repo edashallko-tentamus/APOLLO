@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, Failed, Loading } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const COLS = [
   { field: 'project_code', title: 'Quote', type: 'link', width: 95, compute: (r) => `${r.project_code}${r.version_no > 1 ? ' v' + r.version_no : ''}`, href: (r) => '#/stability/quotes/' + r.project_id },
@@ -60,12 +61,12 @@ export default function QuotesPage({ query }) {
   return <>
     <PageHeader title="Stability quotes" audit={{ kind: 'stability_quotes' }}
       subtitle="A stability study starts as a quote: the conditions, the timepoints and the tests at each one, priced per test. Sent and accepted like any quote (Pricing > Quotes lists them too); once accepted it becomes a study, and its T0 sample waits to be logged in."
-      actions={d?.can_edit && <button type="button" className="btn primary" id="new" onClick={() => newStabilityQuote(dialogs, toast, d.labs, site?.id)}>+ New stability quote</button>} />
+      actions={d?.can_edit && <Button type="button" variant="primary" id="new" onClick={() => newStabilityQuote(dialogs, toast, d.labs, site?.id)}>+ New stability quote</Button>} />
     {error && !d ? <Failed error={error} /> : !d ? <Loading /> : (
-      <div className="card">
+      <Card body>
         <ReadGrid rows={d.rows} columns={COLS} keyField="version_id" search filter={find} rowClass={mutedRow} onRowOpen={openQuote}
           emptyText={d.can_edit ? 'No stability quotes yet. "+ New stability quote" starts one.' : 'No stability quotes yet.'} />
-      </div>
+      </Card>
     )}
   </>;
 }

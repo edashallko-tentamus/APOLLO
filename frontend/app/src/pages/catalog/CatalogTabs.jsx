@@ -8,6 +8,7 @@ import Section from '../../components/Section.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { money } from '../../lib/format.js';
+import { Button, Card } from 'react-bootstrap';
 
 export const TABS = [['tests', 'Tests'], ['packages', 'Packages'], ['prices', 'Price changes'], ['charges', 'Charges'], ['lines', 'Service lines']];
 export function TabBar({ tab }) {
@@ -18,7 +19,7 @@ const inactiveMuted = (r) => (r.status === 'Inactive' ? 'mutedrow' : '');
 const retiredMuted = (r) => (r.status === 'Retired' ? 'mutedrow' : '');
 
 function Body({ error, data, children }) {
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
   return children();
 }
@@ -55,7 +56,7 @@ export function PackagesTab() {
   return <>
     <PageHeader title="Test catalogue" audit={{ kind: 'packages' }}
       subtitle="Packages: several tests sold together at one price, quoted without being rebuilt. Each test carries its share of the price, so it is invoiced when its report is issued, and cancelling one takes off only its share."
-      actions={d?.can_edit && <button type="button" className="btn primary" onClick={newPackage}>+ New package</button>} />
+      actions={d?.can_edit && <Button type="button" variant="primary" onClick={newPackage}>+ New package</Button>} />
     <TabBar tab="packages" />
     <Body error={error} data={d}>{() => (
       <EditableGrid readOnly search rows={d.rows} columns={PACKAGE_COLUMNS} onRowOpen={openPkg} rowClass={retiredMuted}
@@ -95,7 +96,7 @@ export function PricesTab() {
   return <>
     <PageHeader title="Test catalogue" audit={{ kind: 'price_changes' }}
       subtitle={'Price changes made with "Update prices…" (Tests tab): applied on their start date, the first time the hourly job runs that day. A scheduled one can be cancelled until then.'}
-      actions={d?.can_edit && <button type="button" className="btn" onClick={cancelSelected}>Cancel selected…</button>} />
+      actions={d?.can_edit && <Button type="button" variant="outline-secondary" onClick={cancelSelected}>Cancel selected…</Button>} />
     <TabBar tab="prices" />
     <Body error={error} data={d}>{() => (
       <EditableGrid readOnly rows={d.rows} columns={PRICE_COLUMNS} rowClass={cancelledMuted} apiRef={gridApi}

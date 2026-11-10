@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { Card, d8, dt, Loading, useSigned } from './shared.jsx';
+import { Button, Card as BsCard } from 'react-bootstrap';
 
 const VERSION_COLUMNS = [
   { field: 'version_no', title: 'Version', type: 'link', width: 75, compute: (r) => 'v' + r.version_no, href: (r) => '#/methods/versions/' + r.id },
@@ -33,7 +34,7 @@ export default function TestPage({ params: [id] }) {
   const { site } = useSession();
   const dialogs = useDialogs(); const toast = useToast(); const signed = useSigned(); const startVersion = useNewVersion();
   const { data: d, error, reload } = useApi((o) => getTest(id, o), [id]);
-  if (error && !d) return <><PageHeader title="Test" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Test" /><BsCard body className="err">{error.message}</BsCard></>;
   if (!d) return <><PageHeader title="Test" /><Loading /></>;
   const t = d.test;
   const draft = d.versions.find((v) => v.status === 'Draft');
@@ -58,12 +59,12 @@ export default function TestPage({ params: [id] }) {
   const subtitle = <><a href={`#/methods/tests/${t.id}`}>{t.test_code}</a> <Badge status={t.status} /> · {t.site_code || 'Shared by all labs'}{t.department_name ? ' · ' + t.department_name : ''}
     {t.copied_from_code && <> · copied from <a href={'#/methods/tests/' + t.copied_from_test_id}>{t.copied_from_code}</a></>}</>;
   const actions = <>
-    <a className="btn ghost" href="#/methods">All tests</a>{' '}
-    {t.has_catalog_entry && <><a className="btn" href={`#/catalog/${t.id}`}>Pricing and turnaround</a>{' '}</>}
-    {d.can_design && <><button type="button" className="btn" id="dup" onClick={() => copyTo(true)}>Duplicate</button>{' '}
-      <button type="button" className="btn" id="copy" onClick={() => copyTo(false)}>Copy to another lab</button>{' '}</>}
-    {draft ? <a className="btn primary" href={`#/methods/versions/${draft.id}`}>Open draft v{draft.version_no}</a>
-      : d.can_design && <button type="button" className="btn primary" id="newv" onClick={() => startVersion(t)}>New version</button>}
+    <Button variant="light" href="#/methods">All tests</Button>{' '}
+    {t.has_catalog_entry && <><Button variant="outline-secondary" href={`#/catalog/${t.id}`}>Pricing and turnaround</Button>{' '}</>}
+    {d.can_design && <><Button type="button" variant="outline-secondary" id="dup" onClick={() => copyTo(true)}>Duplicate</Button>{' '}
+      <Button type="button" variant="outline-secondary" id="copy" onClick={() => copyTo(false)}>Copy to another lab</Button>{' '}</>}
+    {draft ? <Button variant="primary" href={`#/methods/versions/${draft.id}`}>Open draft v{draft.version_no}</Button>
+      : d.can_design && <Button type="button" variant="primary" id="newv" onClick={() => startVersion(t)}>New version</Button>}
   </>;
   return <>
     <PageHeader title={t.test_name} subtitle={subtitle} actions={actions} audit={{ kind: 'testdef', id: t.id }} />

@@ -6,6 +6,7 @@ import { replaceHash } from '../../router/useHashRoute.js';
 import { STEP_TYPES, TYPE_COLOR } from './shared.jsx';
 import StepEditor from './StepEditor.jsx';
 import WorkflowDiagram from './WorkflowDiagram.jsx';
+import { Button } from 'react-bootstrap';
 
 const STEP_COLUMNS = [
   { field: 'step_name', title: 'Step', type: 'readonly', width: 200 }, { field: 'step_type', title: 'Type', type: 'readonly', width: 140 },
@@ -36,7 +37,7 @@ export default function TabWorkflow({ d, reload, query }) {
 
   return <>
     <Section title="Workflow" help="Steps run top to bottom; a step starts when the steps before it are done. Branches run in parallel (dashed green: a branch that never holds up the rest, e.g. a timepoint's QC Review). Every branch ends in a QC Review. Click a step to see or change it."
-      actions={ed && <button type="button" className="btn primary" id="add" onClick={addStep}>+ Add step</button>}>
+      actions={ed && <Button type="button" variant="primary" id="add" onClick={addStep}>+ Add step</Button>}>
       <div className="wddiag" id="diag">
         {d.steps.length ? <WorkflowDiagram steps={d.steps} deps={d.deps} selId={selId} badKeys={badKeys} onOpen={openStep} />
           : <div className="help" style={{ padding: 20 }}>No steps yet.{ed && ' Add the first one (usually Batching).'}</div>}

@@ -13,10 +13,11 @@ import { LotLogbookCard } from '../logbooks/LogbookCards.jsx';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { coaReviewDialog, coaUploadDialog, qualifyDialog, receiveDialog, reorderDialog, signed, usageDialog } from './dialogs.jsx';
 import { d8, dt, Failed, fmtN, isMixture, Kv, Loading, LocLink, qty, ReadGrid } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const lotHref = (id) => '#/inventory/lots/' + id;
 const StatCard = ({ label, text, cls }) => <div className={`statcard ${cls || ''}`}><span>{label}</span><b>{text}</b></div>;
-const ruleCls = (r) => (!r ? '' : r.result === 'Alert' ? 'alert' : r.result === 'Deficient' ? 'deficient' : r.result === 'Conforms' ? 'conforms' : '');
+const ruleCls = (r) => (!r ? '' : r.result === 'Alert' ? 'calert' : r.result === 'Deficient' ? 'deficient' : r.result === 'Conforms' ? 'conforms' : '');
 const SampleLink = ({ l }) => (l.sample_id ? <a href={'#/samples/' + l.sample_id}>{l.lot_code}</a> : l.lot_code);
 
 const MOVEMENT_COLS = (unit, site) => [
@@ -152,16 +153,16 @@ export default function LotPage({ params: [id] }) {
       reload();
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   }
-  const Btn = ({ k, label, show, primary }) => (show ? <button type="button" className={`btn${primary ? ' primary' : ''}`} disabled={busy} onClick={() => act(k)}>{label}</button> : null);
+  const Btn = ({ k, label, show, primary }) => (show ? <Button type="button" variant={primary ? 'primary' : 'outline-secondary'} disabled={busy} onClick={() => act(k)}>{label}</Button> : null);
 
   return <>
     <div className="eyebrow">{l.lot_code} · {l.site_code}</div>
     <PageHeader title={l.material} audit={{ kind: 'lot', id }}
-      subtitle={<><span className="chips2">{(l.chemical_types || []).map((t) => <span key={t} className="badge w-info">{t}</span>)}{eligible && <span className="badge w-ok">Analyte-eligible</span>}</span>{' '}<Badge status={received ? l.status : l.receipt_status} /></>}
+      subtitle={<><span className="chips2">{(l.chemical_types || []).map((t) => <span key={t} className="badge text-bg-info">{t}</span>)}{eligible && <span className="badge text-bg-success">Analyte-eligible</span>}</span>{' '}<Badge status={received ? l.status : l.receipt_status} /></>}
       actions={<>
-        <a className="btn ghost" href="#/inventory">All items</a> <a className="btn" href={`#/inventory/new?from=${l.id}`}>Duplicate</a>{' '}
-        <button type="button" className="btn" disabled={busy || mixture || l.status === 'Cancelled'} title={mixture || l.status === 'Cancelled' ? 'A mixture is prepared, not ordered' : undefined} onClick={() => act('reorder')}>Reorder</button>{' '}
-        <a className="btn primary" href={`#/inventory/lots/${l.id}/edit`}>Edit</a>
+        <Button variant="light" href="#/inventory">All items</Button> <Button variant="outline-secondary" href={`#/inventory/new?from=${l.id}`}>Duplicate</Button>{' '}
+        <Button type="button" variant="outline-secondary" disabled={busy || mixture || l.status === 'Cancelled'} title={mixture || l.status === 'Cancelled' ? 'A mixture is prepared, not ordered' : undefined} onClick={() => act('reorder')}>Reorder</Button>{' '}
+        <Button variant="primary" href={`#/inventory/lots/${l.id}/edit`}>Edit</Button>
       </>} />
     <div className="actbar">
       <Btn k="approve" label="Approve request" show={l.receipt_status === 'Requested' && !isClosed && who.can_approve} primary />
@@ -178,16 +179,16 @@ export default function LotPage({ params: [id] }) {
       <Btn k="labels" label="Print label" show={received && !isClosed} />
     </div>
     {l.qa_required && <QaBox l={l} d={d} />}
-    {l.receipt_status === 'Requested' && !who.can_approve && <div className="notice">Waiting for a Lab Supervisor to approve this request.</div>}
-    {d.purchase && <div className="notice">Purchase request <a href={'#/purchasing/requests/' + d.purchase.id}>{d.purchase.line_code}</a>: {d.purchase.status}{d.purchase.po_code ? ` on ${d.purchase.po_code}${d.purchase.external_po_number ? ' (PO ' + d.purchase.external_po_number + ')' : ''}` : ''}. Approval, ordering and receiving are also done in Purchasing.</div>}
-    {l.not_usable_because && !isClosed && <div className="notice">Not usable: {l.not_usable_because}.</div>}
+    {l.receipt_status === 'Requested' && !who.can_approve && <div className="alert alert-warning">Waiting for a Lab Supervisor to approve this request.</div>}
+    {d.purchase && <div className="alert alert-warning">Purchase request <a href={'#/purchasing/requests/' + d.purchase.id}>{d.purchase.line_code}</a>: {d.purchase.status}{d.purchase.po_code ? ` on ${d.purchase.po_code}${d.purchase.external_po_number ? ' (PO ' + d.purchase.external_po_number + ')' : ''}` : ''}. Approval, ordering and receiving are also done in Purchasing.</div>}
+    {l.not_usable_because && !isClosed && <div className="alert alert-warning">Not usable: {l.not_usable_because}.</div>}
     <div className="statcards">
       <StatCard label="Purchase status" text={mixture ? 'N/A: in-house' : l.receipt_status + (l.approved_by_name ? ` (approved by ${l.approved_by_name})` : '')} />
       <StatCard label="Expiration" text={expText} cls={ruleCls(eRule)} />
       <StatCard label="Quantity on hand" text={qtyText} cls={received ? ruleCls(qRule) : ''} />
     </div>
     <div className="cols">
-      <div className="card"><h2>Identity</h2><Kv pairs={[
+      <Card body><h2>Identity</h2><Kv pairs={[
         ['Analytes', d.analytes.length ? d.analytes.map((a, i) => <span key={a.analyte_id || i}>{i > 0 && ', '}<a href={'#/analytes?find=' + encodeURIComponent(a.analyte_code)}>{a.analyte_name}</a>{a.analyte_cas ? ` (CAS ${a.analyte_cas})` : ''}</span>) : ''],
         ['CAS', l.cas_display],
         [mixture ? 'Resource ID' : 'Lot #', mixture ? `${l.lot_code} (system-generated)` : l.manufacturer_lot],
@@ -199,19 +200,19 @@ export default function LotPage({ params: [id] }) {
         ['Solid or liquid', l.physical_form],
         ['Storage location', l.storage_location_id ? <LocLink id={l.storage_location_id} code={l.location_code} path={l.location_path} /> : ''], ['Storage condition', l.storage_condition],
         ['Came from', l.transferred_from_code ? <a href={lotHref(l.transferred_from_lot_id)}>{`${l.transferred_from_code} (${l.transferred_from_site})`}</a> : (l.reorder_of_code ? <>Reorder of <a href={lotHref(l.reorder_of_lot_id)}>{l.reorder_of_code}</a></> : '')],
-      ]} /></div>
-      <div className="card"><h2>Quantitative</h2><Kv pairs={[
+      ]} /></Card>
+      <Card body><h2>Quantitative</h2><Kv pairs={[
         ['Concentration', l.conc_display], ['Purity / potency', l.purity_pct === null ? '' : fmtN(l.purity_pct) + '%'],
         [mixture ? 'Prepared quantity' : 'Received quantity', received ? qty(l.quantity_received, l.unit) : `${qty(l.requested_quantity, l.unit)} requested`],
         ['Quantity on hand', <><b>{qty(l.on_hand, l.unit)}</b>{l.negative_stock && <> <span className="bad">negative: reconcile with a stock count</span></>}</>],
         [mixture ? 'Date made' : 'Received date', d8(l.received_date)], ['Expiration date', <>{d8(l.expiration_date)}{mixture && l.expiration_date && <> <span className="help">(not after the earliest component)</span></>}</>],
         ['Retest date', d8(l.retest_date)], ['Opened date', d8(l.opened_date)], ['Notes', l.notes],
-      ]} /></div>
-      {l.waste && <div className="card" id="wastecard"><h2>Waste and disposal</h2><Kv pairs={[
+      ]} /></Card>
+      {l.waste && <Card body id="wastecard"><h2>Waste and disposal</h2><Kv pairs={[
         ['Classification', <>{l.waste.waste_code} {l.waste.waste_name}{l.waste.needs_review && <> <span className="bad">to classify: read the SDS, then choose its classification (Edit)</span></>}</>],
         ['Hazard classes', String(l.waste.hazard_classes || '').replace(/[{}"]/g, '').replace(/,/g, ', ')], ['EPA waste codes', l.waste.epa_codes],
         ['Waste stream', l.waste.waste_stream], ['Container', l.waste.container], ['How to dispose of it', l.waste.disposal_instructions], ['Keep away from', l.waste.segregation],
-      ]} /></div>}
+      ]} /></Card>}
     </div>
     {d.analytes.length > 0 && <Section title={mixture ? 'Calculated concentration' : 'Analytes'} help={mixture ? 'Calculated from the component lots when the mixture was prepared, using the Units and Unit conversions tables.' : ''}>
       <ReadGrid rows={d.analytes} columns={analyteCols} keyField="analyte_id" /></Section>}

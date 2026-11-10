@@ -9,6 +9,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import './trending.css';
+import { Button } from 'react-bootstrap';
 
 export const SOURCES = [
   ['results', 'Results', 'One analyte of one test, from final results'],
@@ -93,7 +94,7 @@ function Signals({ p, ctx, onReview }) {
           <td>{pt.href ? <a href={pt.href}>{s.label}</a> : s.label}<div className="cmt">{d10(pt.t)}{pt.sub ? ' · ' + pt.sub : ''}</div></td>
           <td>{shown(p, pt.v)}</td><td className="rule">{s.rule}</td><td>{s.text}</td>
           <td>{s.review ? <><span className="done">{s.review.outcome}</span><div className="cmt">{s.review.comment} ({s.review.reviewed_by_name}, {d10(s.review.reviewed_at)})</div></>
-            : ctx.chartId && ctx.canManage ? <button type="button" className="btn" onClick={() => onReview(s)}>Review…</button>
+            : ctx.chartId && ctx.canManage ? <Button type="button" variant="outline-secondary" onClick={() => onReview(s)}>Review…</Button>
               : <span className="cmt">{ctx.chartId ? 'Not reviewed' : 'Save the chart to review signals'}</span>}</td>
         </tr>;
       })}</tbody></table>
@@ -146,7 +147,7 @@ export function TrendPanel({ p, ctx = {} }) {
   return (
     <div className="trpanel">
       <div className="ph"><div className="facts" style={{ margin: 0 }}><Facts p={p} /></div>
-        <div className="dl"><span className="trpill">Download</span>{['png', 'svg', 'csv', 'xlsx', 'pdf'].map((k) => <button key={k} type="button" className="btn ghost" onClick={() => download(k)}>{k === 'xlsx' ? 'Excel' : k.toUpperCase()}</button>)}</div></div>
+        <div className="dl"><span className="trpill">Download</span>{['png', 'svg', 'csv', 'xlsx', 'pdf'].map((k) => <Button key={k} type="button" variant="light" onClick={() => download(k)}>{k === 'xlsx' ? 'Excel' : k.toUpperCase()}</Button>)}</div></div>
       <div className="views">{views.map(([k, t]) => <button key={k} type="button" className={view === k ? 'on' : undefined} onClick={() => setView(k)}>{t}</button>)}</div>
       {view === 'chart' && <ServerSvg svg={p.svg} />}
       {view === 'mr' && <><ServerSvg svg={p.mrSvg} /><div className="help" style={{ fontSize: 11.5, color: 'var(--muted)' }}>The moving range is the difference between each point and the one before it; a point above its upper limit is a jump bigger than the process normally makes.</div></>}

@@ -10,6 +10,7 @@ import { useSession } from '../../session/SessionProvider.jsx';
 import NeedPermission from './NeedPermission.jsx';
 import { SignInHistoryDialog, signatureDialog, tempPassword } from './userDialogs.jsx';
 import './admin.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'users' };
 const signInState = (u) => (!u.is_active ? 'Inactive' : u.locked_at ? 'Locked' : !u.has_password ? 'No password yet' : u.must_change_password ? 'Temporary password' : 'Active');
@@ -69,11 +70,11 @@ function Users() {
     <PageHeader title={`People and groups: ${lab ? lab.site_code : ''}`} audit={AUDIT}
       subtitle={`Admin. Tick the groups each person belongs to in ${lab ? lab.site_name : 'this lab'}. A person's permissions here are everything their groups give them, added together; being in any group here is what lets them open this lab. Groups at other labs are separate. Select a block of ticks and press Space, or Ctrl+D, to change many at once. Every change is signed and kept as history; nobody can add themselves to a group.`}
       actions={<>
-        <a className="btn" href="#/admin/groups">Groups and permissions</a> <a className="btn" href="#/admin/permissions">Permission matrix</a>{' '}
-        <button type="button" className="btn" onClick={() => dialogs.open((done) => <SignInHistoryDialog onDone={() => done()} />)}>Sign-in history</button>{' '}
-        <button type="button" className="btn primary" onClick={newUser}>+ New user</button>
+        <Button variant="outline-secondary" href="#/admin/groups">Groups and permissions</Button> <Button variant="outline-secondary" href="#/admin/permissions">Permission matrix</Button>{' '}
+        <Button type="button" variant="outline-secondary" onClick={() => dialogs.open((done) => <SignInHistoryDialog onDone={() => done()} />)}>Sign-in history</Button>{' '}
+        <Button type="button" variant="primary" onClick={newUser}>+ New user</Button>
       </>} />
-    {error ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : <>
+    {error ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : <>
       <EditableGrid rows={rows} columns={columns} search what="group membership" rowClass={rowClass} sign={sign} save={saveRows}
         afterSave={async () => { await refreshUsers(); reload(); }} />
       <p className="help">Everyone signs in with their own user ID and password. &quot;Set temporary password&quot; gives a person a one-time password (it also unlocks a locked account); they must choose their own at the next sign-in. Nobody, including administrators, can see a password. Lab administrators can reset passwords only for people in their lab. System administrators (the LIMS team) can do everything in every lab and appear as such in the permission matrix.

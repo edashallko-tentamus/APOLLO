@@ -16,6 +16,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, dt, Failed, Loading, PHASE1 } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const CHECK_COLS = [
   { field: 'item_text', title: 'Item', type: 'readonly', width: 560 },
@@ -80,12 +81,12 @@ export default function OosPage({ params: [id] }) {
     <PageHeader title={`${o.oos_code}: ${o.analyte_name} in ${o.sample_code}`} audit={{ kind: 'oos', id: o.id }}
       subtitle={<>{o.procedure} · <Badge status={o.status} />{o.conclusion && <> · <b>{o.conclusion}</b></>}</>}
       actions={<>
-        {o.report_document_id && <a className="btn" target="_blank" rel="noopener noreferrer" id="rep" href={oosReportUrl(o.id, site?.id)}>Investigation report (PDF)</a>}{' '}
-        {mayCancel && <button type="button" className="btn ghost" onClick={cancel}>Cancel investigation…</button>}{' '}
-        <a className="btn ghost" href="#/oos">All investigations</a></>} />
+        {o.report_document_id && <Button variant="outline-secondary" target="_blank" rel="noopener noreferrer" id="rep" href={oosReportUrl(o.id, site?.id)}>Investigation report (PDF)</Button>}{' '}
+        {mayCancel && <Button type="button" variant="light" onClick={cancel}>Cancel investigation…</Button>}{' '}
+        <Button variant="light" href="#/oos">All investigations</Button></>} />
     <div className="oosg">
       <div>
-        <div className="card"><h2 style={{ fontSize: 15, margin: '0 0 8px' }}>The result</h2><dl>
+        <Card body><h2 style={{ fontSize: 15, margin: '0 0 8px' }}>The result</h2><dl>
           <dt>Sample</dt><dd><a href={'#/samples/' + o.sample_id}>{o.sample_code}</a>{o.client_sample_id ? ` (${o.client_sample_id})` : ''}</dd>
           <dt>Client</dt><dd>{o.client_name}</dd>
           <dt>Test</dt><dd>{o.test_name}</dd>
@@ -99,12 +100,12 @@ export default function OosPage({ params: [id] }) {
           <dt>Target date</dt><dd className={`oosdue ${late ? 'late' : ''}`}>{d8(o.due_date)}{late ? ' (overdue)' : ''}</dd>
           {o.client_notified_at && <><dt>Client told</dt><dd>{dt(o.client_notified_at)} (OOS email with the COA)</dd></>}
           {o.status === 'Cancelled' && <><dt>Cancelled</dt><dd>{o.cancelled_name || ''}, {dt(o.cancelled_at)}: {o.cancelled_reason || ''}</dd></>}
-        </dl></div>
-        <div className="card"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><h2 style={{ fontSize: 15, margin: 0 }}>Automatic data checks</h2>
-          {open && (can.open || can.review) && <button type="button" className="btn ghost mini" disabled={busy} onClick={rerun}>Run again</button>}</div>
+        </dl></Card>
+        <Card body><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><h2 style={{ fontSize: 15, margin: 0 }}>Automatic data checks</h2>
+          {open && (can.open || can.review) && <Button type="button" variant="light" size="sm" className="mini" disabled={busy} onClick={rerun}>Run again</Button>}</div>
           <div className="help" style={{ margin: '4px 0 8px' }}>{o.auto_checked_at ? 'Run ' + dt(o.auto_checked_at) + '. ' : ''}Worked out from the records; a Fail needs explaining in the investigation.</div>
           <div id="checks">{(o.auto_checks || []).length ? o.auto_checks.map((c, k) => <div key={k} className={`oosck ${c.level}`}><span className="lv">{c.level}</span><b>{c.title}</b>{c.detail}</div>)
-            : <div className="help">Not run yet.</div>}</div></div>
+            : <div className="help">Not run yet.</div>}</div></Card>
       </div>
       <div id="secs">
         {p1 ? <>
@@ -134,7 +135,7 @@ function SignedSection({ ctx, name, title, by, byName, at, answers, comment, ite
     const done = await dialogs.sign({ what: `${o.oos_code}: ${title}`, meaning, needReason: false, submit: ({ signature }) => signSection(o.id, path, { ...body, signature }) });
     if (done) { toast('Section signed.'); reload(); }
   }
-  return <div className="card oossec"><h2>{title}</h2>
+  return <Card body className="oossec"><h2>{title}</h2>
     {by && <div className="signed">Signed ({meaning}) by {byName || ''}, {dt(at)}</div>}
     {!by && !editable && waiting && <div className="help">{waiting}</div>}
     {(by || editable) && <>
@@ -142,9 +143,9 @@ function SignedSection({ ctx, name, title, by, byName, at, answers, comment, ite
       {name === 'Analyst' && <><div className="fl">Hypothesis (what might explain the result; optional)</div>
         {editable ? <textarea rows={2} value={hyp} onChange={(e) => setHyp(e.target.value)} /> : <div>{hypothesis || ''}</div>}</>}
       <div className="fl">Comment</div>{editable ? <textarea rows={3} value={cm} onChange={(e) => setCm(e.target.value)} /> : <div>{comment || ''}</div>}
-      {editable && <div className="oosacts"><button type="button" className="btn primary" onClick={signIt}>Sign the {name.toLowerCase()} section</button></div>}
+      {editable && <div className="oosacts"><Button type="button" variant="primary" onClick={signIt}>Sign the {name.toLowerCase()} section</Button></div>}
     </>}
-  </div>;
+  </Card>;
 }
 
 function Conclusion({ ctx, title, editable, reviewerItems, waiting }) {
@@ -165,7 +166,7 @@ function Conclusion({ ctx, title, editable, reviewerItems, waiting }) {
       submit: ({ signature }) => concludeOos(o.id, { ...body, signature }) });
     if (ok) { toast(`${o.oos_code} concluded: report made.`); reload(); }
   }
-  return <div className="card oossec"><h2>{title}</h2>
+  return <Card body className="oossec"><h2>{title}</h2>
     {done && <div className="signed">Concluded (Approved by) by {o.concluded_name || ''}, {dt(o.concluded_at)}</div>}
     {!done && !editable && <div className="help">{waiting || (open ? (p1 ? 'QA (oos.approve) concludes.' : 'Someone with QC Review rights (testing.review) or QA concludes.') : '')}</div>}
     {reviewerItems && (done || editable) && <Checklist items={reviewerItems} answers={o.reviewer_answers} editable={editable} gridRef={gridRef} />}
@@ -175,9 +176,9 @@ function Conclusion({ ctx, title, editable, reviewerItems, waiting }) {
       <div className="fl">Conclusion</div><SmartSelect id="cc_c" value={conclusion} options={CONCLUSIONS} onChange={setConclusion} />
       <div className="fl">Assignable cause (the documented laboratory error; required for &quot;Assignable cause found&quot;)</div><textarea rows={2} value={cause} onChange={(e) => setCause(e.target.value)} />
       <div className="fl">Justification</div><textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
-      <div className="oosacts"><button type="button" className="btn primary" onClick={conclude}>Conclude and sign…</button></div>
+      <div className="oosacts"><Button type="button" variant="primary" onClick={conclude}>Conclude and sign…</Button></div>
     </>}
-  </div>;
+  </Card>;
 }
 
 // retests, the client's answers and the retest determination
@@ -229,17 +230,17 @@ function Retests({ ctx }) {
   }, [d]); // eslint-disable-line react-hooks/exhaustive-deps -- everything here follows the investigation's data
 
   if (!closed && !d.responses.length && !d.retests.length) return null;
-  return <div className="card oossec"><h2>Retests and the client</h2>
+  return <Card body className="oossec"><h2>Retests and the client</h2>
     {closed && o.conclusion === 'Assignable cause found' && <div className="help">An assignable cause invalidates the result: order the lab investigation retest (a re-prep from the retained sample, not billed). The invalid result is never released.</div>}
     {closed && o.conclusion === 'OOS confirmed' && <div className="help">The confirmed result is released on the COA; the client is emailed then, with links to answer (retest, retest in duplicate, a new sample, hold or return the retained sample, a call with QA). {!o.client_notified_at && <b>Not released yet.</b>}</div>}
     {d.retests.length > 0 && <><div className="fl">Retests</div><ReadGrid rows={d.retests} columns={RETEST_COLS} /></>}
     {d.responses.length > 0 && <><div className="fl">The client&apos;s answers</div><ReadGrid rows={d.responses} columns={respCols} /></>}
     {o.retest_determination && <div className="signed" style={{ marginTop: 8 }}>Retest determination: <b>{o.retest_determination}</b> by {o.determined_name || ''}, {dt(o.determined_at)}: {o.determination_reason || ''}</div>}
     <div className="oosacts">
-      {canLab && <button type="button" className="btn primary" onClick={() => order('Lab investigation')}>Order the lab investigation retest…</button>}
-      {canClient && <button type="button" className="btn primary" onClick={() => order('Client')}>Order the client retest…</button>}
-      {canDet && <button type="button" className="btn primary" onClick={determination}>Record the retest determination…</button>}
+      {canLab && <Button type="button" variant="primary" onClick={() => order('Lab investigation')}>Order the lab investigation retest…</Button>}
+      {canClient && <Button type="button" variant="primary" onClick={() => order('Client')}>Order the client retest…</Button>}
+      {canDet && <Button type="button" variant="primary" onClick={determination}>Record the retest determination…</Button>}
       {clientRetest && !clientRetest.result && !o.retest_determination && <span className="help">QA records the determination (billing) once the retest is approved in QC Review.</span>}
     </div>
-  </div>;
+  </Card>;
 }

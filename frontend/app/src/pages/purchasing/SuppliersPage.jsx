@@ -12,6 +12,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, decisionText, dt, expCls, Failed, levelText, Loading, NeedLab, PuTabs, supCls } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const AUDIT = { kind: 'vendors' };
 const days = (v) => (new Date(v) - Date.now()) / 864e5;
@@ -60,7 +61,7 @@ function Notices({ site, rows, canAck, onDone }) {
   };
   return (
     <Section className="warn" title={`Notices for ${site.site_code} (${rows.length})`} help="Corporate QA's decisions that affect this lab. QA marks them as read (select some, or none for all)."
-      actions={canAck && <button type="button" className="btn" disabled={busy} onClick={ack}>Mark as read</button>}>
+      actions={canAck && <Button type="button" variant="outline-secondary" disabled={busy} onClick={ack}>Mark as read</Button>}>
       <DataGrid grid={grid} />
     </Section>
   );
@@ -80,7 +81,7 @@ export default function SuppliersPage({ query }) {
   return <>
     <PageHeader title={`Vendor approvals: ${site.site_code}`} audit={AUDIT}
       subtitle={`Whether each vendor may be used at ${site.site_name}, and for what. QA approves vendors for this lab; Corporate QA approves them for every lab. A lab can be stricter than corporate (suspend or reject a vendor here), never looser: while Corporate QA has a vendor suspended or rejected, no lab can use it. Purchase requests are approved separately, by Lab Supervisors and General Managers.`}
-      actions={<a className="btn" href="#/inventory/suppliers">Supplier list</a>} />
+      actions={<Button variant="outline-secondary" href="#/inventory/suppliers">Supplier list</Button>} />
     <PuTabs />
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : <>
       {open.length > 0 && <Notices site={site} rows={open} canAck={me.can_qualify} onDone={reload} />}
@@ -92,7 +93,7 @@ export default function SuppliersPage({ query }) {
       <div className="pubar">
         {Object.entries(F).map(([k, [lbl, fn]]) => <a key={k} className={`tab${k === show ? ' on' : ''}`} href={`#/purchasing/suppliers?show=${k}`}>{lbl} <small>{d.rows.filter(fn).length}</small></a>)}
       </div>
-      {!(me.can_qualify || me.can_qualify_corporate) && <div className="notice">QA approves vendors for this lab (purchasing.qualify); Corporate QA for every lab.</div>}
+      {!(me.can_qualify || me.can_qualify_corporate) && <div className="alert alert-warning">QA approves vendors for this lab (purchasing.qualify); Corporate QA for every lab.</div>}
       <ReadGrid rows={shown} columns={COLUMNS} search onRowOpen={openVendor} />
     </>}
   </>;

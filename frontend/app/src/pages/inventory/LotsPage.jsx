@@ -13,6 +13,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { reorderDialog, usageDialog } from './dialogs.jsx';
 import { amtCls, closed, d8, expCls, InvTabs, isMixture, NeedLab, qaCls, qty } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const FILTERS = [['active', 'Active'], ['wasted', 'Show wasted'], ['expired', 'Show expired'], ['negative', 'Show negative'],
   ['order', 'On order'], ['qa', 'QA testing'], ['waste', 'Waste to classify']];
@@ -90,20 +91,20 @@ export default function LotsPage({ query }) {
     <InvTabs />
     <div className="invbar">
       <span className="sp" /><BulkButtons kind="lots" selected={() => picked().map((r) => r.id)} onDone={() => reloadRef.current()} />
-      <button type="button" className="btn" onClick={() => { const p = picked(); printTable(`Inventory: ${site.site_code} (${FILTER_NAME[filterRef.current] || 'Active'})`, PRINT_COLS, p.length ? p : shown()); }}>Print</button>
-      <a className="btn primary" href="#/inventory/new">+ New Inventory Item</a><a className="btn primary" href="#/inventory/mixture">+ In-house mixture</a>
+      <Button type="button" variant="outline-secondary" onClick={() => { const p = picked(); printTable(`Inventory: ${site.site_code} (${FILTER_NAME[filterRef.current] || 'Active'})`, PRINT_COLS, p.length ? p : shown()); }}>Print</Button>
+      <Button variant="primary" href="#/inventory/new">+ New Inventory Item</Button><Button variant="primary" href="#/inventory/mixture">+ In-house mixture</Button>
     </div>
     <div className="invbar"><span className="help">Also:</span>
       {/* usage is recorded against any usable lot, not only those on the page shown */}
-      <button type="button" className="btn" onClick={async () => {
+      <Button type="button" variant="outline-secondary" onClick={async () => {
         try { if (await usageDialog(ui, (await usableLots()).filter((r) => r.use_eligible))) reloadRef.current(); } catch (e) { toast(e.message, 'err'); }
-      }}>Record usage</button>
-      <a className="btn" href="#/inventory/receive">Receive many (paste)</a>
-      <button type="button" className="btn" title="Barcode labels for the ticked rows (Dymo, 1 x 2 1/8 in.), one per container" onClick={() => {
+      }}>Record usage</Button>
+      <Button variant="outline-secondary" href="#/inventory/receive">Receive many (paste)</Button>
+      <Button type="button" variant="outline-secondary" title="Barcode labels for the ticked rows (Dymo, 1 x 2 1/8 in.), one per container" onClick={() => {
         const p = picked().length ? picked() : (g() ? g().selectedRows() : []);
         if (!p.length) { toast('Tick the rows (or select them) to print labels for.', 'err'); return; }
         printLabels('lot', p.map((r) => r.id));
-      }}>Print labels</button>
+      }}>Print labels</Button>
     </div>
     <PagedList load={load} query={listQuery} filters={FILTERS} open={openLot}
       placeholder="Search by ID, name, lot#, CAS, vendor or analyte; scan or type an ID and press Enter to open it">

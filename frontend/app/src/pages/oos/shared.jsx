@@ -1,12 +1,13 @@
 // Parts the OOS screens share: formats, states, and opening an investigation (QC Review and the sample page).
 import { openOosRecord } from '../../api/oos.js';
 import './oos.css';
+import { Card } from 'react-bootstrap';
 
 export const PHASE1 = 'Full Phase I (21 CFR 211)';
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
 export const d8 = (v) => (v ? new Date(String(v).slice(0, 10) + 'T12:00:00').toLocaleDateString([], { dateStyle: 'medium' }) : '');
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 
 // Open an OOS investigation. Exported for the testing area (QC Review) and the sample page:
 //   const id = await openOos(dialogs, toast, { requested_test_id, analyte_id, batch_id, label });

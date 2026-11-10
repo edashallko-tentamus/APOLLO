@@ -16,6 +16,7 @@ import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import PickList from '../charges/PickList.jsx';
 import { useRowQueue } from './rowQueue.js';
+import { Button, Card } from 'react-bootstrap';
 
 const MODE_HELP = { 'Base Price Only': 'One price for the whole test.', 'Base + Preparation Fee': 'Base price plus a preparation fee.', 'Analyte Selection': 'Each analyte has a price and can be switched on or off. Base and prep fee are added if filled in.' };
 const SERVING_ROLES = [{ value: '', label: 'No: an ordinary test' }, { value: 'Serving weight', label: 'Serving weight (its result is the average unit weight)' }, { value: 'Density', label: 'Density (g/mL)' }];
@@ -120,10 +121,10 @@ function Editor({ testId, d, schedules, analytes, reload }) {
   return <>
     <PageHeader title={d.test.test_name} audit={{ kind: 'test', id: testId }}
       subtitle={<><a href={'#/catalog/' + testId}>{d.test.test_code}</a> <Badge status={d.test.status} /> · Test Workflow Designer · Step 1 of 5: Pricing and turnaround</>}
-      actions={<><a className="btn ghost" href="#/catalog">Catalogue</a>{' '}<button type="button" className="btn primary" onClick={save} disabled={saving}>Save</button></>} />
+      actions={<><Button variant="light" href="#/catalog">Catalogue</Button>{' '}<Button type="button" variant="primary" onClick={save} disabled={saving}>Save</Button></>} />
     <div className="steps"><span className="on">1 Pricing and TAT</span><span>2 Method and analytes</span><span>3 Workflow steps</span><span>4 Calculations and limits</span><span>5 Review and approve</span></div>
     <div className="cols">
-      <div className="card">
+      <Card body>
         <h2>Pricing</h2>
         <div className="frm">
           <label>Test name{inp('test_name')}</label>
@@ -142,8 +143,8 @@ function Editor({ testId, d, schedules, analytes, reload }) {
             <div className="listprice"><span>List price</span><b>{money(lp)}</b><small>{lpd}</small></div>
           </div>
         </div>
-      </div>
-      <div className="card">
+      </Card>
+      <Card body>
         <h2>Turnaround and rush</h2>
         <div className="frm">
           <div className="row3">
@@ -156,21 +157,21 @@ function Editor({ testId, d, schedules, analytes, reload }) {
           <label className="cb"><input type="checkbox" checked={form.show_in_public_catalogue} onChange={(ev) => set('show_in_public_catalogue')(ev.target.checked)} /> Show in public catalogue</label>
           <label>Test status<SmartSelect value={form.status} options={STATUSES} onChange={set('status')} /></label>
         </div>
-      </div>
+      </Card>
     </div>
     {m === 'Analyte Selection' && (
       <Section title="Analyte prices" help="Used when the pricing mode is Analyte Selection. Paste analyte names and prices straight from Excel, or set one price and fill down."
-        actions={<button type="button" className="btn" onClick={addAnalytes}>+ Add analytes</button>}>
+        actions={<Button type="button" variant="outline-secondary" onClick={addAnalytes}>+ Add analytes</Button>}>
         <DataGrid grid={ag} />
       </Section>
     )}
     <Section title="Rush tiers for this test" help="Each tier uses the schedule's approval default unless you override it for this test. Changing the schedule takes effect after saving.">
       <DataGrid grid={rg} emptyText="No rush schedule assigned." />
     </Section>
-    <div className="card"><h2>Test versions</h2><p className="help">Scientific content (method, analytes, workflow, formulas) is versioned in the Workflow Designer. Price changes never create a new version.</p>
+    <Card body><h2>Test versions</h2><p className="help">Scientific content (method, analytes, workflow, formulas) is versioned in the Workflow Designer. Price changes never create a new version.</p>
       {d.versions.map((v, i) => <span key={v.version_no}>{i > 0 && ' · '}Version {v.version_no} <Badge status={v.status} /></span>)}
-      {!d.versions.some((v) => v.status === 'Effective') && <div className="notice" style={{ marginTop: 10 }}>This test has no Effective version, so it cannot be ordered yet. Its version is built and approved in the Workflow Designer.</div>}
-      <div style={{ marginTop: 10 }}><a className="btn" href={`#/methods/tests/${testId}`}>Open in the Workflow Designer</a></div></div>
+      {!d.versions.some((v) => v.status === 'Effective') && <div className="alert alert-warning" style={{ marginTop: 10 }}>This test has no Effective version, so it cannot be ordered yet. Its version is built and approved in the Workflow Designer.</div>}
+      <div style={{ marginTop: 10 }}><Button variant="outline-secondary" href={`#/methods/tests/${testId}`}>Open in the Workflow Designer</Button></div></Card>
   </>;
 }
 
@@ -183,7 +184,7 @@ export default function CatalogEditorPage({ params }) {
   // a new answer starts the editor again from it (the form keeps no edits across a save)
   const gen = useRef({ data: null, n: 0 });
   if (data && data !== gen.current.data) gen.current = { data, n: gen.current.n + 1 };
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
   return <Editor key={gen.current.n} testId={testId} {...data} reload={reload} />;
 }

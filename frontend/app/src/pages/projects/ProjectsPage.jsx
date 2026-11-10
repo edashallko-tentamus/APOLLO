@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import PagedList from '../../components/PagedList.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { openNewProject } from './newProject.js';
+import { Button } from 'react-bootstrap';
 
 const FILTERS = [['all', 'All'], ['open', 'Open'], ['accepted', 'Accepted'], ['closed', 'Closed']];
 const openQuote = (r) => { window.location.hash = '#/quote/' + r.latest_version_id; };
@@ -27,7 +28,7 @@ export default function ProjectsPage({ query }) {
   return <>
     <PageHeader title="Projects" audit={AUDIT}
       subtitle="A project is a reusable, client-specific quoted list of tests for a product or a recurring testing bundle. Each re-quote is a new version; orders keep the terms of the version they used. One-off customer requests are Quotes."
-      actions={<><button type="button" className="btn primary" onClick={() => openNewProject(dialogs, toast)}>+ New project</button> <a className="btn ghost" href="#/quotes">Quotes</a></>} />
+      actions={<><Button type="button" variant="primary" onClick={() => openNewProject(dialogs, toast)}>+ New project</Button> <Button variant="light" href="#/quotes">Quotes</Button></>} />
     <PagedList load={listProjects} query={query} filters={FILTERS} placeholder="Search by code, project or client; type a project code and press Enter to open it"
       open={(r) => { window.location.hash = '#/projects/' + r.id; }}>
       {(rows) => <ReadGrid rows={rows} columns={COLUMNS} emptyText="No projects here." onRowOpen={openQuote} />}

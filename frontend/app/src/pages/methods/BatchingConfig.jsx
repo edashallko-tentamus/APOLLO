@@ -6,6 +6,7 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { CfgGrid, filled, useCfgGrid } from './ConfigEditors.jsx';
 import { Field, numOf, Pick, str } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const FREQ = [{ value: 'Once', label: 'Once' }, { value: 'Every N', label: 'Every N' }, { value: 'Daily', label: 'Daily' }];
 const MATERIAL = [{ value: '', label: '' }, { value: 'Strains', label: 'Strains of the test\'s organisms' }];
@@ -63,8 +64,8 @@ function Criterion({ k, store, d, ed, shapeOf, isOpen, toggle, onRemove }) {
           {sh === 'Range' ? <><input type="number" step="any" placeholder="min" value={minT} disabled={!ed} onChange={(e) => setMinT(e.target.value)} onBlur={() => applyDefault({ min: numOf(minT) })} /> to </> : 'max '}
           <input type="number" step="any" placeholder="max" value={maxT} disabled={!ed} onChange={(e) => setMaxT(e.target.value)} onBlur={() => applyDefault({ max: numOf(maxT) })} />
           {sh === 'Max' && <> or <Pick value={def.limit_ref} options={LIMIT_REFS} disabled={!ed} onChange={(v) => applyDefault({ limit_ref: v || null })} aria-label="Or limit" /></>}
-          {ed && <> <button type="button" className="btn mini" title="Set every analyte to the default" onClick={fillAll}>Fill all</button></>}</>}</span>
-        {ed && <button type="button" className="btn mini ghost" onClick={onRemove}>Remove</button>}
+          {ed && <> <Button type="button" variant="outline-secondary" size="sm" className="mini" title="Set every analyte to the default" onClick={fillAll}>Fill all</Button></>}</>}</span>
+        {ed && <Button type="button" variant="light" size="sm" className="mini" onClick={onRemove}>Remove</Button>}
       </div>
       <div className="wdexcrow">
         <div className="wdexc">{ex.length ? <><span className="help">Exceptions:</span> {ex.map((r) => (
@@ -144,7 +145,7 @@ export default function BatchingConfig({ cfg, d, ed, readRef }) {
       <div id="c_crit">{types.length ? types.map((qt) => (
         <div key={qt} className="wdqc">
           <div className="wdqchead"><b>{qt}</b> <span className="help">{qcRows.find((r) => r.qc_type === qt)?.qc_class || classOf(qt) || ''} QC</span>
-            {ed && <button type="button" className="btn mini" onClick={() => addCrit(qt)}>+ Criterion</button>}</div>
+            {ed && <Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => addCrit(qt)}>+ Criterion</Button>}</div>
           {(crits[qt] || []).length ? crits[qt].map((k) => (
             <Criterion key={k} k={k} store={store} d={d} ed={ed} shapeOf={shapeOf} isOpen={open.has(k)} toggle={() => toggle(k)} onRemove={() => removeCrit(qt, k)} />))
             : <div className="help">No acceptance criterion yet.</div>}

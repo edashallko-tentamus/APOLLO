@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { dateTime } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
+import { Card } from 'react-bootstrap';
 
 const d8 = (v) => (v ? new Date(v + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '');
 const ago = (v) => { if (!v) return ''; const m = Math.round((Date.now() - new Date(v).getTime()) / 60000); return m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`; };
@@ -84,7 +85,7 @@ export default function IntakeDashboardPage() {
   }, [d]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const header = <PageHeader title="Intake dashboard" audit={AUDIT} subtitle={`Rush requests, incoming work and today's samples for ${site ? site.site_code : 'your lab'}.`} />;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<div className="loading">Loading…</div></>;
   const overdue = d.pending.filter((p) => p.overdue).length;
 

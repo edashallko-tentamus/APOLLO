@@ -14,6 +14,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import PullsGrid from './PullsGrid.jsx';
 import { d8, dt, ext, Failed, iso, Loading } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const FATES = [{ value: 'Destroyed', label: 'Destroyed' }, { value: 'Returned', label: 'Returned to the client' }, { value: 'Retained', label: 'Kept as retain' }];
 const fateText = (v) => ({ Destroyed: 'Destroyed', Returned: 'Returned to the client', Retained: 'Kept as retain' }[v] || v);
@@ -90,9 +91,9 @@ function Study({ d, reload }) {
   ], [s.project_id]);
 
   const actions = <>
-    <a className="btn ghost" href={summaryPdfUrl(s.id)} {...ext}>Summary so far (PDF)</a>
-    {d.can_amend && s.status !== 'Cancelled' && !s.amendment_pending_version && <> <button type="button" className="btn ghost" id="amend" onClick={amend}>Amend the study…</button></>}
-    {d.can_cancel && running && <> <button type="button" className="btn ghost" id="cancel" onClick={cancel}>Cancel the study…</button></>}
+    <Button variant="light" href={summaryPdfUrl(s.id)} {...ext}>Summary so far (PDF)</Button>
+    {d.can_amend && s.status !== 'Cancelled' && !s.amendment_pending_version && <> <Button type="button" variant="light" id="amend" onClick={amend}>Amend the study…</Button></>}
+    {d.can_cancel && running && <> <Button type="button" variant="light" id="cancel" onClick={cancel}>Cancel the study…</Button></>}
   </>;
   const subtitle = <>
     <a href={'#/clients/' + s.client_id}>{s.client_name}</a> · lot {s.lot || '-'} · {s.site_code} · <Badge status={s.status} /> · from quote <a href={'#/stability/quotes/' + s.project_id}>{s.project_code + (s.version_no > 1 ? ' v' + s.version_no : '')}</a>{s.amendment_no ? ` (amendment ${s.amendment_no})` : ''}
@@ -101,8 +102,8 @@ function Study({ d, reload }) {
 
   return <>
     <PageHeader title={`${s.study_code}: ${s.product || 'stability study'}`} subtitle={subtitle} actions={actions} audit={{ kind: 'stability_study', id: s.id }} />
-    {s.status === 'Cancelled' && <div className="notice stb-done"><b>Cancelled</b> {dt(s.cancelled_at)} by {s.cancelled_by_name || ''}: {s.cancel_reason || ''}. Pulls already taken stay in testing and are reported and billed.</div>}
-    {s.amendment_pending_version && <div className="notice stb-amd">Amendment in progress: quote version {s.amendment_pending_version} (<a href={'#/stability/quotes/' + s.project_id}>open it</a>). The study runs to version {s.version_no} until the client accepts it.</div>}
+    {s.status === 'Cancelled' && <div className="alert alert-warning stb-done"><b>Cancelled</b> {dt(s.cancelled_at)} by {s.cancelled_by_name || ''}: {s.cancel_reason || ''}. Pulls already taken stay in testing and are reported and billed.</div>}
+    {s.amendment_pending_version && <div className="alert alert-warning stb-amd">Amendment in progress: quote version {s.amendment_pending_version} (<a href={'#/stability/quotes/' + s.project_id}>open it</a>). The study runs to version {s.version_no} until the client accepts it.</div>}
     {d.need.length > 0 && ['Awaiting material', 'Active', 'Completed'].includes(s.status) && <PlaceCard d={d} reload={reload} />}
     <Section title="Stored material" help="One labelled lot of material per condition, in its chamber, rack and position. Required = every pull of the design plus the reserve. Material no longer needed (the study completed, or an amendment dropped its condition) is destroyed, returned or kept as a retain, which frees the rack.">
       <div id="stor"><ReadGrid rows={d.storage} columns={storCols} emptyText="Nothing placed yet." rowClass={storRow} /></div>
@@ -208,8 +209,8 @@ function ReportsCard({ d, reload }) {
     <Section className="stb-rep" title="Issued reports" help="The cumulative report the client is sent: finalized results only, timepoint by timepoint, with the excursions and their assessment and the amendments. Issue one after each pull's results are finalized (Report Finalization); the one issued when every pull is done and finalized is marked Final. Signed like a COA (your handwritten signature and title on file) and emailed to the client's report contacts.">
       <div id="reports">
         <div className="stb-bar">
-          {s.status !== 'Awaiting material' && <a className="btn ghost" href={previewPdfUrl(s.id)} {...ext}>Preview the next report</a>}
-          {d.can_report ? <button type="button" className="btn primary" id="issue" disabled={blocks.length > 0} onClick={issue}>Issue report…</button> : <span className="help">reports.finalize is needed to issue reports.</span>}
+          {s.status !== 'Awaiting material' && <Button variant="light" href={previewPdfUrl(s.id)} {...ext}>Preview the next report</Button>}
+          {d.can_report ? <Button type="button" variant="primary" id="issue" disabled={blocks.length > 0} onClick={issue}>Issue report…</Button> : <span className="help">reports.finalize is needed to issue reports.</span>}
         </div>
         <ul className="stb-probs">{d.report_problems.map((x, i) => <li key={i} className={x.severity}>{x.problem}</li>)}</ul>
         <ReadGrid rows={d.reports} columns={REPORT_COLS} emptyText="No report issued yet." />
@@ -258,7 +259,7 @@ function PlaceCard({ d, reload }) {
       reload();
     } catch (e) { toast(e.message, 'err'); setBusy(false); }
   };
-  const goBtn = d.can_manage ? <button type="button" className="btn primary" id="pl_go" disabled={busy} onClick={go}>Place in chambers</button> : <span className="help">stability.manage is needed to place material.</span>;
+  const goBtn = d.can_manage ? <Button type="button" variant="primary" id="pl_go" disabled={busy} onClick={go}>Place in chambers</Button> : <span className="help">stability.manage is needed to place material.</span>;
   return adding
     ? <Section title="Place the new condition's material" help={`An amendment added ${d.need.map((n) => n.condition_name).join(', ')}. Put its material in a rack of a chamber set to that condition: its pulls are scheduled from this date (no T0: the baseline was tested when the study started).`}>
       <div id="place">

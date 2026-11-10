@@ -12,6 +12,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { DocRows, docsToBody, ScopeBoxes } from './dialogs.jsx';
 import { d8, decisionText, dt, expCls, Failed, Kv, levelText, lineColsWithout, Loading, mutedInactive, signed, supCls, today } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const LINES = lineColsWithout('supplier_name');
 const PROMO_COLS = [
@@ -160,23 +161,23 @@ export default function SupplierPage({ params }) {
     <PageHeader title={s.supplier_name} audit={{ kind: 'supplier', id }}
       subtitle={<><span className={`s-${String(s.approval_status).split(' ')[0]}`}>{s.approval_status} for {site?.site_code}</span>{s.approved_until ? ` until ${d8(s.approved_until)}` : ''}{s.decided_at ? ` · decided ${s.decided_at === 'Corporate' ? 'by Corporate QA' : 'by this lab'}` : ''}</>}
       actions={<>
-        <a className="btn ghost" href="#/purchasing/suppliers">All vendors</a>{' '}
-        {(canLab || canCorp) && <><button type="button" className="btn" onClick={() => attach().catch(fail)}>Attach document…</button>{' '}</>}
-        {canPropose && <><button type="button" className="btn" onClick={() => propose().catch(fail)}>Propose for corporate approval…</button>{' '}</>}
-        {(canLab || canCorp) && <button type="button" className="btn primary" onClick={() => approve().catch(fail)}>Approve vendor…</button>}
+        <Button variant="light" href="#/purchasing/suppliers">All vendors</Button>{' '}
+        {(canLab || canCorp) && <><Button type="button" variant="outline-secondary" onClick={() => attach().catch(fail)}>Attach document…</Button>{' '}</>}
+        {canPropose && <><Button type="button" variant="outline-secondary" onClick={() => propose().catch(fail)}>Propose for corporate approval…</Button>{' '}</>}
+        {(canLab || canCorp) && <Button type="button" variant="primary" onClick={() => approve().catch(fail)}>Approve vendor…</Button>}
       </>} />
     {openProp && (
       <Section className={canCorp ? 'warn' : ''} title={`Proposed for corporate approval: ${openProp.promotion_code}`}
         help={`${openProp.site_code} (${openProp.proposed_by_name}, ${dt(openProp.created_at)}) proposes ${openProp.from_code} for every lab: ${openProp.scope_text}, ${openProp.class_name}. ${openProp.document_count} document${openProp.document_count === 1 ? '' : 's'}.${openProp.note ? ' Note: ' + openProp.note : ''}`}
         actions={<>
-          {canCorp && <><button type="button" className="btn" onClick={() => decide(false).catch(fail)}>Reject proposal…</button>{' '}<button type="button" className="btn primary" onClick={() => decide(true).catch(fail)}>Approve for every lab…</button>{' '}</>}
-          {canLab && openProp.site_id === site?.id && <button type="button" className="btn ghost" onClick={() => withdrawProp().catch(fail)}>Withdraw proposal…</button>}
+          {canCorp && <><Button type="button" variant="outline-secondary" onClick={() => decide(false).catch(fail)}>Reject proposal…</Button>{' '}<Button type="button" variant="primary" onClick={() => decide(true).catch(fail)}>Approve for every lab…</Button>{' '}</>}
+          {canLab && openProp.site_id === site?.id && <Button type="button" variant="light" onClick={() => withdrawProp().catch(fail)}>Withdraw proposal…</Button>}
         </>} />)}
     <div className="cols">
-      <div className="card"><h2>Vendor</h2><Kv pairs={[['Code', s.supplier_code], ['Type', s.supplier_type], ['Our account #', s.account_number], ['Contact', s.contact_name],
-        ['Email', s.email], ['Phone', s.phone], ['Website', s.website], ['Address', s.address], ['Notes', s.notes]]} /></div>
-      <div className="card"><h2>Here and now</h2><Kv pairs={[['Status', s.approval_status], ['Decided by', levelText(s)], ['Approved until', d8(s.approved_until)], ['Risk class', s.risk_class],
-        ['This lab', qText(local)], ['Corporate', qText(corp)], ['Next certificate expiry', d8(row.next_certificate_expiry)]]} /></div>
+      <Card body><h2>Vendor</h2><Kv pairs={[['Code', s.supplier_code], ['Type', s.supplier_type], ['Our account #', s.account_number], ['Contact', s.contact_name],
+        ['Email', s.email], ['Phone', s.phone], ['Website', s.website], ['Address', s.address], ['Notes', s.notes]]} /></Card>
+      <Card body><h2>Here and now</h2><Kv pairs={[['Status', s.approval_status], ['Decided by', levelText(s)], ['Approved until', d8(s.approved_until)], ['Risk class', s.risk_class],
+        ['This lab', qText(local)], ['Corporate', qText(corp)], ['Next certificate expiry', d8(row.next_certificate_expiry)]]} /></Card>
     </div>
     <Section title="Approval history" help="Each decision is its own signed record; nothing is overwritten. Corporate (every lab) and this lab's own. A corporate suspension or rejection applies everywhere; otherwise this lab's decision comes first. Withdraw a record only if it was entered in error.">
       <ReadGrid rows={d.qualifications} columns={cols.quals} emptyText="Never approved." rowClass={mutedInactive} />

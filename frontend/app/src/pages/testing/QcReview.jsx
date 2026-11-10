@@ -10,6 +10,7 @@ import { openOos } from '../oos/shared.jsx';
 import { ReviewTrends } from '../trending/TrendPanel.jsx';
 import { chooseReading, markStep } from './actions.jsx';
 import { choiceText, dt, isPast, nfmt, reprepNote, storedBasis, verdictClass } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const reviewView = { results: 'hits', qc: 'exceptions' };   // kept while the page is reloaded
 const reviewOpen = new Map();                               // batch id -> Map of group keys the reviewer opened or closed
@@ -20,7 +21,7 @@ export default function ReviewPanel({ ctx, s }) {
   const { b, d } = ctx;
   // reloaded with the batch (d changes on every reload)
   const { data, error } = useApi((o) => Promise.all([api.getReview(b.id, o), api.oosForBatch(b.id, o).catch(() => ({ rows: [], can_open: false }))]), [b.id, d]);
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
   const [r, oosFor] = data;
   const tp = s && (r.timepoints || []).find((x) => x.step_run_id === s.id);
@@ -228,8 +229,8 @@ function FinalReview({ ctx, r, oosFor }) {
     {can && (r.problems.length ? <Todo title="To resolve before approval" items={r.problems} />
       : <div className="tbnote"><b>Ready to approve.</b> Every step is approved; approving the batch stores the chosen results and compares them with each sample's specification.</div>)}
     {can && <div className="tbacts" style={{ margin: '6px 0 12px' }}>
-      <button type="button" className="btn primary" id="rv_ok" disabled={r.problems.length > 0} title={r.problems.length ? 'Resolve the items listed first' : undefined} onClick={approve}>Approve batch</button>
-      <button type="button" className="btn" id="rv_ret" onClick={giveBack}>Return to the analyst</button></div>}
+      <Button type="button" variant="primary" id="rv_ok" disabled={r.problems.length > 0} title={r.problems.length ? 'Resolve the items listed first' : undefined} onClick={approve}>Approve batch</Button>
+      <Button type="button" variant="outline-secondary" id="rv_ret" onClick={giveBack}>Return to the analyst</Button></div>}
     {(d.invalid_readings || []).length > 0 && <div className="tbnote"><b>Readings that are not results</b> (never reported; each needs a valid reading in a later analytical run):{' '}
       {d.invalid_readings.map((x, i) => <span key={i}>{i > 0 && ' · '}{x.label} {x.analyte_name}: {x.value_text} (run {x.analytical_run}){x.replaced ? ', read again' : <>, <b>not read again yet</b></>}</span>)}</div>}
     {repreps.length > 0 && <div className="tbnote" id="rv_repreps"><b>Re-prepped samples</b> (kept in this batch with what was recorded; their results are not reported from it):{' '}
@@ -297,7 +298,7 @@ function TimepointPanel({ ctx, r, tp }) {
           : r.performer ? <div className="tbnote">You performed or witnessed a step of this batch, so someone else reviews it.</div>
             : tp.problems.length ? <Todo title="To resolve before release" items={tp.problems} />
               : <div className="tbnote"><b>Ready to release.</b> The results are stored as <b>Preliminary: not a final result</b> and can be reported as such.</div>}
-    {can && <div className="tbacts" style={{ margin: '6px 0 12px' }}><button type="button" className="btn primary" id="tp_rel" disabled={tp.problems.length > 0} title={tp.problems.length ? 'Resolve the items listed first' : undefined} onClick={release}>Release preliminary results</button></div>}
+    {can && <div className="tbacts" style={{ margin: '6px 0 12px' }}><Button type="button" variant="primary" id="tp_rel" disabled={tp.problems.length > 0} title={tp.problems.length ? 'Resolve the items listed first' : undefined} onClick={release}>Release preliminary results</Button></div>}
     <h3 style={{ margin: '14px 0 6px' }}>Steps before this timepoint</h3>
     <div id="tp_steps"><StepMarks ctx={ctx} marks={marks} can={can} onlyCompleted /></div>
     {tpLoads.length > 0 && <><h3 style={{ margin: '14px 0 6px' }}>Incubator loads outside their target</h3><div id="tp_loads"><LoadsGrid ctx={ctx} loads={tpLoads} can={can} /></div></>}

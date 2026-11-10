@@ -5,6 +5,7 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import './testing.css';
+import { Card } from 'react-bootstrap';
 
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
 export const day = (v) => (v ? String(v).slice(0, 10) : '');
@@ -25,7 +26,7 @@ export function TopTabs({ cur }) {
 }
 export function useNeedLab() {
   const { site } = useSession();
-  return site ? null : <div className="card err">Choose your lab (top right) first.</div>;
+  return site ? null : <Card body className="err">Choose your lab (top right) first.</Card>;
 }
 
 // ---------------------------------------------------------------- a read-only grid whose selection the page can read

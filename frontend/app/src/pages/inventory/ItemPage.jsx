@@ -15,6 +15,7 @@ import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { fileToBase64, signed } from './dialogs.jsx';
 import { d8, Failed, Field, isMixture, loadLookups, Loading, NeedLab, opts, today, withBlank } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const MAX_COA = 3.5 * 1024 * 1024;
 // COA field -> form field (onlyEmpty: fill only when nothing was typed)
@@ -185,14 +186,14 @@ function ItemForm({ M, L, QA, who, src, editId }) {
     <PageHeader title={title}
       subtitle={editing ? 'Changes are saved with a Reason for Change and your electronic signature, and kept in the audit trail.'
         : 'Fill in what you received, or record a purchase request for something not yet in the lab. Reference Standards and Microbiological Strains must name at least one analyte from the Analytes list.'}
-      actions={<><a className="btn ghost" href={editing ? '#/inventory/lots/' + editId : '#/inventory'}>Cancel</a> <button type="button" className="btn primary" disabled={saving} onClick={save}>{editing ? 'Save changes' : 'Save item'}</button></>} />
+      actions={<><Button variant="light" href={editing ? '#/inventory/lots/' + editId : '#/inventory'}>Cancel</Button> <Button type="button" variant="primary" disabled={saving} onClick={save}>{editing ? 'Save changes' : 'Save item'}</Button></>} />
     <div className="itemform">
       {!editing && <div className="modeswitch">
         <label><input type="radio" name="mode" value="received" checked={mode === 'received'} onChange={() => setMode('received')} /> Received now</label>
         <label><input type="radio" name="mode" value="request" checked={mode === 'request'} onChange={() => setMode('request')} /> Purchase request (a Lab Supervisor approves it)</label>
       </div>}
       <div className="cols">
-        <div className="card"><h2>Identity</h2>
+        <Card body><h2>Identity</h2>
           <Field label="Name" req help={'As staff call it, e.g. "Sodium Standard 1000 ppm" or "Pipette tips, 1000 µL"'} className={ai('item_name')}>{inp('item_name')}</Field>
           <Field label="Type" req><div className="checks" id="f_types">{types.map((t) => (
             <label key={t}><input type="checkbox" value={t} checked={v.chemical_types.includes(t)} disabled={mixture && t === 'In-house mixture'} onChange={toggleType(t)} /> {t}</label>))}</div></Field>
@@ -210,8 +211,8 @@ function ItemForm({ M, L, QA, who, src, editId }) {
           <Field label="Department" help="The department whose tests use it: its low stock flags that department's waiting samples on the dashboard">{sel('department_id', L.deptOpts)}</Field>
           <Field label="Waste classification" help={'How it is disposed of (Admin > Lab setup > Waste classifications). Leave empty to use the default for its type; "classify from the SDS" is listed as needing review.'}>{sel('waste_classification_id', L.wasteOpts)}</Field>
           <div className="grid2"><Field label="Storage location">{sel('storage_location_id', L.locOpts)}</Field><Field label="Storage condition">{sel('storage_condition', opts(M.storage_conditions))}</Field></div>
-        </div>
-        <div className="card"><h2>Quantitative</h2>
+        </Card>
+        <Card body><h2>Quantitative</h2>
           {!request && (mixture ? <Field label="Resource ID"><input id="f_manufacturer_lot_ro" value={l.lot_code} disabled /></Field>
             : <Field label="Lot #" help="The manufacturer's lot number" className={ai('manufacturer_lot')}>{inp('manufacturer_lot')}</Field>)}
           <div className="grid3"><Field label="Concentration" help="For the item as a whole, e.g. 1.02 N acid" className={ai('concentration')}>{inp('concentration', 'number')}</Field>
@@ -225,16 +226,16 @@ function ItemForm({ M, L, QA, who, src, editId }) {
             <div className="grid2"><Field label="Expiration date" className={ai('expiration_date')}>{inp('expiration_date', 'date')}</Field><Field label="Retest date" className={ai('retest_date')}>{inp('retest_date', 'date')}</Field></div>
           </>}
           <Field label="Notes"><textarea id="f_notes" rows={2} value={v.notes} onChange={onInput('notes')} /></Field>
-        </div>
+        </Card>
       </div>
-      {editing ? <div className="card"><h2>Supplier COA</h2><div className="help">COAs for this item are on its page: <a href={'#/inventory/lots/' + editId}>{l.lot_code}</a> (Upload Supplier COA).</div></div>
-        : <div className="card coanew"><h2>Supplier COA</h2>
+      {editing ? <Card body><h2>Supplier COA</h2><div className="help">COAs for this item are on its page: <a href={'#/inventory/lots/' + editId}>{l.lot_code}</a> (Upload Supplier COA).</div></Card>
+        : <Card body className="coanew"><h2>Supplier COA</h2>
           <div className="help">Attach the supplier's Certificate of Analysis (PDF or image, up to 3.5 MB). It is kept with the item exactly as uploaded, with its fingerprint.{' '}
             {M.ai.enabled ? <><b>Read the COA</b> fills in this form from the document; check every value before saving (they are recorded as confirmed by you).</>
               : 'Reading the COA automatically is switched off in this Sandbox until IT and QA approve it (the document would be sent to an AI service); type the values from the COA.'}</div>
           <div className="coarow"><input type="file" id="f_coa" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp" onChange={chooseCoa} />
-            {M.ai.enabled && <button type="button" className="btn" disabled={!coa || reading} onClick={readTheCoa}>{reading ? 'Reading…' : 'Read the COA'}</button>}</div>
-          <div className="help">{coaMsg}</div></div>}
+            {M.ai.enabled && <Button type="button" variant="outline-secondary" disabled={!coa || reading} onClick={readTheCoa}>{reading ? 'Reading…' : 'Read the COA'}</Button>}</div>
+          <div className="help">{coaMsg}</div></Card>}
     </div>
   </>;
 }

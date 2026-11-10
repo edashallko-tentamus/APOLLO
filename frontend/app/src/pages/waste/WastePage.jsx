@@ -5,6 +5,7 @@ import EditableGrid from '../../components/EditableGrid.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import Section from '../../components/Section.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'waste' };
 const TEXT_FIELDS = ['waste_name', 'epa_codes', 'waste_stream', 'container', 'disposal_instructions', 'segregation', 'status'];
@@ -56,7 +57,7 @@ export default function WastePage() {
   return <>
     <PageHeader title="Waste classifications" audit={AUDIT}
       subtitle={d ? `How each inventory item is disposed of. Every item has one: chosen on the item, or the default for its type. A classification marked "Needs review" (classify from the SDS) lists its items under Inventory > Waste to classify. Shared classifications (every lab) are kept by system administrators; ${d.lab.site_code}'s own by its Lab Supervisors, QA and General Managers. Confirm hazard classes and codes with the lab's EHS contact.` : ''} />
-    {error ? <div className="card err">{error.message}</div> : !view ? <div className="loading">Loading…</div> : (
+    {error ? <Card body className="err">{error.message}</Card> : !view ? <div className="loading">Loading…</div> : (
       <Section title="Classifications" help={`Hazard classes: ${d.hazard_classes.join(', ')}. "Default for" takes item types (${d.item_types.join(', ')}); one default per type in the lab (the lab's own default comes before the shared one). Paste from Excel, fill down with Ctrl+D.`}>
         <EditableGrid rows={view.rows} columns={view.columns} allowAdd={view.canAny} readOnly={!view.canAny} what="the waste classifications"
           newRow={view.newRow} rowClass={rowClass} save={view.save} afterSave={reload} />

@@ -9,6 +9,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { money, plural } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { ChargesTab, LinesTab, PackagesTab, PricesTab, TABS, TabBar } from './CatalogTabs.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -77,15 +78,15 @@ function TestsTab({ query }) {
     <PageHeader title="Test catalogue" audit={{ kind: 'catalog' }}
       subtitle="Built by the Test Workflow Designer (step 1). Pricing lives here, outside the validated test version."
       actions={<>
-        <a className="btn ghost" href="/api/catalog.csv">Download catalogue (CSV)</a>{' '}
-        <a className="btn ghost" href="/api/catalog.csv?public=1">Public catalogue (CSV)</a>{' '}
-        {can('catalog.edit') && <><button type="button" className="btn" onClick={reprice} disabled={!rows}>Update prices…</button>{' '}</>}
+        <Button variant="light" href="/api/catalog.csv">Download catalogue (CSV)</Button>{' '}
+        <Button variant="light" href="/api/catalog.csv?public=1">Public catalogue (CSV)</Button>{' '}
+        {can('catalog.edit') && <><Button type="button" variant="outline-secondary" onClick={reprice} disabled={!rows}>Update prices…</Button>{' '}</>}
         {/* new tests are made in the Workflow Designer (they belong to a lab and a department, and are approved there) */}
-        <a className="btn primary" href="#/methods?new=1">+ New test</a>
+        <Button variant="primary" href="#/methods?new=1">+ New test</Button>
       </>} />
     <TabBar tab="tests" />
     <p className="help">Select tests (Ctrl+click or Shift+click for several) and "Update prices…" changes them by a percentage from the date you choose; with nothing selected it can change every active test of this lab.</p>
-    {error && !rows ? <div className="card err">{error.message}</div>
+    {error && !rows ? <Card body className="err">{error.message}</Card>
       : !rows ? <div className="loading">Loading…</div>
         : <EditableGrid readOnly search filter={find} rows={rows} columns={COLUMNS} onRowOpen={openTest} rowClass={retiredMuted} apiRef={gridApi} />}
   </>;

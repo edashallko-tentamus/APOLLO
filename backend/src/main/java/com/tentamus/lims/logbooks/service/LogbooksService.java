@@ -237,7 +237,7 @@ public class LogbooksService {
     // ---------------------------------------------------------------- QA: Logbook review
     public Map<String, Object> review(RequestContext ctx) {
         String site = access.currentSite(ctx);
-        List<Map<String, Object>> rows = copies(db.rows("SELECT " + ENTRY_COLS + """
+        List<Map<String, Object>> rows = copies(db.rows("SELECT " + ENTRY_COLS + " " + """
              FROM logbook_entry_view e WHERE e.site_id = ?::uuid AND e.status IN ('Recorded','Returned') AND e.review_route = 'Logbook'
              ORDER BY e.overdue DESC, e.logbook_code, e.entry_at""", site));
         List<Map<String, Object>> fields = fieldsOf(new ArrayList<>(rows.stream().map(x -> x.get("version_id")).collect(Collectors.toCollection(LinkedHashSet::new))), true);

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Combo, rankOptions } from '../../../public/js/combo.js';
 
-export default function SmartSelect({ id, value, options, onChange, ...rest }) {
+export default function SmartSelect({ id, value, options, onChange, className = '', ...rest }) {
   const input = useRef(null);
   const combo = useRef(null);
   const latest = useRef({ options, value, onChange });
@@ -38,7 +38,7 @@ export default function SmartSelect({ id, value, options, onChange, ...rest }) {
 
   return (
     <span className="combo">
-      <input ref={input} id={id} type="text" className="combo-input" onKeyDown={keyDown} onBlur={blur}
+      <input ref={input} id={id} type="text" className={`combo-input ${className}`.trim()} onKeyDown={keyDown} onBlur={blur}
         onFocus={(e) => e.target.select()} onMouseUp={(e) => { e.preventDefault(); if (!combo.current.isOpen) combo.current.open(''); }} {...rest} />
     </span>
   );

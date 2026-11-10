@@ -14,6 +14,14 @@ export function bestItem(hrefs, hash) {
 }
 
 const ALL_HREFS = [...NAV, ...ADMIN_NAV].flatMap((s) => s.items.map(([h]) => h));
+const SEC_OF = new Map([...NAV.map((s) => [s, SECTION_KEY[s.head] || 'home']), ...ADMIN_NAV.map((s) => [s, 'admin'])]
+  .flatMap(([s, k]) => s.items.map(([h]) => [h, k])));
+
+// The menu item a page belongs to (its icon and section colour): { href, sec } or null
+export function activeMenuItem(hash) {
+  const href = bestItem(ALL_HREFS, hash);
+  return href ? { href, sec: SEC_OF.get(href) } : null;
+}
 
 function Section({ sec, isAdmin, canAny, active }) {
   const items = sec.items.filter(([, , codes]) => !codes || canAny(codes));

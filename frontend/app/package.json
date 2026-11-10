@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node src/components/grid/gridModel.test.js"
+    "test": "node src/components/grid/gridModel.test.js && node src/components/labels/code128.test.js"
   },
   "dependencies": {
     "react": "19.2.0",

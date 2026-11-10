@@ -45,6 +45,24 @@ export function get(path, { fresh = false } = {}) {
 export async function post(path, body, { invalidates } = {}) { const d = await send(path, { method: 'POST', body: body ?? {} }); clearCache(invalidates); return d; }
 export async function put(path, body, { invalidates } = {}) { const d = await send(path, { method: 'PUT', body: body ?? {} }); clearCache(invalidates); return d; }
 
+// A file from the backend (Excel, PDF), saved by the browser under the name the backend gives (else `name`); returns that name
+export async function download(path, { method = 'GET', body, name = 'download' } = {}) {
+  const res = await fetch(API_BASE + path, {
+    method, credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', [SITE_HEADER]: siteId },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new ApiError(e.error || 'The download failed', res.status, e); }
+  const cd = res.headers.get('Content-Disposition') || '';
+  const saved = (cd.match(/filename="([^"]+)"/) || [])[1] || name;
+  saveBlob(await res.blob(), saved);
+  return saved;
+}
+export function saveBlob(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+
 export function clearCache(prefix) {
   if (!prefix) return cache.clear();
   for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k);

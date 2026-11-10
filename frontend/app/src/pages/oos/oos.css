@@ -1,0 +1,12 @@
+/* OOS investigation screens (copied from public/js/pages/oos.js) */
+.oosg { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 12px; align-items: start; }
+.oosg dl { display: grid; grid-template-columns: 140px 1fr; gap: 3px 10px; margin: 0; font-size: 13px; } .oosg dt { color: var(--muted); } .oosg dd { margin: 0; }
+.oosck { border-left: 4px solid #cfd6da; padding: 6px 8px; margin: 0 0 6px; background: #fafbfc; border-radius: 4px; font-size: 12.5px; }
+.oosck.Pass { border-color: #2e8b57; } .oosck.Fail { border-color: #b42318; background: #fdecec; } .oosck.Info { border-color: #6b7c93; }
+.oosck b { display: block; } .oosck .lv { float: right; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+.oossec { margin: 0 0 12px; } .oossec h2 { font-size: 15px; margin: 0 0 6px; } .oossec .signed { color: var(--muted); font-size: 12.5px; margin: 4px 0 8px; }
+.oossec textarea { width: 100%; font-size: 13px; } .oossec .fl { margin: 8px 0 4px; font-weight: 600; font-size: 12.5px; }
+.oosacts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.oosdue.late { color: #b42318; font-weight: 700; }
+table.grid td.tbfail { color: var(--err-ink); font-weight: 700; }
+table.grid td.tbwait { color: var(--muted); }

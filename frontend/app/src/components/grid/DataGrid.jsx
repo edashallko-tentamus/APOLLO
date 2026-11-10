@@ -4,8 +4,9 @@
 //  - type, Enter or F2 to edit; Delete clears; Space ticks; Alt+Down opens a pick list
 //  - typed, pasted and filled values are checked alike: bad cells turn red (hover for why); changed cells are highlighted
 //  - columns with href(row) show real links; links(row) puts several in one cell; header click sorts
-//  - only the rows on screen are drawn, so long lists stay quick
-// shortcut: no detail panels under rows yet (the order page's tests); add them when the order page moves.
+//  - only the rows on screen are drawn, so long lists stay quick (all rows when rows have panels under them)
+//  - detail: { open(row), key(row), render(row) } shows a panel under a row (e.g. a sample's tests)
+//  - onContextMenu(event, selectedRows): a right-click menu; a right-click inside the selection keeps it
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import CellEditor from './CellEditor.jsx';
 import { NUMERIC, display, inRanges, isEditable, plain, ranges, selRows } from './gridModel.js';
@@ -53,7 +54,7 @@ const GridRow = memo(function GridRow({ row, orig, isNew, rowErrors, vr, columns
   );
 });
 
-export default function DataGrid({ grid, search = false, emptyText = 'No rows yet.', rowClass, onRowOpen, toolbar, maxHeight }) {
+export default function DataGrid({ grid, search = false, emptyText = 'No rows yet.', rowClass, onRowOpen, toolbar, maxHeight, detail, onContextMenu }) {
   const { state: st, view, columns, readOnly, allowAdd, act } = grid;
   const wrap = useRef(null);
   const dragging = useRef(false);
@@ -76,8 +77,9 @@ export default function DataGrid({ grid, search = false, emptyText = 'No rows ye
     return () => ro.disconnect();
   }, []);
   const onScroll = useCallback((e) => { const top = e.currentTarget.scrollTop; setBox((b) => (b.top === top ? b : { ...b, top })); }, []);
-  const first = Math.max(0, Math.floor(box.top / box.rowH) - OVERSCAN);
-  const last = Math.min(view.length, Math.ceil((box.top + box.height) / box.rowH) + OVERSCAN);
+  // rows with panels under them differ in height, so then every row is drawn (such lists are short)
+  const first = detail ? 0 : Math.max(0, Math.floor(box.top / box.rowH) - OVERSCAN);
+  const last = detail ? view.length : Math.min(view.length, Math.ceil((box.top + box.height) / box.rowH) + OVERSCAN);
 
   // the active cell stays in sight as the arrows move it (it may not be drawn yet: scroll by arithmetic first)
   useLayoutEffect(() => {
@@ -111,7 +113,8 @@ export default function DataGrid({ grid, search = false, emptyText = 'No rows ye
   }, [act]);
 
   // ---------------------------------------------------------------- mouse
-  const cellOf = (e) => { const td = e.target.closest('td[data-vr]'); return td && wrap.current.contains(td) ? [Number(td.dataset.vr), Number(td.dataset.ci)] : null; };
+  // a cell of this grid (a grid inside a row's panel has its own cells: those belong to it, not to this one)
+  const cellOf = (e) => { const td = e.target.closest('td[data-vr]'); return td && td.closest('.gwrap') === wrap.current ? [Number(td.dataset.vr), Number(td.dataset.ci)] : null; };
   const rowAt = (vr) => st.rows[view[vr]];
 
   function mouseDown(e) {
@@ -170,10 +173,14 @@ export default function DataGrid({ grid, search = false, emptyText = 'No rows ye
   const drawn = [];
   for (let vr = first; vr < last; vr++) {
     const ri = view[vr];
-    drawn.push(<GridRow key={ri} row={st.rows[ri]} orig={st.orig[ri]} isNew={st.isNew[ri]} rowErrors={st.errors[ri]} vr={vr}
+    const row = st.rows[ri];
+    drawn.push(<GridRow key={ri} row={row} orig={st.orig[ri]} isNew={st.isNew[ri]} rowErrors={st.errors[ri]} vr={vr}
       columns={columns} readOnly={readOnly} selCis={selFor(vr)} anchorCi={st.anchor?.r === vr ? st.anchor.c : -1}
       editingCi={st.editing?.vr === vr ? st.editing.ci : -1} editing={st.editing?.vr === vr ? st.editing : null}
       rowClass={rowClass} onCommit={onCommit} onCancel={onCancel} />);
+    if (detail?.open(row)) {
+      drawn.push(<tr key={'d' + detail.key(row)} className="gdetail"><td colSpan={columns.length}><div className="gdetail-in">{detail.render(row)}</div></td></tr>);
+    }
   }
   const spacer = (h) => (h > 0 ? <tr aria-hidden="true" style={{ height: h }}><td colSpan={columns.length} style={{ padding: 0, border: 0 }} /></tr> : null);
 
@@ -189,6 +196,7 @@ export default function DataGrid({ grid, search = false, emptyText = 'No rows ye
     )}
     <div ref={wrap} className="gwrap" tabIndex={0} style={maxHeight ? { maxHeight } : undefined} onScroll={onScroll}
       onMouseDown={mouseDown} onMouseOver={mouseOver} onDoubleClick={dblClick} onKeyDown={keyDown}
+      onContextMenu={onContextMenu ? (e) => { if (cellOf(e)) onContextMenu(e, grid.selectedRows()); } : undefined}
       onClick={(e) => { if (e.target.closest('[data-link]')?.getAttribute('href') === '#') e.preventDefault(); }}>
       <table className="grid">
         <thead><tr>

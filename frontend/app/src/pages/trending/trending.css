@@ -1,0 +1,45 @@
+/* copied from public/js/pages/trending.js */
+.trbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: -2px 0 12px; }
+.trbar .sp { flex: 1; } .trbar label { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.trbar input, .trbar select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.trwatch { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.trtile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.trtile.open { border-color: #e2a39b; box-shadow: inset 4px 0 0 #c0392b; }
+.trtile h3 { margin: 0; font-size: 13.5px; font-weight: 650; line-height: 1.3; } .trtile h3 a { color: var(--ink); text-decoration: none; } .trtile h3 a:hover { text-decoration: underline; }
+.trtile .code { color: var(--muted); font-size: 11.5px; font-weight: 400; }
+.trtile .last { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; color: var(--muted); }
+.trtile .last { gap: 8px; } .trtile .last b { font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.3px; white-space: nowrap; }
+.trtile .of { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; margin-top: 1px; }
+.trpill { display: inline-block; font-size: 11.5px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.trpill.bad { background: #fde8e6; border-color: #f2b8b1; color: #a02a1d; } .trpill.ok { background: #e9f5ee; border-color: #b9dcc7; color: #1d6b3f; } .trpill.info { background: #eef4fa; border-color: #c4d7ea; color: #2b5d8a; }
+.trtile ul { margin: 0; padding-left: 16px; font-size: 12px; color: #7a2d22; } .trtile .err { color: var(--err-ink); font-size: 12px; }
+.trbuild { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .trbuild { grid-template-columns: 1fr; } }
+.trform { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; position: sticky; top: 8px; }
+.trform h3 { margin: 4px 0 8px; font-size: 13px; } .trform .field { margin-bottom: 9px; } .trform label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.trform select, .trform input[type=text], .trform input[type=date] { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box; background: #fff; }
+.trsrc { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.trsrc button { font: inherit; font-size: 12.5px; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 9px; cursor: pointer; line-height: 1.25; }
+.trsrc button small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; } .trsrc button.on { border-color: var(--green-700); background: #eef6f1; box-shadow: inset 0 0 0 1px var(--green-700); }
+.trrules { display: grid; grid-template-columns: 1fr; gap: 3px; font-size: 12px; } .trrules label { display: flex; gap: 6px; align-items: flex-start; color: var(--ink); margin: 0; font-size: 12px; }
+.trform .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; } .trform .row2 input { min-width: 0; padding: 6px 4px; } .trform .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.trpanel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; min-width: 0; }
+.trpanel .svg svg { width: 100%; height: auto; display: block; } .trpanel .svg.small svg { max-height: 220px; }
+.trpanel .facts { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin: 6px 0; } .trpanel .facts b { color: var(--ink); font-weight: 600; }
+.trpanel .dl { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; } .trpanel .dl button, .trpanel .dl a { font-size: 12px; padding: 3px 9px; }
+.trpanel .ph { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.trpanel .views { display: flex; gap: 4px; margin: 8px 0 4px; } .trpanel .views button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.trpanel .views button.on { background: #24313d; color: #fff; border-color: #24313d; }
+.trsig { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 6px; } .trsig th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.trsig td { padding: 5px 6px; border-bottom: 1px solid #eef1f3; vertical-align: top; } .trsig .rule { font-weight: 700; color: #a02a1d; } .trsig .done { color: #1d6b3f; }
+.trsig .cmt { color: var(--muted); font-size: 12px; } .trempty { color: var(--muted); font-size: 13px; padding: 20px 4px; }
+.trcap { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; margin: 6px 0; } .trcap div { background: #f6f8f9; border-radius: 7px; padding: 6px 8px; font-size: 11.5px; color: var(--muted); }
+.trcap b { display: block; font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; } .trcap .bad b { color: #a02a1d; } .trcap .ok b { color: #1d6b3f; }
+.trfrozen { background: #f3effc; border: 1px solid #d9cdf5; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-bottom: 12px; }
+.trqa { background: #f4f7f9; border-color: #dbe3e8; } .trqa.wait { background: #fff6e5; border-color: #f0c36d; } .trqa.ok { background: #eef7f1; border-color: #bfe0cb; }
+.trqa .btn { margin-left: 6px; }
+.trpacks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.trpacks button { font: inherit; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.trpacks button b { display: block; font-size: 13.5px; margin-bottom: 3px; } .trpacks button span { font-size: 12px; color: var(--muted); line-height: 1.35; display: block; }
+.trpacks button.on { border-color: var(--green-700); box-shadow: inset 0 0 0 1px var(--green-700); background: #f3f9f5; }
+.trrev { margin-top: 6px; } .trrev .trpanel { padding: 8px 10px; } .trrev h4 { margin: 0 0 4px; font-size: 13px; }

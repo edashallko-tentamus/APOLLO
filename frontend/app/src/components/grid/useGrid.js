@@ -42,7 +42,7 @@ export function useGrid({ rows, columns, keyField = 'id', readOnly = false, allo
       dragTo: run(dragTo), move: run(M.move), selectAll: run(selectAll),
       fillDown: run(M.fillDown), paste: run(M.paste), clear: run(M.clearSel), toggle: run(M.toggleSel),
       startEdit: run(startEdit), commitEdit: run(commitEdit), cancelEdit: run(cancelEdit),
-      setCell: run(M.setCell), addRows: run(M.addRows), setFilter: run(setFilter), toggleSort: run(toggleSort),
+      setCell: run(M.setCell), addRows: run(M.addRows), markSaved: run(M.markSaved), setFilter: run(setFilter), toggleSort: run(toggleSort),
     };
   }, []);
 

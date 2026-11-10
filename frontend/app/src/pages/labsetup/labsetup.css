@@ -1,0 +1,7 @@
+.mslots { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.mslot { border: 2px dashed var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 170px; }
+.mslot.has { border-style: solid; border-color: var(--line); background: #fff; }
+.mslot h4 { margin: 0; font-size: 13.5px; } .mslot .what { color: var(--muted); font-size: 12px; }
+.mslot .pic { flex: 1; display: grid; place-items: center; background: repeating-linear-gradient(45deg, #f6f8f9, #f6f8f9 8px, #eef2f4 8px, #eef2f4 16px); border-radius: 8px; min-height: 80px; color: var(--muted); font-size: 12px; }
+.mslot.has .pic { background: #fff; } .mslot .pic img { max-width: 100%; max-height: 90px; object-fit: contain; }
+.mslot .acts { display: flex; gap: 6px; flex-wrap: wrap; }

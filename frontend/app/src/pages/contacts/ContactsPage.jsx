@@ -21,13 +21,14 @@ const COLUMNS = [
   { field: 'clients', title: 'Linked clients', type: 'readonly', width: 220 },
 ];
 const newContact = () => ({ status: 'Active', portal_access: false });
+const AUDIT = { kind: 'contacts' };
 
 export default function ContactsPage({ query }) {
   return <>
-    <PageHeader title="Contacts" subtitle="One record per person. Link contacts to clients (and set their roles) from each client page. Newest first, 50 at a time; search finds anyone." />
+    <PageHeader title="Contacts" audit={AUDIT} subtitle="One record per person. Link contacts to clients (and set their roles) from each client page. Newest first, 50 at a time; search finds anyone." />
     <PagedList load={listContacts} query={query} filters={FILTERS} placeholder="Search by name, email, phone or client">
       {(rows, data, reload) => (
-        <EditableGrid rows={rows} columns={COLUMNS} allowAdd newRow={newContact} what="contact records" module="Clients"
+        <EditableGrid rows={rows} columns={COLUMNS} allowAdd newRow={newContact} what="contact records"
           save={saveContacts} afterSave={reload} />
       )}
     </PagedList>

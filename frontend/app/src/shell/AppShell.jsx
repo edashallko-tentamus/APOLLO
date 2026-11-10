@@ -7,7 +7,7 @@ import { useSession } from '../session/SessionProvider.jsx';
 import NotMovedPage from '../pages/NotMovedPage.jsx';
 import Header from './Header.jsx';
 import LeaveConfirm from './LeaveConfirm.jsx';
-import Nav from './Nav.jsx';
+import Nav, { activeMenuItem } from './Nav.jsx';
 
 export default function AppShell() {
   const { hash, path, query } = useHashRoute();
@@ -15,6 +15,8 @@ export default function AppShell() {
   const match = matchRoute(path);
 
   useEffect(() => { window.scrollTo(0, 0); }, [path]);
+  // each menu section has its own colour; the page wears its menu item's (app.css: body[data-sec])
+  useEffect(() => { document.body.dataset.sec = activeMenuItem(hash)?.sec || 'home'; }, [hash]);
 
   return <>
     <Header />

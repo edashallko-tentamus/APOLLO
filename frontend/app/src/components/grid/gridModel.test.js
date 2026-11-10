@@ -69,4 +69,8 @@ assert.equal(M.paste(ro, ctx(st0, { readOnly: true }), 'q'), ro);
 assert.deepEqual(M.viewOf({ ...st0, filter: 'th' }, columns), [2]);
 assert.deepEqual(M.viewOf({ ...st0, sort: { ci: 2, dir: -1 } }, columns), [2, 1, 0]);
 
+// rows added with given values are new rows, starting from newRow()
+st = M.addRows(st0, ctx(st0), [{ name: 'four' }]);
+assert.deepEqual(st.rows[3], { status: 'Active', name: 'four' }); assert.equal(st.isNew[3], true);
+
 console.log('gridModel: all checks passed');

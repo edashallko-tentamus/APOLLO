@@ -228,9 +228,23 @@ export function paste(st, ctx, text) {
   return done(base, d, { sel, extra: [] });
 }
 
+// After an autosave: the saved rows become the new starting point (no longer changed), without redrawing the grid afresh
+export function markSaved(st, ctx, keys, keyField = 'id') {
+  const saved = new Set(keys);
+  let orig = st.orig; let isNew = st.isNew;
+  st.rows.forEach((r, ri) => {
+    if (!saved.has(r[keyField])) return;
+    if (orig === st.orig) { orig = orig.slice(); isNew = isNew.slice(); }
+    orig[ri] = { ...r }; isNew[ri] = false;
+  });
+  return orig === st.orig ? st : { ...st, orig, isNew };
+}
+
+// n empty rows (from newRow), or the given rows (e.g. tests picked in a dialog), as new rows
 export function addRows(st, ctx, n = 1) {
   if (ctx.readOnly || !ctx.allowAdd) return st;
-  const added = Array.from({ length: n }, () => ({ ...(ctx.newRow ? ctx.newRow() : {}) }));
+  const base = () => ({ ...(ctx.newRow ? ctx.newRow() : {}) });
+  const added = Array.isArray(n) ? n.map((r) => ({ ...base(), ...r })) : Array.from({ length: n }, base);
   return { ...st, rows: [...st.rows, ...added], orig: [...st.orig, ...added.map((r) => ({ ...r }))], isNew: [...st.isNew, ...added.map(() => true)] };
 }
 

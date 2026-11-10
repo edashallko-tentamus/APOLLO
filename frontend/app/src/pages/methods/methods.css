@@ -1,0 +1,51 @@
+.wdtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 14px; }
+.wdtabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
+.wdtabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; }
+.wdtabs a small { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 8px; background: var(--err); color: var(--err-ink); font-weight: 700; }
+.wdtabs a.on small { background: #fff; }
+.wdbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; } .wdbar .sp { flex: 1; }
+.wdform .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; } .wdform .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
+.wdform .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 14px; }
+.wdform .field { margin-bottom: 10px; } .wdform .field > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.wdform input:not([type=checkbox]):not([type=radio]), .wdform select, .wdform textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.wdform input:disabled, .wdform select:disabled, .wdform textarea:disabled { background: #F4F6F7; color: var(--ink); }
+.wdform h3 { font-size: 14px; margin: 14px 0 8px; }
+.wdcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.wdcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #fff; } .wdcard span { display: block; color: var(--muted); font-size: 12.5px; } .wdcard b { font-size: 15px; }
+.wdlocked { background: #EEF1F4; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; color: var(--muted); }
+.wddiag { overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #FBFCFC; max-height: 75vh; }
+.wddiag svg { display: block; }
+.wddiag .node { cursor: pointer; } .wddiag .node rect { stroke: #AEB7C0; stroke-width: 1; }
+.wddiag .node.sel rect { stroke: var(--sel-edge); stroke-width: 3; } .wddiag .node.bad rect { stroke: var(--err-ink); stroke-width: 2; }
+.wddiag .node text { font-size: 12px; fill: var(--ink); pointer-events: none; } .wddiag .node text.t { font-size: 10.5px; fill: var(--muted); }
+.wddiag path.e { fill: none; stroke: #8A96A3; stroke-width: 1.4; } .wddiag path.e.par { stroke-dasharray: 5 4; stroke: var(--green-700); }
+.wdlegend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin: 8px 0 0; } .wdlegend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid #AEB7C0; }
+.wdsplit { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.wdchecks { display: flex; flex-wrap: wrap; gap: 4px 16px; max-height: 170px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: #fff; }
+.wdchecks label { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 400; white-space: nowrap; }
+.wddep { display: inline-flex; gap: 8px; align-items: center; } .wdpar { color: var(--muted); font-size: 11.5px !important; }
+.wdtokens { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; } .wdtokens button { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.wdtokens button.wdtok { font-family: inherit; background: var(--green-50); border-color: #BFE6D6; }
+.wdqc { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+.wdqchead { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; } .wdqchead .btn { margin-left: auto; }
+.wdcrit { border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 6px; }
+.wdexc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 2px 0 4px; font-size: 13px; }
+.wdexc1 { background: var(--warn); color: var(--warn-ink); border-radius: 10px; padding: 1px 8px; font-size: 12.5px; }
+.wdtoggle { font-size: 12.5px; display: inline-block; margin-bottom: 4px; } .wdcritg { margin-top: 4px; }
+.wdcritbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
+.wdcritbar > .combo, .wdcritbar > select { width: 180px !important; min-width: 0; flex: none; }
+.wddef { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+.field .wddef input { width: 80px !important; min-width: 0; display: inline-block; flex: none; padding: 4px 6px; }
+.field .wddef .combo, .field .wddef select { width: 100px !important; min-width: 0; flex: none; }
+.wdqc { padding: 8px 12px !important; margin: 6px 0 !important; } .wdqchead { margin-bottom: 2px !important; }
+.wdexcrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; } .wdexcrow .wdtoggle { margin: 0; }
+.wdmono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.wdprob { list-style: none; padding: 0; margin: 0; } .wdprob li { padding: 7px 10px; border-radius: 6px; margin-bottom: 6px; }
+.wdprob li.Error { background: var(--err); color: var(--err-ink); } .wdprob li.Warning { background: var(--warn); color: var(--warn-ink); }
+.wdprob li a { font-weight: 600; margin-right: 6px; }
+.wdok { background: var(--green-50); color: var(--green-700); border-radius: 8px; padding: 10px 14px; font-weight: 600; }
+.wdtry { border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 8px; background: #fff; }
+.wdtry .grid4 input { font-size: 12.5px; }
+@media (max-width: 900px) { .wdcards, .wdform .grid2, .wdform .grid3, .wdform .grid4 { grid-template-columns: 1fr; } }
+/* React port: the step editor's config grids and diagram nodes */
+.wddiag .node:focus { outline: none; } .wddiag .node:focus rect { stroke: var(--sel-edge); stroke-width: 2; }

@@ -1,0 +1,63 @@
+/* copied from public/js/pages/dashboard.js */
+.rlabs { display: flex; flex-direction: column; gap: 4px; }
+.dbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
+.dbar .sp { flex: 1; } .dbar select { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.dgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 100px; gap: 12px; grid-auto-flow: row dense; }
+.dw { background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
+.dw.drag-over { outline: 2px dashed var(--green-700); outline-offset: 2px; } .dw.dragging { opacity: .45; }
+.dw header { display: flex; align-items: center; gap: 6px; padding: 9px 12px 4px; cursor: grab; user-select: none; }
+.dw header h3 { margin: 0; font-size: 13.5px; font-weight: 650; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dw header .cat { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
+.dw header button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.dw header button:hover { background: #F0F3F5; color: var(--ink); }
+.dw .dwfoot { font-size: 10.5px; color: var(--muted); padding: 0 22px 4px 12px; text-align: right; opacity: .75; white-space: nowrap; }
+.dw .dwfoot .dwref { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.dw .dwfoot .dwref:hover { color: var(--ink); }
+.dw .body { padding: 4px 12px 6px; overflow: auto; flex: 1; min-height: 0; font-size: 13px; }
+.dw .rz { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize; background:
+  linear-gradient(135deg, transparent 50%, #b7c0c8 50%, #b7c0c8 58%, transparent 58%, transparent 70%, #b7c0c8 70%, #b7c0c8 78%, transparent 78%); }
+.dk { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.dk a, .dk div.k { display: block; text-decoration: none; color: var(--ink); border-radius: 8px; padding: 6px 8px; background: #F7F9FA; border: 1px solid transparent; cursor: pointer; }
+.dk a:hover, .dk div.k:hover { border-color: var(--line); background: #fff; }
+.dk b { display: block; font-size: 22px; font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+.dk span { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; } .dk small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+.dk .good b { color: #1d6b3f; } .dk .warn b { color: #8a5a00; } .dk .bad b { color: #b42318; }
+.dk .good b::after { content: " ✓"; font-size: 14px; } .dk .bad b::after { content: " !"; font-size: 14px; }
+.dnote { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+.dlist a { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid #EEF1F3; text-decoration: none; color: var(--ink); }
+.dlist a:hover { background: #F7F9FA; } .dlist a b { font-variant-numeric: tabular-nums; } .dlist a.zero { color: var(--muted); } .dlist a.zero b { font-weight: 400; }
+.dstack { margin-top: 8px; } .dstack .r { display: grid; grid-template-columns: 120px 1fr 36px; gap: 8px; align-items: center; margin: 5px 0; }
+.dstack .r a { color: var(--ink); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dstack .bar { display: flex; gap: 2px; height: 14px; } .dstack .bar i { display: block; height: 100%; border-radius: 0; }
+.dstack .bar i:first-child { border-radius: 4px 0 0 4px; } .dstack .bar i:last-child { border-radius: 0 4px 4px 0; } .dstack .bar i:only-child { border-radius: 4px; }
+.dstack .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.dleg { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 4px; } .dleg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.dseg { display: flex; gap: 2px; height: 22px; margin: 10px 0 6px; } .dseg i { display: block; height: 100%; } .dseg i:first-child { border-radius: 4px 0 0 4px; } .dseg i:last-child { border-radius: 0 4px 4px 0; }
+.dsegt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .dsegt div { font-size: 12px; color: var(--muted); } .dsegt b { display: block; color: var(--ink); font-size: 18px; font-variant-numeric: tabular-nums; }
+.dt { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; } .dt th { text-align: left; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.dt td { padding: 4px 6px; border-bottom: 1px solid #EEF1F3; white-space: nowrap; } .dt td.num, .dt th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dt tr.tot td { font-weight: 700; border-top: 1px solid var(--line); }
+.dchart { display: flex; align-items: flex-end; gap: 10px; height: 120px; padding: 6px 0 0; border-bottom: 1px solid var(--line); margin-top: 6px; }
+.dchart .m { flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 100%; position: relative; } .dchart .m i { flex: 1; border-radius: 4px 4px 0 0; min-height: 0; }
+.dchart .m em { position: absolute; bottom: -18px; left: 0; right: 0; text-align: center; font-style: normal; font-size: 11px; color: var(--muted); }
+.dempty { color: var(--muted); padding: 12px 0; }
+.dhidden { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; color: var(--muted); font-size: 13px; }
+.dpop { position: absolute; z-index: 30; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); padding: 6px; min-width: 240px; }
+.dpop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; cursor: pointer; font: inherit; } .dpop button:hover { background: #F0F3F5; }
+.ddet { position: fixed; inset: 0; background: rgba(15,25,35,.35); z-index: 60; display: flex; align-items: flex-start; justify-content: center; padding: 50px 16px; }
+.ddet .box { background: #fff; border-radius: 12px; width: min(1180px, 100%); max-height: calc(100vh - 100px); overflow: auto; padding: 16px 18px; }
+.ddet .box h3 { margin: 0 0 10px; display: flex; justify-content: space-between; gap: 12px; }
+@media (max-width: 900px) { .dgrid { grid-template-columns: 1fr; } .dw { grid-column: 1 / -1 !important; } }
+/* D-1.1: tabs inside a widget, the smaller secondary figures, the line chart, the deviation cells, the lab tabs */
+.dtabs { display: flex; justify-content: flex-end; gap: 4px; margin: 0 0 4px; }
+.dtabs button { border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 14px; padding: 2px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.dtabs button.on { background: var(--green-700, #1d6b3f); border-color: transparent; color: #fff; }
+.dminor { margin-top: 8px; border-top: 1px solid #EEF1F3; padding-top: 6px; }
+.dminor .t { font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
+.dk.small { gap: 6px; } .dk.small a, .dk.small div.k { background: none; padding: 2px 6px; } .dk.small b { font-size: 14px; font-weight: 600; color: var(--muted); } .dk.small span { font-size: 11px; }
+.dlinebox { width: 100%; min-height: 210px; margin-top: 4px; overflow: hidden; } .dline { display: block; } .dline text { font-size: 11px; fill: var(--muted); } .dline .grid { stroke: #EEF1F3; } .dline .zero { stroke: #b7c0c8; }
+.dt td.up { color: #1d6b3f; } .dt td.down { color: #b42318; }
+.ftabs { display: flex; gap: 6px; margin: 0 0 10px; } .ftabs button { border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 14px; font: inherit; cursor: pointer; }
+.dt.kt td.k-good { color: #1d6b3f; font-weight: 700; } .dt.kt td.k-warn { color: #8a5a00; font-weight: 700; } .dt.kt td.k-bad { color: #b42318; font-weight: 700; }
+.dt.kt td.k-flag { color: #b42318; font-weight: 600; } .dt.kt td { white-space: nowrap; }
+.ftabs button.on { background: var(--green-700, #1d6b3f); color: #fff; border-color: transparent; }

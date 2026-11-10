@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { useSession } from '../session/SessionProvider.jsx';
 import Brand from './Brand.jsx';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
+import HeaderSearch from './HeaderSearch.jsx';
 import LabSwitcher from './LabSwitcher.jsx';
 
 function Header() {
@@ -14,6 +15,7 @@ function Header() {
   return (
     <header className="top">
       <Brand productName={productName} />
+      <HeaderSearch />
       <div className="who">
         <LabSwitcher />
         <span id="whoName" className="whoname">{user.full_name}<small title={g.join(', ')}>{user.username}{detail}</small></span>

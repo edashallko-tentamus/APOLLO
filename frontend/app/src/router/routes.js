@@ -1,14 +1,11 @@
-// Screens moved to React. Each loads only when first opened (its own file in the build).
-// An address not listed here is a screen still in the current app: the shell offers a link to it there.
-import { lazy } from 'react';
+// Screens moved to React. Each area lists its own addresses in src/pages/<area>/routes.js:
+//   import { lazy } from 'react';
+//   export default [{ pattern: /^\/clients$/, page: lazy(() => import('./ClientsPage.jsx')) }, ...];
+// Each page loads only when first opened (its own file in the build). An address no area lists is a screen still
+// in the current app: the shell offers a link to it there.
+const areas = import.meta.glob('../pages/*/routes.js', { eager: true });
 
-const Home = lazy(() => import('../pages/home/HomePage.jsx'));
-const Contacts = lazy(() => import('../pages/contacts/ContactsPage.jsx'));
-
-export const ROUTES = [
-  { pattern: /^\/$/, page: Home },
-  { pattern: /^\/contacts$/, page: Contacts },
-];
+export const ROUTES = Object.values(areas).flatMap((m) => m.default);
 
 export function matchRoute(path) {
   for (const r of ROUTES) {

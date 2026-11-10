@@ -21,11 +21,12 @@ export async function confirmLeave() {
 // After the person chose to leave (signing out reloads the page): no second warning from the browser
 export const forgetUnsaved = () => dirtyChecks.clear();
 
-// A page with edits registers here while they are unsaved
+// A page with edits registers here while they are unsaved. isDirty: true/false, or a function asked at the moment
+// of leaving (use one when a save and a move to another page can happen before the page redraws)
 export function useUnsavedChanges(isDirty) {
   const ref = useRef(isDirty); ref.current = isDirty;
   useEffect(() => {
-    const check = () => !!ref.current;
+    const check = () => (typeof ref.current === 'function' ? !!ref.current() : !!ref.current);
     dirtyChecks.add(check);
     return () => dirtyChecks.delete(check);
   }, []);

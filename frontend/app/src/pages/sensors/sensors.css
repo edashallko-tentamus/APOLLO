@@ -1,0 +1,14 @@
+/* copied from the old logbooks, testing and stability pages, which injected them for every screen */
+.lb-due { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.lb-due span { border: 1px solid #F1C27D; background: #FFF6E5; color: #8A5300; border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.lb-due span.ok { border-color: #BFE3CF; background: #EEF8F2; color: #1F6B45; }
+.lb-fail td { background: #FDF0EF; }
+.lb-failbox { border: 1px solid #F3B9B3; background: #FDF0EF; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+.lb-note { color: var(--muted); font-size: 12.5px; }
+.short { color: var(--err-ink); font-weight: 700; }
+table.grid td.tbpass { color: var(--green-700); font-weight: 600; } table.grid td.tbfail { color: var(--err-ink); font-weight: 700; }
+table.grid td.tbwait { color: var(--muted); }
+.sensor-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 18px; }
+.sensor-facts b { display: block; font-size: 11px; color: var(--muted); }
+.sensor-facts .pill { padding: 1px 6px; border-radius: 4px; }
+.sensor-facts .tbpass { color: var(--green-700); font-weight: 600; } .sensor-facts .tbwait { color: var(--muted); }

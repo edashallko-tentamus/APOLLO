@@ -1,0 +1,22 @@
+/* Billing screens (copied from public/js/pages/billing.js) */
+.bltabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
+.bltabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
+.bltabs a.on { background: var(--s-pricing, #7a4d8c); border-color: var(--s-pricing, #7a4d8c); color: #fff; } .bltabs small { opacity: .8; margin-left: 3px; }
+.blfil { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
+.blfil button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; } .blfil button.on { border-color: var(--s-pricing, #7a4d8c); font-weight: 700; background: #F3E9F6; }
+.blsum { display: flex; gap: 22px; flex-wrap: wrap; margin: 2px 0 10px; font-size: 13px; } .blsum b { font-size: 17px; display: block; color: var(--ink); } .blsum span { color: var(--muted); }
+tr.bllate td { background: #fff1e6; } td.bllate { color: #a13d12; font-weight: 700; } tr.blretest td { background: #fbf7ec; }
+td.blneg { color: #a13d12; }
+.blinv { display: grid; grid-template-columns: minmax(320px, 1fr) 300px; gap: 12px; align-items: start; } .blinv .card { margin: 0 0 12px; }
+.bldet { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 18px; margin: 4px 0 2px; font-size: 13.5px; }
+.bldet div > span { display: block; color: var(--muted); font-size: 12px; } .bldet div > b { font-weight: 600; }
+.blpay { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12.5px; font-weight: 700; }
+.blpay.Paid { background: #e3f3e8; color: #1f6b3a; } .blpay.Unpaid { background: #eef1f3; color: #3b4650; } .blpay.Overdue { background: #fde8e1; color: #a13d12; } .blpay.Credited { background: #F3E9F6; color: #7a4d8c; }
+tr.blcharge td { background: #f4f7fb; }
+.bltot div { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13.5px; } .bltot .big { font-size: 18px; font-weight: 700; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; }
+.blbanner { border-left: 4px solid #c68a00; background: #fff8e6; padding: 8px 12px; border-radius: 4px; margin: 0 0 12px; font-size: 13px; }
+.blbanner.cn { border-color: #7a4d8c; background: #F3E9F6; }
+.blopts { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; } .blopts td, .blopts th { padding: 5px 6px; border-bottom: 1px solid #eef1f3; text-align: left; }
+.blopts tr.met td { background: #eef8f1; } .blopts tr.missed td { color: #8a949c; } .blopts label { cursor: pointer; }
+pre.bljson { background: #f6f8f7; border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 11.5px; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+@media (max-width: 1100px) { .blinv { grid-template-columns: 1fr; } }

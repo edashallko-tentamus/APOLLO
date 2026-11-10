@@ -8,6 +8,8 @@
     "start": "node frontend/server.js",
     "start:backend": "mvn -q -f backend/pom.xml spring-boot:run",
     "start:frontend": "node frontend/server.js",
+    "build:app": "npm --prefix frontend/app ci && npm --prefix frontend/app run build",
+    "dev:app": "npm --prefix frontend/app run dev",
     "test": "mvn -q -f backend/pom.xml spring-boot:run -Dspring-boot.run.arguments=test",
     "test:browser": "node tests/e2e_smoke.js http://localhost:3000",
     "test:browser2": "node tests/e2e_slice2.js http://localhost:3000",

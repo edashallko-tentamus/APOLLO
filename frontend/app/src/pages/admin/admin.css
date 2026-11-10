@@ -1,0 +1,2 @@
+/* copied from the old equipment/inventory pages, which injected it for every screen */
+table.grid td.cwarn { background: #FFF4DE; color: var(--warn-ink); font-weight: 600; }

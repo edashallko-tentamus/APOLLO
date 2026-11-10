@@ -1,0 +1,6 @@
+/* Excel upload preview and printed lists (copied from public/js/pages/inventory.js) */
+.bulksum { display: flex; gap: 18px; flex-wrap: wrap; background: #F7F9FA; border-radius: 8px; padding: 8px 12px; margin: 6px 0 10px; }
+.bulksum .c-new b { color: var(--green-700); } .bulksum .c-upd b { color: #2F5BA8; } .bulksum .c-err b { color: var(--err-ink); }
+table.grid tr.errrow td { background: #FDECEA; }
+#printarea { display: none; }
+@media print { body.printing-list > *:not(#printarea) { display: none !important; } body.printing-list #printarea { display: block; } }

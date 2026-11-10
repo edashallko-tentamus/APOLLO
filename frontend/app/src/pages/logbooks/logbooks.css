@@ -1,0 +1,16 @@
+.lb-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px 18px; margin: 4px 0 6px; }
+.lb-facts div { font-size: 13px; } .lb-facts b { display: block; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: none; }
+.lb-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.lb-bar label { font-size: 12px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.lb-due { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.lb-due span { border: 1px solid #F1C27D; background: #FFF6E5; color: #8A5300; border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.lb-due span.ok { border-color: #BFE3CF; background: #EEF8F2; color: #1F6B45; }
+.lb-fail td { background: #FDF0EF; }
+.lb-probs { margin: 4px 0 0; padding-left: 18px; } .lb-probs li { color: var(--err-ink); }
+.lb-probs li.Warning { color: var(--warn-ink); } .lb-probs li.ok { color: #1F6B45; list-style: none; margin-left: -18px; }
+.lb-vals { border-collapse: collapse; width: 100%; max-width: 900px; } .lb-vals th, .lb-vals td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #EEF1F3; font-size: 13px; }
+.lb-vals th { background: #F0F3F5; font-weight: 600; } .lb-vals td.out { color: var(--err-ink); font-weight: 700; } .lb-vals td.in { color: #1F6B45; }
+.lb-failbox { border: 1px solid #F3B9B3; background: #FDF0EF; border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+.lb-note { color: var(--muted); font-size: 12.5px; }
+.lb-set { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 18px; }
+.lb-set .field { margin: 0; } .lb-set input, .lb-set select, .lb-set textarea { width: 100%; }

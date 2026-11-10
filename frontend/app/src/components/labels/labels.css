@@ -1,0 +1,23 @@
+/* Barcode labels: Dymo LabelWriter 450, one label per printed page (copied from public/js/labels.js) */
+.lbl { box-sizing: border-box; overflow: hidden; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; position: relative; }
+.lbl.small { width: 2.125in; height: 1in; padding: 0.05in 0.07in; }
+.lbl.big { width: 4in; height: 2.125in; padding: 0.08in 0.12in; }
+.lbl .bc { display: block; fill: #000; }
+.lbl .id { font-weight: 700; font-size: 9pt; line-height: 1.1; margin-top: 1px; white-space: nowrap; }
+.lbl.big .id { font-size: 13pt; }
+.lbl .t { font-size: 6.5pt; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbl.big .t { font-size: 7.5pt; }
+.lbl .row { display: flex; justify-content: space-between; gap: 6px; }
+.lbl .tests { margin-top: 3px; border-top: 0.5pt solid #000; padding-top: 2px; }
+.lbl .tests div { display: flex; justify-content: space-between; gap: 8px; font-size: 7.5pt; line-height: 1.2; }
+.lbl .tests div span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lbl .tests b { font-weight: 700; }
+.lbl .pg { position: absolute; right: 0.12in; bottom: 0.06in; font-size: 6.5pt; }
+.lblprev { display: flex; flex-wrap: wrap; gap: 10px; max-height: 52vh; overflow: auto; padding: 8px; background: #EEF1F4; border-radius: 8px; }
+.lblprev .lbl { box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+#labelPrint { display: none; }
+@media print {
+  body.printing-labels > *:not(#labelPrint) { display: none !important; }
+  body.printing-labels #labelPrint { display: block; }
+  body.printing-labels #labelPrint .lbl { page-break-after: always; break-after: page; box-shadow: none; }
+}

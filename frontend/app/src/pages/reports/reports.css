@@ -1,0 +1,25 @@
+/* Report Finalization screens (copied from public/js/pages/reports.js) */
+.fz { display: grid; grid-template-columns: 230px minmax(480px, 1fr) 290px; gap: 10px; align-items: start; }
+.fz .card { margin: 0 0 12px; } .fz h2 { font-size: 14px; margin: 0 0 8px; }
+.fz .hist dl { display: grid; grid-template-columns: 112px 1fr; gap: 2px 8px; margin: 0; font-size: 12.5px; } .fz .hist dt { color: var(--muted); } .fz .hist dd { margin: 0; }
+.fz .hist ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; } .fz .hist li { margin: 2px 0; }
+.fz .pdf { width: 100%; height: calc(100vh - 150px); min-height: 640px; border: 1px solid var(--line); border-radius: 6px; background: #f4f6f7; }
+.fz .card { padding: 10px 12px; } .fz .chk .lk { display: block; margin-top: 4px; font-weight: 600; }
+.rftabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
+.rftabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
+.rftabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; } .rftabs small { opacity: .8; margin-left: 3px; }
+.rffil { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
+.rffil button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; } .rffil button.on { border-color: var(--green-700); background: var(--green-50); font-weight: 700; }
+tr.rfover td { background: #fdecec; } tr.rfsoon td { background: #fff4d6; } tr.rftaken td { color: #8a949c; }
+td.rfrush { font-weight: 700; color: #b42318; } td.rfoos a { font-weight: 700; color: #b42318; }
+table.grid td.tbpass { color: var(--green-700); font-weight: 600; }
+.fz .chk { border-left: 4px solid #cfd6da; padding: 6px 8px; margin: 0 0 6px; background: #fafbfc; border-radius: 4px; font-size: 12.5px; }
+.fz .chk.Pass { border-color: #2e8b57; } .fz .chk.Block { border-color: #b42318; background: #fdecec; } .fz .chk.Warning { border-color: #c68a00; background: #fff8e6; } .fz .chk.Info { border-color: #6b7c93; }
+.fz .chk b { display: block; } .fz .chk .lv { float: right; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+.fz .chk textarea { width: 100%; margin-top: 5px; font-size: 12.5px; }
+.fz .note { font-size: 12.5px; padding: 5px 6px; border-bottom: 1px solid #eef1f3; } .fz .note .k { color: var(--muted); font-size: 11.5px; } .fz .note button { float: right; }
+.fzbar { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; z-index: 5; }
+.fzchips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 10px; } .fzchips button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; }
+.fzchips button.on { border-color: var(--green-700); font-weight: 700; } .fzchips button.ready { background: var(--green-50); } .fzchips button.blocked { background: #fdecec; }
+.rfsub { margin: 14px 0 6px; font-size: 14px; }
+@media (max-width: 1300px) { .fz { grid-template-columns: 260px 1fr; } .fz .side { grid-column: 1 / -1; } }

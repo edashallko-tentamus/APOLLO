@@ -7,7 +7,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 | System | LIMS3, Tentamus North America (first lab: CFL) |
 | Environment | Sandbox (non-GxP). Fictional demo data only. |
 | System Owner | Alex Kiddle, LIMS Director |
-| Current version | **0.37.1** (2026-10-28) |
+| Current version | **0.37.2** (2026-11-10) |
 | Related records | TNA-CC-002 LIMS3 Change Control; VP-LIMS3-001 Validation Plan; LIMS3 Module Development Framework; ontology vault (`docs/ontology_vault`) |
 
 **Status in plain words.** The Sandbox prototype passes its automated functional tests: 1913 database rule tests (0.37.0 on PostgreSQL 16 in the cloud; Claude Code reports the PGlite runs in its entries) and every browser test suite (41 runs, 0.37.0 on PostgreSQL 16 in the cloud). It has **not** been through a URS sign-off, a validation protocol, an independent review or a sign-off under the Module Development Framework. Nothing here is validated or ready for use.
@@ -86,6 +86,7 @@ A living record of how LIMS3 is designed and built: what changed in each version
 
 | Version | Date | Slice | Built by | Migrations | What it added |
 |---|---|---|---|---|---|
+| 0.37.2 | 2026-11-10 | Revenue on the People widget | Claude Code | none | Revenue CM, PM, YTD and % of lab per person (each test's revenue split among the people who signed its bench steps); Steps signed and Batches returned hidden |
 | 0.37.1 | 2026-10-28 | The performance report finishes on real data | Claude Code | none | The Samples sheet asks the turnaround view for the period's samples only (over 10 minutes on Alex's data before; 6.7 s for ten months after) |
 | 0.37.0 | 2026-10-28 | KPIs: Lab Score, top tests and clients, departments, people | Claude in the cloud | 059 | The Lab Score (samples on time 60 %, revenue vs budget 10 %, vs monthly forecast 30 %) on the GM and executive dashboards; top 20 tests by orders with a 2-SD swing flag, revenue and their top 3 clients; top 20 clients (CM, PM, CY, PY to date, PY); the lab's departments with revenue and work (GM), the top 10 departments across labs (executive); People (GM, Lab Supervisors) and My numbers (everyone) |
 | 0.36.1 | 2026-10-22 | Batch page redraws, header search box, bench test timing | Claude Code | none | The batch page draws only its latest load (an older load finishing last no longer puts back the batch as it was); the header search box is set up once; `test:testing` waits for autosave, focus and redraws instead of fixed pauses |
@@ -155,6 +156,14 @@ A living record of how LIMS3 is designed and built: what changed in each version
 ---
 
 ## 5. Change entries (newest first)
+
+### 0.37.2: revenue on the People widget (2026-11-10, Claude Code; no migration)
+
+- **Why.** Alex: add revenue columns for the current month, the past month, % of lab and year to date to the GM dashboard's People widget; stop showing Steps signed and Batches returned but keep them for later.
+- **Decision.** Alex chose to split each invoiced test's revenue equally among the people who signed its bench steps (so the column adds up to the lab's test revenue and % of lab is a true share).
+- **What changed.** `server/routes_dashboard.js`: `peopleRevenue()`; People columns Person, Departments, Batches, Tests, On time, Batches reviewed, Tests finalized, Revenue CM, Revenue PM, Revenue YTD, % of lab. Revenue only for people who may see revenue (`invoicing.view`, `invoicing.issue`, `dashboard.gm`) or on the GM board; a Lab Supervisor's Home is unchanged apart from the two hidden columns. `tests/e2e_kpis.js` updated.
+- **How it was checked.** The query on a copy of Alex's data: 0.4 s, and the people's YTD adds up to the lab's test revenue exactly (CFL $71,723.50, TPS $361,650.50). On the filming copy: the GM sees the new columns, the Lab Supervisor's Home does not, and the widget renders correctly. `test:kpis` not run.
+- **Alex's data.** Nothing to apply; it takes effect when port 3000 next starts (a restart signs everyone out).
 
 ### 0.37.1: the performance report finishes on real data (2026-10-28, Claude Code; no migration)
 

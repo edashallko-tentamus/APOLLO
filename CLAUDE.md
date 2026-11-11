@@ -976,6 +976,14 @@ Alex (2026-10-28): KPIs by department and person, a Lab Score, the top 20 tests 
 - The report route's Samples sheet asks `sample_tat_view` by sample ID (`WHERE sample_id = ANY(...)`) for the period's samples, instead of `LEFT JOIN sample_tat_view`: the join worked the turnaround out for every sample ever, once per row (over 10 minutes on Alex's data). **Never JOIN `sample_tat_view` (or `test_tat_view`) to another table:** filter it by its own grouping columns (`sample_id`, `site_id`) so the filter reaches the rows before they are added up.
 - Fresh test databases are too small to show slow queries: time anything heavy on a copy of Alex's data (as his account, outside the app, never signing in as him: see the scratchpad's `reportcheck.js` pattern).
 
+## 0.37.2: revenue on the People widget (Claude Code, 2026-11-10; no migration)
+
+- Alex: the GM dashboard's People widget gains Revenue CM, Revenue PM, Revenue YTD and % of lab; Steps signed and Batches returned are no longer shown but are still worked out (`peopleFigures`) and stay on My numbers.
+- **Credit rule (Alex chose "split it"):** each invoiced client test's revenue (`revenue_line_view`, credit notes taken off) is split equally among the people who signed its bench steps (QC Review not counted; verification batches and removed entries left out), so the column adds up to the lab's test revenue. Kits and other charges, and tests nobody signed a step on, are credited to nobody. `% of lab` = the person's YTD over `cyTotal` (all of the lab's revenue). `peopleRevenue()` in `routes_dashboard.js`; 0.4 s on a copy of Alex's data.
+- **Who sees it:** the revenue columns show on the GM board and to anyone holding `invoicing.view`, `invoicing.issue` or `dashboard.gm`; a Lab Supervisor's Home keeps the work columns only. A person with revenue in the tab's month but no signed work in it is still listed.
+- The widget's description in `dashboard_widget` (059) still names steps signed and returns: change it in the next migration.
+- `tests/e2e_kpis.js` checks the new columns and that a Lab Supervisor's Home shows no revenue (not run yet).
+
 ## Demo recordings (Alex, 2026-10-16)
 
 Alex asked Claude in the cloud to record the module demos with Claude Code as each is finished. Protocol: `..\demo-scripts\RECORDING.md`. Claude Code writes and rehearses each runner (`..\lims3-film\public\demo\<name>.js`), resets the filming copy, then runs `node record-demo.js <name> --title "NN Title"` in `..\lims3-film` (port 3300 only) and adds a line to `..\demo-videos\READY.md`. Claude in the cloud converts each recording to MP4, checks it, writes fixes to `..\demo-videos\<title>.review.md` and sends it to Alex.

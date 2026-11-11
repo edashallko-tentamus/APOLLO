@@ -505,20 +505,62 @@ module.exports = function registerDashboard({ route, tx, currentSite, hasPermiss
     }
     return out;
   }
-  const peopleCols = [{ t: 'Person' }, { t: 'Departments' }, { t: 'Steps signed', num: true, help: 'Bench steps completed and signed (QC Review not counted)' },
+  // Each person's share of the revenue of the client tests they worked on (Alex, 2026-11-10): an invoiced test's revenue is
+  // split equally among the people who signed its bench steps (QC Review not counted), so the column adds up to the lab's test revenue
+  async function peopleRevenue(db, s, d) {
+    return q(db, `WITH lines AS (
+        SELECT r.requested_test_id, r.amount, r.invoice_date FROM revenue_line_view r
+         WHERE r.site_id = ANY($1) AND r.requested_test_id IS NOT NULL AND r.invoice_date >= LEAST(${PM}, ${Y0}) AND r.invoice_date < ${Y1}),
+      workers AS (
+        SELECT DISTINCT e.requested_test_id, sr.performed_by AS u FROM batch_entry e JOIN test_batch b ON b.id = e.batch_id
+          JOIN step_run sr ON sr.batch_id = b.id JOIN workflow_step ws ON ws.id = sr.step_id
+         WHERE e.requested_test_id IN (SELECT requested_test_id FROM lines) AND e.entry_type = 'Sample' AND e.removed_at IS NULL
+           AND NOT b.is_verification AND sr.status = 'Completed' AND sr.performed_by IS NOT NULL AND ws.step_type <> 'QC Review'),
+      shares AS (SELECT requested_test_id, count(*) AS k FROM workers GROUP BY 1)
+      SELECT w.u, au.full_name,
+        COALESCE(sum(l.amount / sh.k) FILTER (WHERE l.invoice_date >= ${M0} AND l.invoice_date < ${M1}), 0) AS rev_cm,
+        COALESCE(sum(l.amount / sh.k) FILTER (WHERE l.invoice_date >= ${PM} AND l.invoice_date < ${M0}), 0) AS rev_pm,
+        COALESCE(sum(l.amount / sh.k) FILTER (WHERE l.invoice_date >= ${Y0} AND l.invoice_date < ${Y1}), 0) AS rev_cy,
+        (SELECT string_agg(DISTINCT dp.department_name, ', ') FROM group_member m JOIN lab_group g ON g.id = m.group_id JOIN department dp ON dp.id = g.department_id
+          WHERE m.user_id = w.u AND m.status = 'Active' AND g.status = 'Active' AND g.site_id = ANY($1)) AS departments
+        FROM lines l JOIN shares sh ON sh.requested_test_id = l.requested_test_id JOIN workers w ON w.requested_test_id = l.requested_test_id
+        JOIN app_user au ON au.id = w.u WHERE NOT au.is_automated GROUP BY 1, 2`, [s, d]);
+  }
+  // Steps signed and Batches returned are still worked out (and on My numbers) but not shown here (Alex, 2026-11-10)
+  const peopleCols = [{ t: 'Person' }, { t: 'Departments' },
     { t: 'Batches', num: true, help: 'Batches in which the person signed a bench step' }, { t: 'Tests', num: true, help: 'Client tests in those batches' },
-    { t: 'Batches returned', num: true, help: 'Of those batches, returned to the analyst from QC Review at least once' },
     { t: 'On time', num: true, help: 'Of those tests approved in QC Review, the share approved by their due date' },
-    { t: 'Batches reviewed', num: true }, { t: 'Tests finalized', num: true, help: 'Tests released on a COA in Report Finalization' }];
-  const peopleRow = (x) => [{ text: x.full_name }, { text: x.departments || '' }, { v: N(x.steps), f: 'int' }, { v: N(x.batches), f: 'int' }, { v: N(x.tests), f: 'int' },
-    { v: N(x.returned), f: 'int', tone: N(x.returned) ? 'flag' : '' }, pctc(N(x.ot_n) ? Math.round((1000 * N(x.ot_ok)) / N(x.ot_n)) / 10 : null),
-    { v: N(x.reviews), f: 'int' }, { v: N(x.finalized), f: 'int' }];
-  const PEOPLE_NOTE = 'Work signed at the lab this month or last month (verification runs left out). On time is judged on the tests of the batches the person worked on, so it is shared by everyone on those batches.';
-  W.staff = async (db, s) => {
+    { t: 'Batches reviewed', num: true }, { t: 'Tests finalized', num: true, help: 'Tests released on a COA in Report Finalization' },
+    { t: 'Revenue CM', num: true, help: 'This month to date: the person\'s share of the revenue of client tests they worked on' },
+    { t: 'Revenue PM', num: true, help: 'Last month' }, { t: 'Revenue YTD', num: true, help: 'This year to date' },
+    { t: '% of lab', num: true, help: 'The person\'s revenue this year as a share of the lab\'s revenue this year' }];
+  const peopleRow = (x, total) => [{ text: x.full_name }, { text: x.departments || '' }, { v: N(x.batches), f: 'int' }, { v: N(x.tests), f: 'int' },
+    pctc(N(x.ot_n) ? Math.round((1000 * N(x.ot_ok)) / N(x.ot_n)) / 10 : null),
+    { v: N(x.reviews), f: 'int' }, { v: N(x.finalized), f: 'int' },
+    money(x.rev_cm), money(x.rev_pm), money(x.rev_cy), pctc(share(x.rev_cy, total))];
+  const PEOPLE_NOTE = 'Work signed at the lab this month or last month (verification runs left out). On time is judged on the tests of the batches the person worked on, so it is shared by everyone on those batches. Revenue: each invoiced client test\'s revenue (credit notes taken off) is split equally among the people who signed its bench steps; kits and other charges, and tests nobody signed a step on, are credited to nobody.';
+  W.staff = async (db, s, c) => {
     const d = await today(db, s);
     const f = await peopleFigures(db, s, d, null);
-    const tab = (rows) => ({ columns: peopleCols, rows: rows.map(peopleRow), empty: 'Nobody signed work in this period.' });
-    return { tabbed: { tabs: [['cm', 'This month'], ['pm', 'Last month']], tables: { cm: tab(f.cm), pm: tab(f.pm) } }, note: PEOPLE_NOTE };
+    // revenue only for those who may see revenue (the Revenue widget's permissions); a Lab Supervisor's Home keeps the work figures
+    let seesRevenue = c && c.board !== 'home';
+    for (const code of ['invoicing.view', 'invoicing.issue', 'dashboard.gm']) if (!seesRevenue && c && await hasPermission(c, code, s[0])) seesRevenue = true;
+    if (!seesRevenue) {
+      const cols = peopleCols.slice(0, 7);
+      const tab = (rows) => ({ columns: cols, rows: rows.map((x) => peopleRow(x, 0).slice(0, 7)), empty: 'Nobody signed work in this period.' });
+      return { tabbed: { tabs: [['cm', 'This month'], ['pm', 'Last month']], tables: { cm: tab(f.cm), pm: tab(f.pm) } }, note: PEOPLE_NOTE.replace(/ Revenue:.*$/, '') };
+    }
+    const rev = await peopleRevenue(db, s, d); const total = await cyTotal(db, s, d);
+    const byU = Object.fromEntries(rev.map((r) => [r.u, r]));
+    // a person with revenue in the tab's month but no signed work in it is still listed
+    const rows = (k) => {
+      const work = f[k].map((x) => ({ ...x, ...(byU[x.u] || {}), full_name: x.full_name, departments: x.departments }));
+      const seen = new Set(work.map((x) => x.u));
+      const extra = rev.filter((r) => !seen.has(r.u) && N(r[`rev_${k}`]));
+      return [...work, ...extra].sort((a, b) => String(a.full_name).localeCompare(b.full_name));
+    };
+    const tab = (k) => ({ columns: peopleCols, rows: rows(k).map((x) => peopleRow(x, total)), empty: 'Nobody signed work in this period.' });
+    return { tabbed: { tabs: [['cm', 'This month'], ['pm', 'Last month']], tables: { cm: tab('cm'), pm: tab('pm') } }, note: PEOPLE_NOTE };
   };
   W.my_numbers = async (db, s, c) => {
     const d = await today(db, s);

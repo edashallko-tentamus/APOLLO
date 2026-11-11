@@ -76,8 +76,10 @@ const head = (w) => (w && w.data && (w.data.table || (w.data.tabbed && w.data.ta
   check('...some work waits in the backlog (the demo)', backlog >= 1, String(backlog));
 
   const st = W(g, 'staff').data.tabbed;
-  check('People: This month and Last month tabs, with steps, batches, tests, returned, on time, reviews and tests finalized',
-    st && st.tabs.map((t) => t[1]).join('|') === 'This month|Last month' && ['Steps signed', 'Batches', 'Tests', 'Batches returned', 'On time', 'Batches reviewed', 'Tests finalized'].every((t) => head(W(g, 'staff')).includes(t)));
+  check('People: This month and Last month tabs, with batches, tests, on time, reviews, tests finalized and revenue (not steps signed or batches returned)',
+    st && st.tabs.map((t) => t[1]).join('|') === 'This month|Last month'
+    && ['Batches', 'Tests', 'On time', 'Batches reviewed', 'Tests finalized', 'Revenue CM', 'Revenue PM', 'Revenue YTD', '% of lab'].every((t) => head(W(g, 'staff')).includes(t))
+    && !['Steps signed', 'Batches returned'].some((t) => head(W(g, 'staff')).includes(t)), head(W(g, 'staff')).join('|'));
 
   await signIn(page, BASE, 'General Manager (demo)', '#/dashboard/gm'); await page.waitForSelector('#dgrid .dw[data-code="lab_score"] .dk');
   check('In the browser: the Lab Score figure and its table', (await page.locator('.dw[data-code="lab_score"] table.kt tbody tr').count()) === 1);
@@ -109,6 +111,7 @@ const head = (w) => (w && w.data && (w.data.table || (w.data.tabbed && w.data.ta
   const sup = await as('labsup');
   const sh = await sup('/dashboard/home');
   check('The Lab Supervisor\'s Home has People and My numbers', ['staff', 'my_numbers'].every((c) => sh.widgets.some((w) => w.code === c && !w.error)));
+  check('...People on a Lab Supervisor\'s Home shows no revenue (no revenue permission)', !head(sh.widgets.find((w) => w.code === 'staff')).some((t) => /Revenue|% of lab/.test(t)));
   const ana = await as('analyst');
   const ah = await ana('/dashboard/home');
   check('The Analyst\'s Home has My numbers, not People', ah.widgets.some((w) => w.code === 'my_numbers') && !ah.widgets.some((w) => w.code === 'staff'));

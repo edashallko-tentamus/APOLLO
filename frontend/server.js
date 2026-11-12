@@ -1,4 +1,4 @@
-// LIMS3 front end: serves the screens in ./public and forwards every /api/... request to the backend unchanged,
+// LIMS3 front end: serves the React screens (app/dist, built by npm run build:app) and forwards every /api/... request to the backend unchanged,
 // so the browser sees one address (same origin: the session cookie and the security policy work as before).
 // Start the backend first (npm run start:backend), then this: npm start (PORT, 3000; backend at LIMS_API_URL, http://127.0.0.1:3001).
 'use strict';
@@ -11,8 +11,7 @@ try { process.loadEnvFile(path.join(__dirname, '..', 'backend', '.env')); } catc
 
 const PORT = Number(process.env.PORT || 3000);
 const API = new URL(process.env.LIMS_API_URL || 'http://127.0.0.1:3001');
-const PUBLIC = path.join(__dirname, 'public');
-const APP = path.join(__dirname, 'app', 'dist'); // the React screens (npm run build:app), at /app/ while they move over
+const APP = path.join(__dirname, 'app', 'dist'); // the React screens (npm run build:app)
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
 
@@ -29,14 +28,14 @@ function send(res, status, body, type = 'application/json; charset=utf-8', extra
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
-function serveStatic(req, res, urlPath, root = PUBLIC) {
+function serveStatic(req, res, urlPath, root = APP) {
   let decoded;
   try { decoded = decodeURIComponent(urlPath); } catch (_) { return send(res, 400, { error: 'Bad address' }); } // a broken %-code used to stop the server
   let p = path.normalize(path.join(root, decoded));
   if (p !== root && !p.startsWith(root + path.sep)) return send(res, 403, { error: 'Forbidden' });
   if (urlPath === '/' || !fs.existsSync(p) || fs.statSync(p).isDirectory()) p = path.join(root, 'index.html');
   // the React build's assets/ have the content's fingerprint in their names, so the browser may keep them
-  const cache = root === APP && p.startsWith(path.join(APP, 'assets') + path.sep) ? 'public, max-age=31536000, immutable'
+  const cache = p.startsWith(path.join(APP, 'assets') + path.sep) ? 'public, max-age=31536000, immutable'
     : /\.(js|css|png|svg|ico)$/.test(p) ? 'no-cache' : null;
   send(res, 200, fs.readFileSync(p), MIME[path.extname(p)] || 'application/octet-stream', cache ? { 'Cache-Control': cache } : {});
 }
@@ -74,11 +73,12 @@ function forward(req, res) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname.startsWith('/api/')) return forward(req, res);
-  if (url.pathname === '/app') { res.writeHead(301, { Location: '/app/', ...BASE_HEADERS }); return res.end(); }
-  if (url.pathname.startsWith('/app/') && !fs.existsSync(path.join(APP, 'index.html'))) {
-    return send(res, 503, 'The new screens have not been built yet. Run: npm run build:app', 'text/plain; charset=utf-8');
+  // the React screens used to live at /app/: old bookmarks go to the same screen (the browser keeps the #/... part)
+  if (url.pathname === '/app' || url.pathname.startsWith('/app/')) { res.writeHead(301, { Location: '/', ...BASE_HEADERS }); return res.end(); }
+  if (!fs.existsSync(path.join(APP, 'index.html'))) {
+    return send(res, 503, 'The screens have not been built yet. Run: npm run build:app', 'text/plain; charset=utf-8');
   }
-  try { if (url.pathname.startsWith('/app/')) serveStatic(req, res, url.pathname.slice(4), APP); else serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) send(res, 500, { error: 'Could not read that file' }); }
+  try { serveStatic(req, res, url.pathname); } catch (e) { console.error(e); if (!res.headersSent) send(res, 500, { error: 'Could not read that file' }); }
 });
 if (require.main === module) {
   server.listen(PORT, '127.0.0.1', () => console.log(`LIMS3 front end running: http://localhost:${PORT} (API at ${API.origin})`));

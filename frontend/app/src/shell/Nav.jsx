@@ -1,8 +1,6 @@
 // The side menu. Screens already in React open here; the rest open in the current app (same sign-in).
 import { memo, useMemo } from 'react';
-import { iconFor } from '../../../public/js/icons.js';
-import { LEGACY_BASE } from '../config.js';
-import { isMoved } from '../router/routes.js';
+import { iconFor } from '../lib/icons.js';
 import { useSession } from '../session/SessionProvider.jsx';
 import { ADMIN_NAV, NAV, SECTION_KEY } from './navConfig.js';
 
@@ -29,16 +27,12 @@ function Section({ sec, isAdmin, canAny, active }) {
   const key = isAdmin ? 'admin' : SECTION_KEY[sec.head] || 'home';
   return <>
     {sec.head && <div className="navsub" data-sec={key}>{sec.head}</div>}
-    {items.map(([href, label]) => {
-      const moved = isMoved(href);
-      return (
-        <a key={href} href={moved ? href : LEGACY_BASE + href} data-sec={key} className={href === active ? 'on' : undefined}
-          title={moved ? undefined : 'Opens in the current app (not yet moved to the new screens)'}>
-          {/* static icon markup from our own icons.js, no user data */}
-          <span className="nico" dangerouslySetInnerHTML={{ __html: iconFor(href) }} />{label}
-        </a>
-      );
-    })}
+    {items.map(([href, label]) => (
+      <a key={href} href={href} data-sec={key} className={href === active ? 'on' : undefined}>
+        {/* static icon markup from our own icons.js, no user data */}
+        <span className="nico" dangerouslySetInnerHTML={{ __html: iconFor(href) }} />{label}
+      </a>
+    ))}
   </>;
 }
 

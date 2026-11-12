@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-// The current app's stylesheet, so both look the same while screens move over; split per component as they move.
-import '../../public/css/app.css';
+// The app's stylesheet (moved from the old screens' public/css/app.css).
+import './styles/app.css';
 import DialogProvider from './components/dialogs/DialogProvider.jsx';
 import ToastProvider from './components/Toasts.jsx';
 import SessionProvider from './session/SessionProvider.jsx';

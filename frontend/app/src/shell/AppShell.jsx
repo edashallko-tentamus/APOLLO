@@ -4,7 +4,7 @@ import ErrorBoundary from '../components/ErrorBoundary.jsx';
 import { matchRoute } from '../router/routes.js';
 import { useHashRoute } from '../router/useHashRoute.js';
 import { useSession } from '../session/SessionProvider.jsx';
-import NotMovedPage from '../pages/NotMovedPage.jsx';
+import NotFoundPage from '../pages/NotFoundPage.jsx';
 import Header from './Header.jsx';
 import LeaveConfirm from './LeaveConfirm.jsx';
 import Nav, { activeMenuItem } from './Nav.jsx';
@@ -26,7 +26,7 @@ export default function AppShell() {
         {/* a new lab or page starts afresh: nothing from the old one carries over (a page's own ?tab=… does not reopen it) */}
         <ErrorBoundary key={`${site?.id}|${path}`}>
           <Suspense fallback={<div className="loading">Loading…</div>}>
-            {match ? <match.Page params={match.params} query={query} /> : <NotMovedPage hash={hash} />}
+            {match ? <match.Page params={match.params} query={query} /> : <NotFoundPage />}
           </Suspense>
         </ErrorBoundary>
       </main>

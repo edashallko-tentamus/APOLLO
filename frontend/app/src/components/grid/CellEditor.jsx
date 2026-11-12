@@ -1,7 +1,7 @@
 // The box that opens over a cell while typing in it. Pick-list cells are smart dropdowns (the current app's combo.js):
 // type to filter, Down arrow for the list, Enter or Tab picks. Enter moves down, Tab across, Escape cancels.
 import { useEffect, useRef } from 'react';
-import { Combo, rankOptions } from '../../../../public/js/combo.js';
+import { Combo, rankOptions } from '../../lib/combo.js';
 import { optionsOf } from './gridModel.js';
 
 function startText(col, row, initial) {

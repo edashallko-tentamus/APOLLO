@@ -1,7 +1,7 @@
 // The smart dropdown for every pick list (the current app's combo.js): type to filter to the closest match,
 // Down arrow opens the list, arrows and Enter or Tab pick, Escape closes. options: [{ value, label }].
 import { useEffect, useRef } from 'react';
-import { Combo, rankOptions } from '../../../public/js/combo.js';
+import { Combo, rankOptions } from '../lib/combo.js';
 
 export default function SmartSelect({ id, value, options, onChange, className = '', ...rest }) {
   const input = useRef(null);

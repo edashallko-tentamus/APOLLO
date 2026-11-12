@@ -7,7 +7,7 @@
 .lbl.big .id { font-size: 13pt; }
 .lbl .t { font-size: 6.5pt; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lbl.big .t { font-size: 7.5pt; }
-.lbl .row { display: flex; justify-content: space-between; gap: 6px; }
+.lbl .lrow { display: flex; justify-content: space-between; gap: 6px; }
 .lbl .tests { margin-top: 3px; border-top: 0.5pt solid #000; padding-top: 2px; }
 .lbl .tests div { display: flex; justify-content: space-between; gap: 8px; font-size: 7.5pt; line-height: 1.2; }
 .lbl .tests div span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

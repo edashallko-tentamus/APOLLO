@@ -3,6 +3,7 @@ import { getStartCounts } from '../../api/master.js';
 import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
+import { Card } from 'react-bootstrap';
 
 function Tile({ n, label, href, warn }) {
   return <a className={`tile${warn ? ' warn' : ''}`} href={href}><b>{n}</b><span>{label}</span></a>;
@@ -14,7 +15,7 @@ export default function StartPage() {
   const at = site ? ` (${site.site_code})` : '';
   return <>
     <PageHeader title="LIMS3 Sandbox" subtitle={`Clients, quotes, lab orders and samples. You are working in ${site ? `${site.site_code} (${site.site_name})` : 'no lab: ask an administrator to assign you'}.`} />
-    {error ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : (
+    {error ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : (
       <div className="tiles">
         <Tile n={d.open_orders} label={`Open lab orders${at}`} href="#/orders" />
         <Tile n={d.rush_pending} label={`Rush awaiting approval${at}`} href="#/intake" warn={d.rush_pending > 0} />
@@ -29,7 +30,7 @@ export default function StartPage() {
         <Tile n={d.audit_entries} label="Audit trail entries" href="#/audit" />
       </div>
     )}
-    <div className="card guide">
+    <Card body className="guide">
       <h2>Things to try</h2>
       <ol>
         <li><b>Analytes:</b> select a few cells in a column and press <kbd>Ctrl</kbd>+<kbd>D</kbd> to fill down, or copy a block from Excel and paste it with <kbd>Ctrl</kbd>+<kbd>V</kbd>. Type a wrong CAS number and watch it get rejected.</li>
@@ -44,6 +45,6 @@ export default function StartPage() {
         <li><b>Labs:</b> the lab icon at the top right switches lab (CFL or TPS); you only see orders for your labs. Administrators assign labs under Admin, Users and lab access, and keep the Matrix list under Admin, Matrices.</li>
       </ol>
       <p className="help">Everyone signs in with their own user ID and password (Sign out is at the top right). Inventory changes ask for an electronic signature: your user ID and password again, with a reason picked from the canned list or typed. Administrators give each person a temporary password under Admin, Users and lab access. This is a sandbox with fictional demo data.</p>
-    </div>
+    </Card>
   </>;
 }

@@ -6,6 +6,7 @@ import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import './labsetup.css';
+import { Button, Card } from 'react-bootstrap';
 
 const KINDS = [
   ['Logo', 'Printed at the top of the lab\'s COAs.'],
@@ -41,13 +42,13 @@ export default function MediaCard({ site, onChange }) {
     try { await retireSiteMedia(id, reason); toast('Image removed.'); done(); } catch (e) { toast(e.message, 'err'); }
   }
 
-  if (error) return <div className="card err">{error.message}</div>;
-  if (!d) return <div className="card"><div className="loading">Loading…</div></div>;
+  if (error) return <Card body className="err">{error.message}</Card>;
+  if (!d) return <Card body><div className="loading">Loading…</div></Card>;
   const cur = (k) => d.rows.find((m) => m.kind === k && m.status === 'Active');
   const others = d.rows.filter((m) => m.kind === 'Other' && m.status === 'Active');
   return (
     <Section title={`Images: ${site.site_code}`} help={`The lab's logo and marks. Until a file is uploaded the slot stays a placeholder and nothing is printed. PNG, JPEG or SVG, up to 2 MB. ${d.can_edit ? '' : 'The lab\'s administrators upload them (admin.lab).'}`}
-      actions={d.can_edit && <button type="button" className="btn" onClick={() => upload('Other')}>+ Other image</button>}>
+      actions={d.can_edit && <Button type="button" variant="outline-secondary" onClick={() => upload('Other')}>+ Other image</Button>}>
       <div className="mslots">
         {KINDS.map(([k, what]) => { const m = cur(k); return (
           <div key={k} className={`mslot${m ? ' has' : ''}`} data-kind={k}>
@@ -55,15 +56,15 @@ export default function MediaCard({ site, onChange }) {
             <div className="pic">{m ? <img src={siteMediaUrl(m.id)} alt={`${k} of ${site.site_code}`} /> : 'No file yet'}</div>
             {m && <div className="what">{m.file_name} · {m.uploaded_by}</div>}
             {d.can_edit && <div className="acts">
-              <button type="button" className="mini" onClick={() => upload(k)}>{m ? 'Replace…' : 'Upload…'}</button>
-              {m && <button type="button" className="mini" onClick={() => retire(m.id)}>Remove</button>}
+              <Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => upload(k)}>{m ? 'Replace…' : 'Upload…'}</Button>
+              {m && <Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => retire(m.id)}>Remove</Button>}
             </div>}
           </div>); })}
         {others.map((m) => (
           <div key={m.id} className="mslot has">
             <h4>{m.title || 'Other image'}</h4>
             <div className="pic"><img src={siteMediaUrl(m.id)} alt={m.title || ''} /></div>
-            {d.can_edit && <div className="acts"><button type="button" className="mini" onClick={() => retire(m.id)}>Remove</button></div>}
+            {d.can_edit && <div className="acts"><Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => retire(m.id)}>Remove</Button></div>}
           </div>
         ))}
       </div>

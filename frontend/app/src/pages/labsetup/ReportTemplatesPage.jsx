@@ -5,6 +5,7 @@ import EditableGrid from '../../components/EditableGrid.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import Section from '../../components/Section.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'report_templates' };
 const TITLE = 'CERTIFICATE OF ANALYSIS';
@@ -52,7 +53,7 @@ export default function ReportTemplatesPage() {
   return <>
     <PageHeader title="Report templates" audit={AUDIT}
       subtitle={'The layouts COAs are printed in. Each test picks its template in the Workflow Designer (tab 1, Reporting); a test without one uses its lab\'s default. When the tests on one sample use different templates, the COA is one PDF in parts, each test in its own template\'s part. Layouts: "Standard COA", and "COA with 1 photo" or "COA with 2 photos" (the sample\'s photos marked Report photo 1 and 2 at receipt, 4:3, under its details). Every COA carries a QR code of its verification link.'} />
-    {error ? <div className="card err">{error.message}</div> : !view ? <div className="loading">Loading…</div> : (
+    {error ? <Card body className="err">{error.message}</Card> : !view ? <div className="loading">Loading…</div> : (
       <Section title="Templates" help={`${view.canAny ? 'QA and lab administrators keep their lab\'s templates (reports.templates); templates for every lab are kept by system administrators.' : 'QA and lab administrators keep these (reports.templates).'} The default is the one tests use when they name none.`}>
         <EditableGrid rows={view.rows} columns={view.columns} allowAdd={view.canAny} readOnly={!view.canAny} what="the report templates"
           newRow={view.newRow} rowClass={rowClass} save={view.save} afterSave={reload} />

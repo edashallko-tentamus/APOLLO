@@ -1,5 +1,6 @@
 // Short notices at the corner of the screen: toast('Saved.') or toast(message, 'err')
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Toast, ToastContainer } from 'react-bootstrap';
 import { TOAST_MS } from '../config.js';
 
 const ToastContext = createContext(() => {});
@@ -20,9 +21,10 @@ export default function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={toast}>
       {children}
-      <div id="toasts" role="status" aria-live="polite">
-        {items.map((t) => <div key={t.id} className={`toast ${t.kind} show`}>{t.message}</div>)}
-      </div>
+      <ToastContainer id="toasts" position="bottom-end" className="p-3 position-fixed" role="status" aria-live="polite">
+        {items.map((t) => <Toast key={t.id} className={t.kind} bg={t.kind === 'err' ? 'danger' : undefined} animation={false}>
+          <Toast.Body className="text-white">{t.message}</Toast.Body></Toast>)}
+      </ToastContainer>
     </ToastContext.Provider>
   );
 }

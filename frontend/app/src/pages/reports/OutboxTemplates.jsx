@@ -6,6 +6,7 @@ import EditableGrid from '../../components/EditableGrid.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { Failed, Loading } from './shared.jsx';
+import { Card } from 'react-bootstrap';
 
 export default function OutboxTemplates() {
   const { data: d, error, reload } = useApi(() => emailTemplates(), []);
@@ -30,8 +31,8 @@ export default function OutboxTemplates() {
   }, [canEdit, dialogs, toast, reload]);
   if (error && !d) return <Failed error={error} />;
   if (!d) return <Loading />;
-  return <div className="card">
+  return <Card body>
     <p className="help">Every automatic email is sent from one of these templates. Words in {'{{double braces}}'} are filled in by the system (the list is under each template). {canEdit ? 'Edit the name, subject or active tick here; "Wording…" edits the body.' : 'QA and administrators edit them (outbox.templates).'}</p>
     <EditableGrid rows={d.rows} columns={columns} readOnly={!canEdit} what="the email templates" save={saveEmailTemplates} afterSave={reload} />
-  </div>;
+  </Card>;
 }

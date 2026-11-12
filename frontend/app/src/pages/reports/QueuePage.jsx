@@ -13,6 +13,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { plural } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, dt, Failed, Loading, SelectGrid, startReview } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const TABS = [['queue', 'Report Finalization Queue'], ['mine', 'Finalization worklist'], ['batches', 'Batched Finalization'], ['issued', 'Issued COAs'], ['stability', 'Stability reports']];
 const INTRO = {
@@ -67,7 +68,7 @@ export default function QueuePage({ query }) {
     <PageHeader title="Report Finalization" subtitle={INTRO[tab]} audit={{ kind: 'finalization' }} />
     <div className="rftabs">{TABS.map(([k, l]) => <a key={k} href={`#/reports/finalization?tab=${k}`} className={k === tab ? 'on' : ''}>{l}{count[k] !== undefined && <> <small>{count[k]}</small></>}</a>)}</div>
     {error && !d ? <Failed error={error} /> : !d ? <Loading /> : <>
-      {!d.can_finalize && <div className="notice">You need the &quot;Report Finalization&quot; permission (reports.finalize) in this lab to finalize. Project Managers and QA hold it.</div>}
+      {!d.can_finalize && <div className="alert alert-warning">You need the &quot;Report Finalization&quot; permission (reports.finalize) in this lab to finalize. Project Managers and QA hold it.</div>}
       {tab === 'issued' ? <IssuedTab query={query} />
         : tab === 'stability' ? <StabilityTab />
           : tab === 'batches' ? <BatchesTab d={d} reload={reload} />
@@ -118,8 +119,8 @@ function QueueTab({ d }) {
       <ReadGrid rows={d.final_due} columns={dueCols} />
     </Section>}
     <Section title="Waiting for finalization" actions={<>
-      <button type="button" className="btn primary" disabled={!d.can_finalize || busy} onClick={claim}>Claim selected</button>{' '}
-      <button type="button" className="btn" disabled={!d.can_finalize} onClick={reviewNow}>Review selected now</button></>}>
+      <Button type="button" variant="primary" disabled={!d.can_finalize || busy} onClick={claim}>Claim selected</Button>{' '}
+      <Button type="button" variant="outline-secondary" disabled={!d.can_finalize} onClick={reviewNow}>Review selected now</Button></>}>
       <div className="rffil">Show: {Object.entries(FILTERS).map(([k, [l, fn]]) => (
         <button key={k} type="button" data-f={k} className={k === filter ? 'on' : ''} onClick={() => setFilter(k)}>{l} <small>{d.rows.filter(fn).length}</small></button>))}</div>
       <SelectGrid gridRef={gridRef} rows={rows} columns={COLUMNS} search emptyText="Nothing waits for finalization." rowClass={queueRow} />
@@ -144,8 +145,8 @@ function MineTab({ mine, reload }) {
     catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   }
   return <Section title="My worklist" actions={<>
-    <button type="button" className="btn primary" disabled={!mine.length} onClick={go}>Review selected (or all)</button>{' '}
-    <button type="button" className="btn" disabled={!mine.length || busy} onClick={release}>Release selected…</button></>}>
+    <Button type="button" variant="primary" disabled={!mine.length} onClick={go}>Review selected (or all)</Button>{' '}
+    <Button type="button" variant="outline-secondary" disabled={!mine.length || busy} onClick={release}>Release selected…</Button></>}>
     <SelectGrid gridRef={gridRef} rows={mine} columns={MINE_COLUMNS} search rowClass={urgent}
       emptyText="You hold nothing. Claim sample tests on the Report Finalization Queue tab." />
   </Section>;
@@ -170,7 +171,7 @@ function BatchesTab({ d, reload }) {
       try { await releaseClaim(r.id, { reason }); toast(`${r.claim_code} released: its tests are back in the queue.`); reload(); } catch (e) { toast(e.message, 'err'); }
     } },
   ], [d.can_take_over, dialogs, toast, reload]);
-  return <div className="card"><ReadGrid rows={d.claims} columns={columns} emptyText="No group is being finalized." /></div>;
+  return <Card body><ReadGrid rows={d.claims} columns={columns} emptyText="No group is being finalized." /></Card>;
 }
 
 const ISSUED_FILTERS = [['all', 'All'], ['final', 'Final'], ['interim', 'Not final']];
@@ -193,12 +194,12 @@ function IssuedTab({ query }) {
     { field: 'verify_code', title: 'Verification code', type: 'link', width: 145, href: () => '#', onClick: (v) => window.open(verifyUrl(v.verify_code), '_blank') },
   ], [openPdf]);
   const load = useCallback((params, opts) => listIssued(params, opts), []);
-  return <div className="card">
+  return <Card body>
     <PagedList load={load} query={query} filters={ISSUED_FILTERS} filterParam="f" open={openPdf}
       placeholder="Search by report, sample, client sample ID, order, client or verification code; scan or type one and press Enter to open the report">
       {(rows) => <ReadGrid rows={rows} columns={columns} emptyText="No COA here." />}
     </PagedList>
-  </div>;
+  </Card>;
 }
 
 const STAB_COLS = [
@@ -216,6 +217,6 @@ const STAB_COLS = [
 const blockedRow = (r) => (r.blocked ? 'mutedrow' : '');
 function StabilityTab() {
   const { data, error } = useApi(() => stabilityReportsDue(), []);
-  return <div className="card">{error && !data ? <Failed error={error} /> : !data ? <Loading />
-    : <ReadGrid rows={data.rows} columns={STAB_COLS} search rowClass={blockedRow} emptyText="No placed stability study at this lab." />}</div>;
+  return <Card body>{error && !data ? <Failed error={error} /> : !data ? <Loading />
+    : <ReadGrid rows={data.rows} columns={STAB_COLS} search rowClass={blockedRow} emptyText="No placed stability study at this lab." />}</Card>;
 }

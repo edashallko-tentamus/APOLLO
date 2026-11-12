@@ -10,6 +10,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import CellEditor from './CellEditor.jsx';
 import { NUMERIC, display, inRanges, isEditable, plain, ranges, selRows } from './gridModel.js';
+import { Button } from 'react-bootstrap';
 
 const OVERSCAN = 8;
 const KEY_MOVES = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
@@ -20,7 +21,7 @@ function CellContent({ col, ci, row, hasError }) {
   if (t === 'bool') return <span className={`chk${row[col.field] ? ' on' : ''}`}>{row[col.field] ? '✓' : ''}</span>;
   if (t === 'button') {
     const label = typeof col.label === 'function' ? col.label(row) : col.label;
-    return label ? <button type="button" className="mini" data-btn={ci}>{label}</button> : null;
+    return label ? <Button type="button" variant="outline-secondary" size="sm" className="mini" data-btn={ci}>{label}</Button> : null;
   }
   if (col.links) {
     const ls = col.links(row) || [];
@@ -188,8 +189,8 @@ export default function DataGrid({ grid, search = false, emptyText = 'No rows ye
     {(search || (allowAdd && !readOnly) || toolbar) && (
       <div className="gtool">
         {search && <input className="gsearch" placeholder="Search…" value={st.filter} onChange={(e) => act.setFilter(e.target.value)} />}
-        {allowAdd && !readOnly && <><button type="button" className="mini" onClick={() => act.addRows(1)}>+ Add row</button>
-          <button type="button" className="mini" onClick={() => act.addRows(10)}>+10 rows</button></>}
+        {allowAdd && !readOnly && <><Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => act.addRows(1)}>+ Add row</Button>
+          <Button type="button" variant="outline-secondary" size="sm" className="mini" onClick={() => act.addRows(10)}>+10 rows</Button></>}
         <span className="ghint">{readOnly ? '' : 'Ctrl+D fill down · Ctrl+C / Ctrl+V copy and paste (Excel) · Enter or type to edit'}</span>
         {toolbar}
       </div>

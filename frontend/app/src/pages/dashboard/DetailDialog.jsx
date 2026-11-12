@@ -1,6 +1,7 @@
 // The list behind a dashboard number: the rows the backend gives, as a read-only grid; a link closes it.
 import { useEffect, useMemo, useRef } from 'react';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
+import { Button } from 'react-bootstrap';
 
 const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString([], { dateStyle: 'medium' }) : String(v); };
 const TITLES = { sample_code: 'Sample', client_sample_id: 'Client sample ID', order_code: 'Order', client_name: 'Client', test_name: 'Test', due_date: 'Due', reported_on: 'Reported',
@@ -25,7 +26,7 @@ export default function DetailDialog({ d, onClose }) {
     <div className="ddet" onClick={(e) => { if (e.target === e.currentTarget || e.target.closest('a[href^="#/"]')) onClose(); }}
       onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <div ref={box} className="box" role="dialog" aria-label={d.title}>
-        <h3><span>{d.title} <small className="help">{d.rows.length} row{d.rows.length === 1 ? '' : 's'}</small></span><button type="button" className="btn" onClick={onClose}>Close</button></h3>
+        <h3><span>{d.title} <small className="help">{d.rows.length} row{d.rows.length === 1 ? '' : 's'}</small></span><Button type="button" variant="outline-secondary" onClick={onClose}>Close</Button></h3>
         <ReadGrid rows={d.rows} columns={columns} search emptyText="Nothing here." />
       </div>
     </div>

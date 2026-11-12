@@ -13,6 +13,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const dt = (v) => (v ? new Date(v).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 const localNow = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
@@ -60,8 +61,8 @@ export function CustodyCard({ orderId, custody: x, onChange }) {
     <Section title={`Chain of custody ${x.document.coc_code}`}
       help={`The chain of custody is also the sample manifest. Print it to travel with the samples: the client and any courier sign "Relinquished by" on paper. Each receipt is signed here ("Receive and sign"), and the receiver's handwritten signature goes into its Received area.${x.required ? ' This lab logs samples only by "Receive and sign".' : ''}`}
       actions={<>
-        <a className="btn" id="cocpdf" href={`/api/orders/${orderId}/custody.pdf?s=${s}`} target="_blank" rel="noopener noreferrer">Print chain of custody</a>
-        {x.can_receive && <> <button type="button" className="btn" id="cocpaper" onClick={paper}>Attach signed paper copy…</button></>}
+        <Button variant="outline-secondary" id="cocpdf" href={`/api/orders/${orderId}/custody.pdf?s=${s}`} target="_blank" rel="noopener noreferrer">Print chain of custody</Button>
+        {x.can_receive && <> <Button type="button" variant="outline-secondary" id="cocpaper" onClick={paper}>Attach signed paper copy…</Button></>}
       </>}>
       {x.events.length ? <ReadGrid rows={x.events} columns={cols} /> : <p className="help">No receipt signed yet.</p>}
     </Section>
@@ -184,7 +185,7 @@ function PhotoDialog({ sample, onDone }) {
           <img src={p.data} alt={`Photo ${i + 1}`} />
           <input className="phcap" placeholder="Caption" value={p.caption} onChange={(e) => change(i, { caption: e.target.value })} />
           <SmartSelect className="phslot" value={p.slot} options={SLOT_OPTS(slotTaken)} onChange={(v) => change(i, { slot: v })} />
-          <button type="button" className="btn ghost small phdel" title="Remove" onClick={() => setShots((cur) => cur.filter((_, j) => j !== i))}>Remove</button>
+          <Button type="button" variant="light" size="sm" className="phdel" title="Remove" onClick={() => setShots((cur) => cur.filter((_, j) => j !== i))}>Remove</Button>
         </div>))}</div>
     </Modal>
   );
@@ -198,7 +199,7 @@ export function PhotosCard({ sample }) {
   const s = useSiteParam();
   const { data: x, error, reload } = useApi(() => api.samplePhotos(sample.id), [sample.id]);
   if (error) return null;
-  if (!x) return <div className="card"><div className="loading">Loading…</div></div>;
+  if (!x) return <Card body><div className="loading">Loading…</div></Card>;
   const live = x.rows.filter((r) => r.status === 'Active');
   async function add() { if (await openPhotoDialog(dialogs, sample)) reload(); }
   async function edit(p) {
@@ -215,10 +216,10 @@ export function PhotosCard({ sample }) {
   }
   return (
     <Section title={`Photos (${live.length})`} help="Photos of the sample at receipt, 4:3. A photo report layout prints the ones marked Report photo 1 and 2."
-      actions={x.can_edit && <button type="button" className="btn" id="phadd" onClick={add}>Add photos…</button>}>
-      {x.problem && <div className="notice">{x.problem}.</div>}
+      actions={x.can_edit && <Button type="button" variant="outline-secondary" id="phadd" onClick={add}>Add photos…</Button>}>
+      {x.problem && <div className="alert alert-warning">{x.problem}.</div>}
       {live.length ? <div className="phgrid">{live.map((p) => (
-        <PhotoFigure key={p.id} p={p} s={s}>{x.can_edit && <button type="button" className="btn ghost small phedit" onClick={() => edit(p)}>Change…</button>}</PhotoFigure>
+        <PhotoFigure key={p.id} p={p} s={s}>{x.can_edit && <Button type="button" variant="light" size="sm" className="phedit" onClick={() => edit(p)}>Change…</Button>}</PhotoFigure>
       ))}</div> : <p className="help">No photos yet.</p>}
     </Section>
   );

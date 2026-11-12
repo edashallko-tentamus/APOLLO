@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import NeedPermission from './NeedPermission.jsx';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'matrices' };
 const STATUS = { field: 'status', title: 'Status', type: 'select', options: ['Active', 'Inactive'], width: 100 };
@@ -47,17 +48,17 @@ function Matrices({ query }) {
 
   return <>
     <PageHeader title="Matrices" audit={AUDIT} subtitle="Admin. The controlled list of sample matrices offered on the sample grid. A matrix used on samples cannot be renamed: set it Inactive and add the new name. Inactive matrices stay on the samples that already use them. Each matrix can belong to a product category, which workflow steps can use (e.g. a different sample weight for cosmetics and supplements)." />
-    {err ? <div className="card err">{err.message}</div> : !rows || !cats ? <div className="loading">Loading…</div> : <>
-      <div className="card">
+    {err ? <Card body className="err">{err.message}</Card> : !rows || !cats ? <div className="loading">Loading…</div> : <>
+      <Card body>
         <EditableGrid rows={rows} columns={columns} allowAdd search filter={new URLSearchParams(query).get('find') || ''} what="the Matrix list"
           newRow={newMatrix} rowClass={rowClass} save={saveMatrices} afterSave={reload} />
-      </div>
-      <div className="card">
+      </Card>
+      <Card body>
         <h2>Product categories</h2>
         <p className="help">Used by workflow steps that set amounts per category (Tests and workflows). Shared by all labs.</p>
         <EditableGrid rows={cats} columns={CAT_COLUMNS} allowAdd what="the product categories" newRow={newCat} rowClass={rowClass}
           save={saveProductCategories} afterSave={() => { reloadCats(); reload(); }} />
-      </div>
+      </Card>
       <ComplianceCategories />
     </>}
   </>;
@@ -69,13 +70,13 @@ function ComplianceCategories() {
   const count = d?.rows.length || 0;
   const newRow = useMemo(() => () => ({ status: 'Active', is_gmp: false, sort_order: (count + 1) * 10 }), [count]);
   return (
-    <div className="card">
+    <Card body>
       <h2>Compliance categories</h2>
       <p className="help">What the sample is, as declared on the sample submission form (the sample grid&apos;s Category column). GMP categories are finalized by the quality team (reports.finalize_gmp). Kept by QA and administrators (master.compliance).</p>
-      {error ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : (
+      {error ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : (
         <EditableGrid rows={d.rows} columns={COMPLIANCE_COLUMNS} allowAdd={d.can_edit} readOnly={!d.can_edit} what="the compliance categories"
           newRow={newRow} rowClass={rowClass} save={saveComplianceCategories} afterSave={reload} />
       )}
-    </div>
+    </Card>
   );
 }

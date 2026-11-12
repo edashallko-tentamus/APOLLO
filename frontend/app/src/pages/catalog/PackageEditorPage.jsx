@@ -14,6 +14,7 @@ import { money, plural } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import PickList from '../charges/PickList.jsx';
 import { useRowQueue } from './rowQueue.js';
+import { Button, Card } from 'react-bootstrap';
 
 const pctOff = (list, price) => (Number(list) > 0 && Number(price) < Number(list) ? Math.round((1 - Number(price) / Number(list)) * 1000) / 10 : 0);
 const ITEM_COLUMNS = [
@@ -102,14 +103,14 @@ function Editor({ d, opts, reload }) {
   return <>
     <PageHeader title={p.package_name} audit={{ kind: 'test_package', id: p.id }}
       subtitle={<>{p.package_code} <Badge status={p.status} /> · {p.site_code} · Test catalogue package</>}
-      actions={<><a className="btn ghost" href="#/catalog?tab=packages">Packages</a>
-        {ed && <>{' '}<button type="button" className="btn ghost" onClick={retire}>Retire…</button>{' '}<button type="button" className="btn primary" onClick={save} disabled={saving}>Save</button></>}</>} />
+      actions={<><Button variant="light" href="#/catalog?tab=packages">Packages</Button>
+        {ed && <>{' '}<Button type="button" variant="light" onClick={retire}>Retire…</Button>{' '}<Button type="button" variant="primary" onClick={save} disabled={saving}>Save</Button></>}</>} />
     {d.problems.length > 0 && (
-      <div className={`card${errors.length ? ' warn' : ''}`}><h2>{errors.length ? 'To fix before it can be quoted' : 'Worth a look'}</h2>
-        <ul>{d.problems.map((x, i) => <li key={i}><b>{x.severity}:</b> {x.problem}</li>)}</ul></div>
+      <Card body className={errors.length ? 'warn' : undefined}><h2>{errors.length ? 'To fix before it can be quoted' : 'Worth a look'}</h2>
+        <ul>{d.problems.map((x, i) => <li key={i}><b>{x.severity}:</b> {x.problem}</li>)}</ul></Card>
     )}
     <div className="cols">
-      <div className="card"><h2>Package</h2><div className="frm">
+      <Card body><h2>Package</h2><div className="frm">
         <label>Package name{field('package_name')}</label>
         <label>Description{field('description')}</label>
         <div className="row3" id="pksum">
@@ -119,16 +120,16 @@ function Editor({ d, opts, reload }) {
         </div>
         <label className="cb"><input type="checkbox" checked={form.show_in_public_catalogue} disabled={!ed}
           onChange={(e) => setForm((f) => ({ ...f, show_in_public_catalogue: e.target.checked }))} /> Show in public catalogue</label>
-      </div></div>
-      <div className="card"><h2>On quotes</h2>
+      </div></Card>
+      <Card body><h2>On quotes</h2>
         {d.quotes.length
           ? <table className="tbl"><tbody><tr><th>Quote</th><th>Client</th><th>Status</th><th>Price</th></tr>
             {d.quotes.map((q) => <tr key={q.version_id}><td><a href={'#/quote/' + q.version_id}>{q.project_code} v{q.version_no}</a></td><td>{q.client_name}</td><td><Badge status={q.status} /></td><td>{money(q.package_price)}</td></tr>)}</tbody></table>
           : <p className="help">Not on any quote yet. Quotes take the package from Pricing: open a quote and use "Add a package".</p>}
-        <p className="help">Changing the package changes new quotes only. A quote keeps the price and shares it was given.</p></div>
+        <p className="help">Changing the package changes new quotes only. A quote keeps the price and shares it was given.</p></Card>
     </div>
     <Section title="Tests in the package" help="Type each test's price in the package: that is what it is quoted and invoiced at, and the package price is their sum. A test added starts at its catalogue price (no discount). The discount is worked out from the catalogue prices."
-      actions={ed && <button type="button" className="btn" onClick={addTests}>+ Add tests</button>}>
+      actions={ed && <Button type="button" variant="outline-secondary" onClick={addTests}>+ Add tests</Button>}>
       <DataGrid grid={{ ...ig, allowAdd: false }} emptyText={'No tests yet: "+ Add tests".'} />
     </Section>
     {anRows.length > 0 && (
@@ -147,7 +148,7 @@ export default function PackageEditorPage({ params }) {
   }, [id]);
   const gen = useRef({ data: null, n: 0 });
   if (data && data !== gen.current.data) gen.current = { data, n: gen.current.n + 1 };
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
   return <Editor key={gen.current.n} {...data} reload={reload} />;
 }

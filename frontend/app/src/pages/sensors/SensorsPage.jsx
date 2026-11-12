@@ -11,6 +11,7 @@ import { useGrid } from '../../components/grid/useGrid.js';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import './sensors.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'sensors' };
 const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
@@ -101,7 +102,7 @@ export default function SensorsPage() {
     return [...cols.slice(-2), ...cols.slice(0, -2)]; // the action buttons first, so they stay in view however wide the table gets
   }, [d, dialogs, toast, reload]);
 
-  if (error) return <><PageHeader title="Sensors" audit={AUDIT} /><div className="card err">{error.message}</div></>;
+  if (error) return <><PageHeader title="Sensors" audit={AUDIT} /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Sensors" audit={AUDIT} /><div className="loading">Loading…</div></>;
   const c = d.connection || {};
   const on = !!c.enabled;
@@ -155,11 +156,11 @@ export default function SensorsPage() {
     <PageHeader title="Sensors" audit={AUDIT}
       subtitle="Temperature and humidity sensors (Monnit, through iMonnit) feeding the logbooks: one entry per hour, one per spell outside the limits and one per silence, recorded by the automated sensor feed. A person gives the reason for an excursion or a silence; QA approves the entries as usual. Each link is approved by QA before it feeds."
       actions={<>
-        {d.can_configure && on && <button type="button" className="btn" onClick={readNow} disabled={reading}>Read now</button>}{' '}
-        {d.can_configure && <button type="button" className="btn primary" onClick={newLink}>+ Link a sensor</button>}
+        {d.can_configure && on && <Button type="button" variant="outline-secondary" onClick={readNow} disabled={reading}>Read now</Button>}{' '}
+        {d.can_configure && <Button type="button" variant="primary" onClick={newLink}>+ Link a sensor</Button>}
       </>} />
     <Section title="Connection" help="Set by a system administrator. The iMonnit key is kept on the server, never in the LIMS."
-      actions={d.is_admin && <button type="button" className="btn" onClick={connection}>Change…</button>}>
+      actions={d.is_admin && <Button type="button" variant="outline-secondary" onClick={connection}>Change…</Button>}>
       <div className="lb-facts sensor-facts">
         <div><b>Status</b>{on ? <span className="pill tbpass">On</span> : <span className="pill tbwait">Off</span>}</div>
         <div><b>Connects to</b>{c.mode || ''}{c.mode === PRETEND ? <> <span className="lb-note">(made-up readings, for trying it out)</span></> : c.base_url ? <><br />{c.base_url}</> : ''}</div>

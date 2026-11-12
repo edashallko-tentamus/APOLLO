@@ -34,7 +34,7 @@ export default function QaTestingPage() {
       subtitle={'Items of the types ticked here are quarantined when they are received: they cannot be used at the bench or in a mixture until a QA test, run on a sample carrying the lot\'s ID, releases them (for every use, or for named tests). A lot that fails is rejected for every use until a retest passes. Any item can also be sent for QA testing from its page.'} />
     <InvTabs />
     {error && !d ? <Failed error={error} /> : !d ? <Loading /> : <>
-      {!d.can_edit && <div className="notice">You can view these settings. QA keeps them (inventory.qa_configure).</div>}
+      {!d.can_edit && <div className="alert alert-warning">You can view these settings. QA keeps them (inventory.qa_configure).</div>}
       <Section title="Item types tested before use" help={'Changing a type affects items received from now on. Items already received keep their status; a lot can still be sent for QA testing, or QA can waive it, from the lot\'s page.'}>
         <EditableGrid rows={d.rows} columns={DEFAULT_COLS} readOnly={!d.can_edit} what="QA testing defaults" save={saveQaDefaults} afterSave={reload} />
       </Section>

@@ -4,6 +4,7 @@ import { changePassword, login, setupAdmin } from '../api/auth.js';
 import { PASSWORD_RULE } from '../config.js';
 import SmartSelect from '../components/SmartSelect.jsx';
 import Brand from '../shell/Brand.jsx';
+import { Button } from 'react-bootstrap';
 
 const TITLES = { login: 'Sign in', setup: 'First-time setup', change: 'Choose a new password' };
 const BUTTONS = { login: 'Sign in', setup: 'Set password and sign in', change: 'Save new password' };
@@ -56,7 +57,7 @@ export default function LoginScreen({ mode, message, username = '', setupUsers =
         {mode !== 'login' && <Field id="lg_conf" label="Type it again" type="password" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} />}
         <div className="help">{mode === 'login' ? 'Forgotten your password, or locked out? Ask an administrator for a temporary password.' : PASSWORD_RULE}</div>
         <div className="merr" role="alert">{error}</div>
-        <button className="btn primary" type="submit" disabled={busy}>{BUTTONS[mode]}</button>
+        <Button variant="primary" type="submit" className="w-100 mt-2" disabled={busy}>{BUTTONS[mode]}</Button>
       </form>
     </div>
   );

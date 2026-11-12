@@ -7,6 +7,8 @@ import { useDialogs } from '../dialogs/DialogProvider.jsx';
 import DataGrid from '../grid/DataGrid.jsx';
 import { useGrid } from '../grid/useGrid.js';
 import { auditColumns } from './auditColumns.js';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from '../Modal.jsx';
 
 const COLUMNS = auditColumns();
 const NO_ROWS = [];
@@ -22,15 +24,15 @@ function AuditDialog({ scope, title, onDone }) {
     return () => window.removeEventListener('hashchange', onDone);
   }, [onDone]);
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(); }}>
-      <div className="modal xwide" role="dialog" aria-modal="true" aria-label={`Audit trail: ${title}`}>
+    <Dialog label={`Audit trail: ${title}`} xwide onClose={() => onDone()}>
+      <div className="modal-body">
         <h3>Audit trail: {title}</h3>
         <p className="intro">{scope.id ? 'Every change to this record and its parts' : 'Every change to the records on this page'}, newest first (latest 500). Written by the database; it cannot be edited. Click a record to open it.</p>
-        {error ? <div className="card err">{error.message}</div> : loading && !data ? <div className="loading">Loading…</div>
+        {error ? <Card body className="err">{error.message}</Card> : loading && !data ? <div className="loading">Loading…</div>
           : <DataGrid grid={grid} search emptyText="No changes recorded yet." maxHeight="60vh" />}
-        <div className="mbtns"><button type="button" className="btn primary" onClick={() => onDone()} autoFocus>Close</button></div>
+        <div className="mbtns"><Button type="button" variant="primary" onClick={() => onDone()} autoFocus>Close</Button></div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

@@ -10,6 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { decideQuote, newQuote } from './quoteDialogs.js';
 import './quotes.css';
+import { Button, Card } from 'react-bootstrap';
 
 export const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/); return (m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v)).toLocaleDateString([], { dateStyle: 'medium' }); };
 const quoteHref = (r) => (r.kind === 'Stability' ? '#/stability/quotes/' + r.project_id : '#/quote/' + r.version_id);
@@ -60,15 +61,15 @@ export default function QuotesPage({ query }) {
   return <>
     <PageHeader title="Quotes" audit={AUDIT}
       subtitle="Every quote and project quote, newest first, 50 at a time. A standalone quote is for one customer request; a project is a reusable package of tests for a product. Accept or reject a quote here when the client answers by phone or email; answers through the link in the quote email are recorded by themselves."
-      actions={<>{canEdit && <button type="button" className="btn primary" onClick={() => newQuote(dialogs, toast)}>+ New quote</button>} <a className="btn ghost" href="#/projects">Projects</a></>} />
+      actions={<>{canEdit && <Button type="button" variant="primary" onClick={() => newQuote(dialogs, toast)}>+ New quote</Button>} <Button variant="light" href="#/projects">Projects</Button></>} />
     <div className="tabs"><a className={`tab${mine ? ' on' : ''}`} href="#/quotes?tab=mine">My open quotes</a><a className={`tab${mine ? '' : ' on'}`} href="#/quotes?tab=all">All quotes</a></div>
-    {error && !meta ? <div className="card err">{error.message}</div> : !meta ? <div className="loading">Loading…</div> : <>
+    {error && !meta ? <Card body className="err">{error.message}</Card> : !meta ? <div className="loading">Loading…</div> : <>
       <div className="qfil">
         <label>Type <SmartSelect value={type} options={TYPES} onChange={pick(setType, 'type')} /></label>
         <label>Lab <SmartSelect value={lab} options={[{ value: '', label: 'All labs' }, ...meta.labs.map((l) => ({ value: l.id, label: l.site_code }))]} onChange={pick(setLab, 'lab')} /></label>
         {!mine && <label>Prepared by <SmartSelect value={owner} options={[{ value: '', label: 'Anyone' }, ...(meta.owners || []).map((o) => ({ value: o.id, label: o.name || '' }))]} onChange={pick(setOwner, 'owner')} /></label>}
       </div>
-      <div className="card">
+      <Card body>
         <PagedList key={mine ? 'mine' : 'all'} load={load} query={query} filters={mine ? NO_FILTERS : ALL_FILTERS}
           placeholder="Search by quote, reference, client or person; type or scan a quote number and press Enter"
           open={(r) => { window.location.hash = quoteHref(r); }}>
@@ -77,7 +78,7 @@ export default function QuotesPage({ query }) {
               emptyText={mine ? 'You have no open quotes. "+ New quote" starts one.' : 'No quotes match.'} />
           ); }}
         </PagedList>
-      </div>
+      </Card>
     </>}
   </>;
 }

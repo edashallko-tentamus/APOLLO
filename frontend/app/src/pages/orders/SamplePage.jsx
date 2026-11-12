@@ -15,6 +15,7 @@ import { PhotosCard } from '../custody/Custody.jsx';
 import { openOos } from '../oos/shared.jsx';
 import SampleCoaCard from '../reports/SampleCoaCard.jsx';
 import { d8, dt, hasVal, quoteHref, quoteText, unit } from './orderFormat.js';
+import { Button, Card } from 'react-bootstrap';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const loc = (v) => { if (!v) return ''; const x = new Date(v); return `${x.getFullYear()}-${pad2(x.getMonth() + 1)}-${pad2(x.getDate())} ${pad2(x.getHours())}:${pad2(x.getMinutes())}`; };
@@ -42,7 +43,7 @@ function Kv({ pairs }) {
 export default function SamplePage({ params }) {
   const id = params[0];
   const { data: d, error, reload } = useApi((o) => api.getSample(id, o), [id]);
-  if (error && !d) return <div className="card err">{error.message}</div>;
+  if (error && !d) return <Card body className="err">{error.message}</Card>;
   if (!d) return <div className="loading">Loading…</div>;
   return <SampleView id={id} d={d} reload={reload} />;
 }
@@ -54,15 +55,15 @@ function SampleView({ id, d, reload }) {
   return <>
     <PageHeader title={`Sample ${s.sample_code || s.client_sample_id || '(not logged)'}`} audit={{ kind: 'sample', id }}
       subtitle={<><a href={'#/orders/' + o.id}>{o.order_code}</a> · <a href={'#/clients/' + o.client_id}>{o.client_code} {o.client_name}</a> · {o.site_code} <Badge status={s.status} /></>}
-      actions={<>{s.sample_code && <><button type="button" className="btn" id="labels" onClick={() => printLabels('sample', [s.id])}>Print labels</button>{' '}</>}
-        <a className="btn" href={'#/orders/' + o.id}>Edit on the order</a></>} />
+      actions={<>{s.sample_code && <><Button type="button" variant="outline-secondary" id="labels" onClick={() => printLabels('sample', [s.id])}>Print labels</Button>{' '}</>}
+        <Button variant="outline-secondary" href={'#/orders/' + o.id}>Edit on the order</Button></>} />
     <div className="cols">
-      <div className="card"><h2>Sample</h2><Kv pairs={[['Sample ID', s.sample_code || 'Not logged yet'], ['Client sample ID', s.client_sample_id], ['Description', s.description],
+      <Card body><h2>Sample</h2><Kv pairs={[['Sample ID', s.sample_code || 'Not logged yet'], ['Client sample ID', s.client_sample_id], ['Description', s.description],
         ['Matrix', s.matrix], ['Product', s.product], ['Lot', s.lot], ['Batch', s.batch], ['METRC ID', s.metrc_id || ''], ['Category', s.compliance_category],
-        ['Serving', [s.serving_count ? `${Number(s.serving_count)} ${s.serving_count_unit || ''}` : '', s.serving_size ? `${Number(s.serving_size)} ${s.serving_unit || ''}` : ''].filter(Boolean).join(', ') + (s.servings_per_package ? `; ${Number(s.servings_per_package)} per package` : '')]]} /></div>
-      <div className="card"><h2>Receipt and turnaround</h2><Kv pairs={[['Amount received', s.quantity_received === null ? '' : `${s.quantity_received} ${s.quantity_unit || ''}`], ['Containers', nz(s.number_of_units)],
+        ['Serving', [s.serving_count ? `${Number(s.serving_count)} ${s.serving_count_unit || ''}` : '', s.serving_size ? `${Number(s.serving_size)} ${s.serving_unit || ''}` : ''].filter(Boolean).join(', ') + (s.servings_per_package ? `; ${Number(s.servings_per_package)} per package` : '')]]} /></Card>
+      <Card body><h2>Receipt and turnaround</h2><Kv pairs={[['Amount received', s.quantity_received === null ? '' : `${s.quantity_received} ${s.quantity_unit || ''}`], ['Containers', nz(s.number_of_units)],
         ['Condition', s.condition], ['Temperature', s.receipt_temperature === null ? '' : s.receipt_temperature + ' °C'], ['Preservation', s.preservation],
-        ['Logged', s.logged_at ? `${dt(s.logged_at)} by ${s.logged_by_name || ''}` : 'Not logged yet'], ['Due', d8(s.due_date)], ['Value', money(s.sample_value)]]} /></div>
+        ['Logged', s.logged_at ? `${dt(s.logged_at)} by ${s.logged_by_name || ''}` : 'Not logged yet'], ['Due', d8(s.due_date)], ['Value', money(s.sample_value)]]} /></Card>
     </div>
     <Section title="Tests" help="Change tests, rush or TAT on the order page.">
       <ReadGrid rows={d.tests} columns={TEST_COLUMNS} rowClass={muted} emptyText="No tests ordered." />
@@ -174,10 +175,10 @@ function ServingCard({ s, d, reload }) {
           <dt>Density</dt><dd>{s.density_result_id ? `${n(s.density)} ${s.density_unit || ''} (measured)` : 'Not measured'}</dd>
           <dt>Serving tests</dt><dd>{ordered.length ? ordered.map((x) => `${x.test_name} (${x.status})`).join(', ') : 'None ordered'}</dd>
         </dl>
-        {held.length > 0 && <div className="notice" id="servheld"><b>Held:</b> {held.map((x) => `${x.test_name}: ${x.problem}`).join('; ')}.</div>}
+        {held.length > 0 && <div className="alert alert-warning" id="servheld"><b>Held:</b> {held.map((x) => `${x.test_name}: ${x.problem}`).join('; ')}.</div>}
         {(btnW || btnD) && <p>
-          {btnW && <button type="button" className="btn" data-sreq="Serving weight" onClick={() => request('Serving weight')}>Request the serving weight test…</button>}{' '}
-          {btnD && <button type="button" className="btn" data-sreq="Density" onClick={() => request('Density')}>Request the density test…</button>}
+          {btnW && <Button type="button" variant="outline-secondary" data-sreq="Serving weight" onClick={() => request('Serving weight')}>Request the serving weight test…</Button>}{' '}
+          {btnD && <Button type="button" variant="outline-secondary" data-sreq="Density" onClick={() => request('Density')}>Request the density test…</Button>}
         </p>}
       </div>
     </Section>

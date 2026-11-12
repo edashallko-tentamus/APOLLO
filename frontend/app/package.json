@@ -11,7 +11,9 @@
     "test": "node src/components/grid/gridModel.test.js && node src/components/labels/code128.test.js"
   },
   "dependencies": {
+    "bootstrap": "5.3.8",
     "react": "19.2.0",
+    "react-bootstrap": "2.10.10",
     "react-dom": "19.2.0"
   },
   "devDependencies": {

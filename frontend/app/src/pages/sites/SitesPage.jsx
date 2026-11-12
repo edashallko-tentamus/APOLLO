@@ -8,6 +8,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import MediaCard from '../labsetup/MediaCard.jsx';
 import ProductNameCard from '../labsetup/ProductNameCard.jsx';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'sites' };
 const d8 = (v) => (v ? new Date(v + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '');
@@ -51,7 +52,7 @@ export default function SitesPage({ params }) {
   return <>
     <PageHeader title="Sites and holidays" audit={AUDIT}
       subtitle={'Admin. Each site has its own time zone (cutoff times are local) and holiday calendar (business-day turnaround skips these days). Only system administrators add or change labs (a new lab gets the standard groups); each lab\'s administrators keep its holidays. People get a lab by joining one of its groups (Admin, People and groups).'} />
-    {error ? <div className="card err">{error.message}</div> : !rows ? <div className="loading">Loading…</div> : <>
+    {error ? <Card body className="err">{error.message}</Card> : !rows ? <div className="loading">Loading…</div> : <>
       <Section title="Sites">
         <EditableGrid rows={rows} columns={columns} allowAdd={sysAdmin} readOnly={!sysAdmin} what="site settings" newRow={newSite} save={saveSites} afterSave={reload} />
       </Section>

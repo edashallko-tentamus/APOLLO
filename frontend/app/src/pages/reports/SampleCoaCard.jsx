@@ -11,6 +11,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { dt, startReview } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const NOTE_COLS = [
   { field: 'kind', title: 'Kind', type: 'readonly', width: 90, format: (v) => (v === 'Internal' ? 'Internal' : 'On the COA') },
@@ -74,7 +75,7 @@ export default function SampleCoaCard({ sampleId }) {
     <ReadGrid rows={d.notes} columns={NOTE_COLS} emptyText="No notes." />
     <h3 className="rfsub">Attachments</h3>
     <ReadGrid rows={d.attachments} columns={attachCols} emptyText="No attachments." />
-    {d.can_attach && <p><button type="button" className="btn" onClick={async () => { if (await addAttachment(dialogs, toast, sampleId)) reload(); }}>Add an attachment…</button></p>}
-    {d.versions.length > 0 && can('reports.finalize') && <p className="help">A new version without a new result (a corrected note or client detail): <button type="button" className="btn" onClick={reissue}>Issue a new version…</button></p>}
+    {d.can_attach && <p><Button type="button" variant="outline-secondary" onClick={async () => { if (await addAttachment(dialogs, toast, sampleId)) reload(); }}>Add an attachment…</Button></p>}
+    {d.versions.length > 0 && can('reports.finalize') && <p className="help">A new version without a new result (a corrected note or client detail): <Button type="button" variant="outline-secondary" onClick={reissue}>Issue a new version…</Button></p>}
   </Section>;
 }

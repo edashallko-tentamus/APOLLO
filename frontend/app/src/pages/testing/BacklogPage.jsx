@@ -12,6 +12,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { decideSplit } from './actions.jsx';
 import { day, TopTabs, useNeedLab } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'batches' };
 const COLUMNS = [
@@ -51,8 +52,8 @@ function Group({ rows, max, canPerform, onMake, onAddTo, toast, dialogs }) {
   return (
     <Section className="tbgroup" title={`${r0.test_code} ${r0.test_name} (v${r0.version_no})`}
       help={`${rows.length} waiting${max ? ` · up to ${max} per batch` : ''}${rows.some((x) => x.kind === 'Re-prep') ? ' · includes re-preps' : ''}`}
-      actions={canPerform && <><button type="button" className="btn" data-sel={r0.test_version_id} onClick={selected}>Batch selected rows</button>{' '}
-        <button type="button" className="btn primary" data-auto={r0.test_version_id} onClick={auto}>Autobatch</button></>}>
+      actions={canPerform && <><Button type="button" variant="outline-secondary" data-sel={r0.test_version_id} onClick={selected}>Batch selected rows</Button>{' '}
+        <Button type="button" variant="primary" data-auto={r0.test_version_id} onClick={auto}>Autobatch</Button></>}>
       <div data-v={r0.test_version_id}><DataGrid grid={grid} emptyText="Nothing waiting." onContextMenu={menu} /></div>
     </Section>
   );
@@ -118,8 +119,8 @@ export default function BacklogPage() {
     <PageHeader title="Testing" audit={AUDIT}
       subtitle="The backlog: logged tests waiting for a batch, by department. Re-preps come first, then rush, then by due date. Autobatch fills a batch up to the test's maximum and adds its QC; or select rows and batch only those." />
     <TopTabs cur="#/testing" />
-    {error && !d ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : <>
-      {!d.rows.length && <div className="card">Nothing is waiting. Tests appear here once their sample is logged (and the test has an approved workflow).</div>}
+    {error && !d ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : <>
+      {!d.rows.length && <Card body>Nothing is waiting. Tests appear here once their sample is logged (and the test has an approved workflow).</Card>}
       {groups.map(([dk, vs]) => <div key={dk}>
         <h2 style={{ margin: '18px 0 8px' }}>{dk}</h2>
         {vs.map((rows) => <Group key={rows[0].test_version_id} rows={rows} max={d.max_samples[rows[0].test_version_id]} canPerform={d.can_perform}

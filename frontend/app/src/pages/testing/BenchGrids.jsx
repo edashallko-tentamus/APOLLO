@@ -9,6 +9,7 @@ import {
   active, benchEntries, day, dilFactor, dilutionExpected, dilutionSteps, eqLink, isPast, isWeighed, kindOf, lotLink, nfmt,
   pickText, readingDilution, reprepCol, reprepNote, rlabel, runOfReading, runsOf, sampleHref, usedFor, valueOf, weightRange,
 } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const blank = (v) => v === null || v === undefined || v === '';
 const benchRowClass = (r) => (r.sup ? 'tbsup' : r.run_no > 1 ? 'tbrerun' : '');
@@ -181,8 +182,8 @@ export function DilutionGrid(p) {
     return [{ entry_id: r.entry_id, data: fields.length ? { fields } : {}, correction: o.had }];
   };
   const toolbar = canWork && rows.some((r) => r.expected)
-    ? <button type="button" className="mini" id="dl_std" onClick={() => fillEmpty(apiRef, (r) => blank(r.a1) && r.expected, (r) => ({ a1: r.expected?.aliquot, d1: r.expected?.diluent }))}>
-      {(c.by_category || []).length ? 'Each sample\'s amounts (by its matrix) for empty rows' : `Standard dilution (${nfmt(c.aliquot)} + ${nfmt(c.diluent || 0)}) for empty rows`}</button> : null;
+    ? <Button type="button" variant="outline-secondary" size="sm" className="mini" id="dl_std" onClick={() => fillEmpty(apiRef, (r) => blank(r.a1) && r.expected, (r) => ({ a1: r.expected?.aliquot, d1: r.expected?.diluent }))}>
+      {(c.by_category || []).length ? 'Each sample\'s amounts (by its matrix) for empty rows' : `Standard dilution (${nfmt(c.aliquot)} + ${nfmt(c.diluent || 0)}) for empty rows`}</Button> : null;
   return <BenchGrid {...p} rows={rows} columns={columns} toValues={toValues} toolbar={toolbar} />;
 }
 
@@ -267,7 +268,7 @@ export function PlatingGrid(p) {
   }, [d, s]);
   const toValues = (r, o) => [{ entry_id: r.entry_id, value_num: r.plates, data: r.levels ? { levels: r.levels } : {}, correction: o.had }];
   const per = c.plates_per_entry || 1;
-  const toolbar = canWork ? <button type="button" className="mini" id="pl_std" onClick={() => fillEmpty(apiRef, (r) => blank(r.plates), () => ({ plates: per }))}>
-    {nfmt(per)} plate{Number(per) === 1 ? '' : 's'} for empty rows</button> : null;
+  const toolbar = canWork ? <Button type="button" variant="outline-secondary" size="sm" className="mini" id="pl_std" onClick={() => fillEmpty(apiRef, (r) => blank(r.plates), () => ({ plates: per }))}>
+    {nfmt(per)} plate{Number(per) === 1 ? '' : 's'} for empty rows</Button> : null;
   return <BenchGrid {...p} rows={rows} columns={columns} toValues={toValues} toolbar={toolbar} />;
 }

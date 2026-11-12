@@ -9,6 +9,7 @@ import { useMeta } from '../../hooks/useMeta.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8 } from './orderFormat.js';
 import { openNewOrder } from './newOrder.jsx';
+import { Button } from 'react-bootstrap';
 
 const FILTERS = [['current', 'Current'], ['finished', 'Reported'], ['all', 'All']];
 const AUDIT = { kind: 'orders' };
@@ -36,7 +37,7 @@ export default function OrdersPage({ query }) {
   return <>
     <PageHeader title="Lab orders" audit={AUDIT}
       subtitle={`Orders for ${site ? site.site_code : 'your lab'}. The samples a client orders at one time; tests can only come from the client's accepted quotes. Newest first, 50 at a time; scan or type an order, PO or sample ID and press Enter to open it.`}
-      actions={<button type="button" className="btn primary" id="new" onClick={() => openNewOrder(dialogs, toast, { site, meta })}>+ New lab order</button>} />
+      actions={<Button type="button" variant="primary" id="new" onClick={() => openNewOrder(dialogs, toast, { site, meta })}>+ New lab order</Button>} />
     <PagedList load={listOrders} query={query} filters={FILTERS} open={openExact}
       placeholder="Search by order, client, PO or contact; scan or type an order, PO or sample ID and press Enter">
       {(rows) => <ReadGrid rows={rows} columns={COLUMNS} rowClass={rowClass} onRowOpen={openRow} emptyText="No orders here." />}

@@ -7,6 +7,8 @@ import { useGrid } from '../../components/grid/useGrid.js';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { money } from '../../lib/format.js';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from '../../components/Modal.jsx';
 
 const COLUMNS = [
   { field: 'included', title: 'Included', type: 'bool', width: 80 },
@@ -39,11 +41,11 @@ export default function AnalyteDialog({ line, editable, onDone }) {
   }
 
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(false); }}>
-      <div className="modal wide" role="dialog" aria-modal="true" aria-label={`Analytes on ${line.test_name}`}>
+    <Dialog label={`Analytes on ${line.test_name}`} wide onClose={() => onDone(false)}>
+      <div className="modal-body">
         <h3>Analytes on {line.test_name}</h3>
         <p className="intro">Untick analytes the client does not need. The list price recalculates and the negotiated discount ({line.discount_pct ?? 0}%) is kept. Select a block of cells and press Space to tick or untick them all, or use Ctrl+D.</p>
-        {error ? <div className="card err">{error.message}</div> : !data ? <div className="loading">Loading…</div> : <>
+        {error ? <Card body className="err">{error.message}</Card> : !data ? <div className="loading">Loading…</div> : <>
           <DataGrid grid={grid} emptyText="No analytes." />
           <div className="preview">
             <span>{inc.length} of {state.rows.length} analytes</span><span>List {money(line.list_price)} → <b>{money(newList)}</b></span>
@@ -53,10 +55,10 @@ export default function AnalyteDialog({ line, editable, onDone }) {
         </>}
         <div className="merr" role="alert">{err}</div>
         <div className="mbtns">
-          <button type="button" className="btn ghost" onClick={() => onDone(false)}>Cancel</button>
-          {editable && <button type="button" className="btn primary" onClick={apply} disabled={busy || !data}>Apply</button>}
+          <Button type="button" variant="light" onClick={() => onDone(false)}>Cancel</Button>
+          {editable && <Button type="button" variant="primary" onClick={apply} disabled={busy || !data}>Apply</Button>}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

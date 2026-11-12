@@ -10,6 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { entries, loc, needsReason, resultClass } from './calc.js';
 import './logbooks.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'logbooks' };
 const SUB = 'QA approves each logbook\'s entries daily or weekly (as the logbook says); late ones first. Tick the entries checked, then approve them with one signature. Entries you recorded or corrected are approved by someone else. A sample weights logbook is reviewed in the batch that uses it, not here.';
@@ -50,7 +51,7 @@ export default function ReviewPage() {
   const { reset, act } = grid;
   useEffect(() => { reset(rows); }, [rows, reset]);
 
-  if (error && !d) return <><PageHeader title="Logbook review" audit={AUDIT} /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Logbook review" audit={AUDIT} /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Logbook review" audit={AUDIT} /><div className="loading">Loading…</div></>;
   const logbooks = [...new Set(d.rows.map(lbName))];
   const late = d.rows.filter((x) => x.overdue).length;
@@ -69,14 +70,14 @@ export default function ReviewPage() {
 
   return <>
     <PageHeader title="Logbook review" subtitle={SUB} audit={AUDIT} />
-    <div className="card">
+    <Card body>
       <div className="lb-bar">
-        {d.can_review ? <><button type="button" className="btn primary" onClick={approve}>Approve ticked (signed)</button><button type="button" className="btn" onClick={tickAll}>Tick all I may approve</button></>
+        {d.can_review ? <><Button type="button" variant="primary" onClick={approve}>Approve ticked (signed)</Button><Button type="button" variant="outline-secondary" onClick={tickAll}>Tick all I may approve</Button></>
           : <span className="lb-note">QA (logbook.review) approves these.</span>}
         <label>Logbook <SmartSelect value={lb} options={[{ value: '', label: 'All' }, ...logbooks.map((x) => ({ value: x, label: x }))]} onChange={filterBy} /></label>
         <span className="lb-note">{d.rows.length} waiting{late > 0 && <>, <b className="short">{late} overdue</b></>}</span>
       </div>
       <DataGrid grid={grid} search emptyText="Nothing waiting for QA." rowClass={reviewRowClass} />
-    </div>
+    </Card>
   </>;
 }

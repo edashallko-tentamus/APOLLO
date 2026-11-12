@@ -14,6 +14,7 @@ import DetailDialog from './DetailDialog.jsx';
 import { performanceReport } from './PerformanceReport.jsx';
 import WidgetBody from './WidgetBody.jsx';
 import './dashboard.css';
+import { Button, Card } from 'react-bootstrap';
 
 const LIVE_MS = 5 * 60000;
 const BOARDS = {
@@ -115,7 +116,7 @@ export default function Board({ boardKey: key }) {
   useEffect(() => {
     const t = setInterval(async () => {
       const m = modelRef.current;
-      if (!m || document.visibilityState !== 'visible' || document.querySelector('.ddet, .modal-bg') || dragging.current) return;
+      if (!m || document.visibilityState !== 'visible' || document.querySelector('.ddet, .modal') || dragging.current) return;
       const codes = m.order.filter((w) => w.live).map((w) => w.code);
       if (!codes.length) return;
       try { const fresh = await getBoard(key, { lab, only: codes }); setModel((cur) => cur && merge(cur, fresh)); } catch { /* keep the last numbers */ }
@@ -159,7 +160,7 @@ export default function Board({ boardKey: key }) {
   const b = BOARDS[key];
   const labText = site ? `${site.site_code} (${site.site_name})` : 'your lab';
   const header = <PageHeader title={b.title} subtitle={b.sub(labText)} audit={key === 'home' ? null : AUDIT} />;
-  if (error && !data) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !data) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!data || !model) return <>{header}<div className="loading">Loading…</div></>;
 
   const labOptions = [{ value: '', label: 'All my labs together' }, ...data.labs.map((l) => ({ value: l.id, label: `${l.site_code}: ${l.site_name}` }))];
@@ -168,11 +169,11 @@ export default function Board({ boardKey: key }) {
     <div className="dbar">
       {data.labs.length > 1 && <label>Lab <SmartSelect id="dlab" value={lab} options={labOptions} onChange={setLab} /></label>}
       <span className="sp" />
-      {key !== 'home' && <button type="button" className="btn" id="dreport" title="Download the performance report for a period to Excel"
-        onClick={() => performanceReport({ dialogs, toast, labs: data.labs, siteId })}>Performance report (Excel)</button>}
-      <button type="button" className="btn" id="drefresh" title="Work out again every widget that is not live" disabled={!!busy} onClick={refreshAll}>Refresh all</button>
-      <button type="button" className="btn" id="dadd" onClick={bringBack}>Bring back a widget</button>
-      <button type="button" className="btn ghost" id="dreset" onClick={reset}>Reset layout</button>
+      {key !== 'home' && <Button type="button" variant="outline-secondary" id="dreport" title="Download the performance report for a period to Excel"
+        onClick={() => performanceReport({ dialogs, toast, labs: data.labs, siteId })}>Performance report (Excel)</Button>}
+      <Button type="button" variant="outline-secondary" id="drefresh" title="Work out again every widget that is not live" disabled={!!busy} onClick={refreshAll}>Refresh all</Button>
+      <Button type="button" variant="outline-secondary" id="dadd" onClick={bringBack}>Bring back a widget</Button>
+      <Button type="button" variant="light" id="dreset" onClick={reset}>Reset layout</Button>
     </div>
     <div className="dgrid" id="dgrid">
       {!model.order.length && <div className="dhidden" style={{ gridColumn: '1 / -1' }}>No widgets here. Your groups have none at this lab, or you put them all away: Bring back a widget, or ask your lab administrator (Admin &gt; Dashboard widgets).</div>}

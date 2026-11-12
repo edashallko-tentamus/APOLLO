@@ -5,6 +5,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { ListTabs, Loading, NeedLab } from './shared.jsx';
+import { Card } from 'react-bootstrap';
 
 const COLUMNS = [
   { field: 'method_code', title: 'Code', type: 'readonly', width: 95 },
@@ -26,15 +27,15 @@ export default function SopsPage({ query }) {
   const { data: d, error, reload } = useApi((o) => (site ? listSops(o) : Promise.resolve(null)), [site?.id]);
   const header = <PageHeader title="Methods (SOPs)" subtitle={SUB} audit={AUDIT} />;
   if (!site) return <NeedLab />;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<Loading /></>;
   return <>
     {header}
     <ListTabs cur="#/methods/sops" />
-    {!d.can_design && <div className="notice">You can view the methods. Changing them needs methods.design in this lab.</div>}
-    <div className="card">
+    {!d.can_design && <div className="alert alert-warning">You can view the methods. Changing them needs methods.design in this lab.</div>}
+    <Card body>
       <EditableGrid rows={d.rows} columns={COLUMNS} allowAdd={d.can_design} readOnly={!d.can_design} search filter={new URLSearchParams(query).get('find') || ''}
         what="methods" newRow={newRow} rowClass={rowClass} sign={sign} save={saveSops} afterSave={reload} />
-    </div>
+    </Card>
   </>;
 }

@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { CONTROL, Panels, SOURCES, TrendTabs } from './TrendPanel.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const SUB = 'Choose what to chart, draw it, then download it or save it for the lab. Saved charts are watched (Trend watch) and can be frozen to a baseline; QC charts can be shown in QC Review.';
@@ -154,17 +155,17 @@ function Builder({ o, editing, shared }) {
             <label key={k}><input type="checkbox" checked={def.rules.includes(k)} onChange={(e) => setRule(k, e.target.checked)} /> <span><b>{k}</b> {t}</span></label>))}
         </div></>}
         <div className="acts">
-          <button type="button" className="btn primary" id="draw" onClick={() => run()}>Draw</button>
-          {can('trending.manage') && <button type="button" className="btn" id="save" onClick={save}>{editing ? 'Save changes' : 'Save chart…'}</button>}
-          <button type="button" className="btn ghost" id="copy" onClick={copyLink}>Copy link</button>
+          <Button type="button" variant="primary" id="draw" onClick={() => run()}>Draw</Button>
+          {can('trending.manage') && <Button type="button" variant="outline-secondary" id="save" onClick={save}>{editing ? 'Save changes' : 'Save chart…'}</Button>}
+          <Button type="button" variant="light" id="copy" onClick={copyLink}>Copy link</Button>
         </div>
       </div>
       <div id="out">
-        {out.state === 'idle' && <div className="card trempty">Choose what to chart on the left, then Draw.</div>}
-        {out.state === 'drawing' && <div className="card trempty">Drawing…</div>}
-        {out.state === 'error' && <div className="card err">{out.error}</div>}
+        {out.state === 'idle' && <Card body className="trempty">Choose what to chart on the left, then Draw.</Card>}
+        {out.state === 'drawing' && <Card body className="trempty">Drawing…</Card>}
+        {out.state === 'error' && <Card body className="err">{out.error}</Card>}
         {out.state === 'done' && (out.panels.length ? <Panels panels={out.panels} ctx={{ rules: def.rules }} margin="2px 0 6px" />
-          : <div className="card trempty">Nothing to chart: no analytes or QC checks for this choice.</div>)}
+          : <Card body className="trempty">Nothing to chart: no analytes or QC checks for this choice.</Card>)}
       </div>
     </div>
   </>;
@@ -176,7 +177,7 @@ export default function BuilderPage({ query }) {
   let shared = null;
   if (!cid && q.get('d')) { try { shared = JSON.parse(q.get('d')); } catch { /* a bad link: start empty */ } }
   const { data, error } = useApi(async (o) => ({ o: await getOptions(o), editing: cid ? (await getChart(cid, '', '', o)).chart : null }), [cid]);
-  if (error && !data) return <><PageHeader title="Build a chart" audit={AUDIT} /><TrendTabs on="build" /><div className="card err">{error.message}</div></>;
+  if (error && !data) return <><PageHeader title="Build a chart" audit={AUDIT} /><TrendTabs on="build" /><Card body className="err">{error.message}</Card></>;
   if (!data) return <><PageHeader title="Build a chart" audit={AUDIT} /><TrendTabs on="build" /><div className="loading">Loading…</div></>;
   return <Builder key={cid || query} o={data.o} editing={data.editing} shared={shared} />;
 }

@@ -10,6 +10,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, Failed, Field, Loading, NeedLab, signed } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const withBlank = (o) => [{ value: '', label: '' }, ...o];
 const str = (v) => (v === null || v === undefined ? '' : String(v));
@@ -87,9 +88,9 @@ function EquipmentForm({ L, src, editId, fromId, site }) {
     <div className="eyebrow">{editId ? e.equipment_code : fromId ? 'Duplicate of ' + e.equipment_code : 'New'} · {site.site_code}</div>
     <PageHeader title={editId ? `Edit ${e.equipment_name}` : 'New equipment'}
       subtitle="Saving asks for your electronic signature. At least one group or person must be responsible for it: they get its calibration and maintenance warnings."
-      actions={<a className="btn ghost" href={editId ? '#/equipment/' + editId : '#/equipment'}>Cancel</a>} />
-    {!types.length && <div className="notice">This lab has no equipment types yet: add them on the Equipment types and departments tab first.</div>}
-    <div className="card eqform">
+      actions={<Button variant="light" href={editId ? '#/equipment/' + editId : '#/equipment'}>Cancel</Button>} />
+    {!types.length && <div className="alert alert-warning">This lab has no equipment types yet: add them on the Equipment types and departments tab first.</div>}
+    <Card body className="eqform">
       <div className="grid2">
         <Field label="Name" req help={'What people call it, e.g. "HPLC 2 (pesticides)" or "Pipette P200 #4"'}>{inp('equipment_name')}</Field>
         <Field label="Type" req help="From this lab's Equipment types list">{sel('equipment_type_id', types)}</Field>
@@ -121,7 +122,7 @@ function EquipmentForm({ L, src, editId, fromId, site }) {
       </Field>
       <Field label="Notes"><textarea rows={2} value={v.notes} onChange={(ev) => set('notes')(ev.target.value)} /></Field>
       <div className="merr" role="alert">{err}</div>
-      <div className="actbar"><button type="button" className="btn primary" disabled={busy} onClick={save}>{editId ? 'Save changes' : 'Create equipment'}</button></div>
-    </div>
+      <div className="actbar"><Button type="button" variant="primary" disabled={busy} onClick={save}>{editId ? 'Save changes' : 'Create equipment'}</Button></div>
+    </Card>
   </>;
 }

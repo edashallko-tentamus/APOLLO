@@ -9,7 +9,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { canonRows, Failed, inactiveRow, InvTabs, listCol, Loading, NeedLab } from './shared.jsx';
 
-const ReadOnlyNote = ({ who }) => (who.can_maintain ? null : <div className="notice">You can view this list. Lab Supervisors, QA, General Managers and administrators maintain it.</div>);
+const ReadOnlyNote = ({ who }) => (who.can_maintain ? null : <div className="alert alert-warning">You can view this list. Lab Supervisors, QA, General Managers and administrators maintain it.</div>);
 const findOf = (query) => new URLSearchParams(query).get('find') || '';
 
 // ---------------------------------------------------------------- Suppliers and manufacturers
@@ -33,7 +33,7 @@ export function SuppliersPage({ query }) {
     <PageHeader title="Suppliers and manufacturers" audit={{ kind: 'suppliers' }}
       subtitle="Shared by every lab. Whether each supplier is approved for your lab, and its qualification history, is on Purchasing > Suppliers (click a code)." />
     <InvTabs />
-    {!canEdit && <div className="notice">You can view this list. Changing it needs the purchasing.suppliers permission (QA and General Managers by default).</div>}
+    {!canEdit && <div className="alert alert-warning">You can view this list. Changing it needs the purchasing.suppliers permission (QA and General Managers by default).</div>}
     <div className="invbar"><span className="sp" /><BulkButtons kind="suppliers" onDone={reload} /></div>
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : (
       <EditableGrid rows={data[1]} columns={cols} allowAdd={canEdit} readOnly={!canEdit} search filter={findOf(query)} what="the Supplier list"

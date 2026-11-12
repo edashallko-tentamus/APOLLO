@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { Failed, Kv, Loading, money, NeedLab, PuTabs, signed } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'purchasing' };
 
@@ -35,12 +36,12 @@ export default function SettingsPage() {
     <PageHeader title={`Purchasing settings: ${site.site_code}`} audit={AUDIT} subtitle="Each lab decides when a General Manager must also approve a request." />
     <PuTabs />
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : (
-      <div className="card">
+      <Card body>
         <Kv pairs={[['Second approval above', s.second_approval_over === null || s.second_approval_over === undefined ? 'Not set: one approval is enough' : money(s.second_approval_over) + ' per request (quantity × price)'],
           ['Requests without a price', 'Need only one approval (the price is unknown)']]} />
         {me.can_settings
-          ? <div className="actbar" style={{ marginTop: 12 }}><button type="button" className="btn primary" disabled={busy} onClick={edit}>Change</button></div>
+          ? <div className="actbar" style={{ marginTop: 12 }}><Button type="button" variant="primary" disabled={busy} onClick={edit}>Change</Button></div>
           : <p className="help">Changing this needs the admin.lab permission (lab administrators).</p>}
-      </div>)}
+      </Card>)}
   </>;
 }

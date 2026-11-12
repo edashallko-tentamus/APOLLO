@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { Panels, TrendTabs, safe } from './TrendPanel.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const PACKS = [['oos', 'OOS trends', 'Investigations opened, the OOS rate and confirmed OOS per month; by test and by outcome.'],
@@ -36,12 +37,12 @@ export default function ReportsPage({ query }) {
     <div className="trbar">
       <label>From <input type="date" id="from" value={f} onChange={(e) => setF(e.target.value)} /></label><label>To <input type="date" id="to" value={t} onChange={(e) => setT(e.target.value)} /></label>
       {withTest && <label>Test <SmartSelect id="test" value={ts} options={testOptions} onChange={setTs} /></label>}
-      <button type="button" className="btn" id="go" onClick={() => go(pk)}>Show</button><span className="sp" /><button type="button" className="btn primary" id="pdf" onClick={pdf}>Download PDF</button>
+      <Button type="button" variant="outline-secondary" id="go" onClick={() => go(pk)}>Show</Button><span className="sp" /><Button type="button" variant="primary" id="pdf" onClick={pdf}>Download PDF</Button>
     </div>
     <div id="ps">
-      {error && !d ? <div className="card err">{error.message}</div>
-        : !d ? <div className="card trempty">Drawing…</div>
-          : d.panels.length ? <Panels panels={d.panels} ctx={{}} /> : <div className="card trempty">Nothing to chart: no charts are watched yet.</div>}
+      {error && !d ? <Card body className="err">{error.message}</Card>
+        : !d ? <Card body className="trempty">Drawing…</Card>
+          : d.panels.length ? <Panels panels={d.panels} ctx={{}} /> : <Card body className="trempty">Nothing to chart: no charts are watched yet.</Card>}
     </div>
   </>;
 }

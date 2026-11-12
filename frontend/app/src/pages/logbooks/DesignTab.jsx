@@ -9,6 +9,7 @@ import Section from '../../components/Section.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { dt, KINDS } from './calc.js';
+import { Button } from 'react-bootstrap';
 
 const TYPES = ['Number', 'Text', 'Choice', 'Pass/Fail', 'Date/time', 'Equipment', 'Lot', 'Calculated'];
 const SETTING_KEYS = ['logbook_name', 'kind', 'subject', 'entry_frequency', 'review_frequency', 'review_route', 'signing', 'validity_hours', 'creates_lot', 'lot_name', 'lot_unit', 'status', 'description'];
@@ -87,7 +88,7 @@ export default function DesignTab({ d, l, eff, draftF, reload }) {
 
   return <>
     <Section title="Settings" help="Who it is for and how it is reviewed. Not versioned: a change is kept in the audit trail with its reason."
-      actions={d.can_design && <button type="button" className="btn" onClick={saveSettings} disabled={busy}>Save settings</button>}>
+      actions={d.can_design && <Button type="button" variant="outline-secondary" onClick={saveSettings} disabled={busy}>Save settings</Button>}>
       <div className="lb-set">
         {fld('Name', input('logbook_name'))}
         {fld('Kind', pick('kind'))}
@@ -109,8 +110,8 @@ export default function DesignTab({ d, l, eff, draftF, reload }) {
       help={draft ? 'Fields in the order they are entered. A Calculated field uses the fields before it ({nominal_g}) or a value published on a Lot field\'s lot ({culture_lot.passage}). Limits make an entry Pass or Fail; per equipment when the limits differ by unit (Equipment covered).'
         : 'Approved and locked: entries use it. Start a new version to change it; QA approves it before it replaces this one.'}
       actions={<>
-        {!draft && d.can_design && <button type="button" className="btn" onClick={newVersion}>New version</button>}
-        {draft && d.can_review && <button type="button" className="btn primary" onClick={approve} disabled={errors.length > 0} title={errors.length ? 'Fix the errors listed first' : undefined}>Approve design (QA)</button>}
+        {!draft && d.can_design && <Button type="button" variant="outline-secondary" onClick={newVersion}>New version</Button>}
+        {draft && d.can_review && <Button type="button" variant="primary" onClick={approve} disabled={errors.length > 0} title={errors.length ? 'Fix the errors listed first' : undefined}>Approve design (QA)</Button>}
       </>}>
       {draft && <ul className="lb-probs">{d.problems.length
         ? d.problems.map((p, i) => <li key={i} className={p.severity}>{p.severity}: {p.problem}</li>)

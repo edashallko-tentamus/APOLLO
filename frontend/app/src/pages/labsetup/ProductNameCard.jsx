@@ -5,6 +5,7 @@ import Section from '../../components/Section.jsx';
 import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { Button } from 'react-bootstrap';
 
 export default function ProductNameCard({ sysAdmin }) {
   const dialogs = useDialogs();
@@ -21,7 +22,7 @@ export default function ProductNameCard({ sysAdmin }) {
 
   return (
     <Section title="Product name" help="The system's name in the header, the browser tab and the sign-in page. One setting, so a rename is one change. System administrators change it."
-      actions={sysAdmin && s && <button type="button" className="btn" onClick={change}>Change…</button>}>
+      actions={sysAdmin && s && <Button type="button" variant="outline-secondary" onClick={change}>Change…</Button>}>
       {error ? <div className="err">{error.message}</div> : !s ? <div className="loading">Loading…</div> : <div className="pname">{s.product_name || 'LIMS3'}</div>}
     </Section>
   );

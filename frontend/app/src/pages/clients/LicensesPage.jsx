@@ -5,6 +5,7 @@ import EditableGrid from '../../components/EditableGrid.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { day, licenseStateCls } from './clientForm.jsx';
+import { Card } from 'react-bootstrap';
 
 const COLUMNS = [
   { field: 'client_name', title: 'Client', type: 'link', width: 220, href: (r) => '#/clients/' + r.client_id },
@@ -25,7 +26,7 @@ export default function LicensesPage({ query }) {
   const due = useMemo(() => (d ? d.rows.filter((r) => r.state !== 'Current') : []), [d]);
   const header = <PageHeader title="Client licenses" audit={AUDIT}
     subtitle="Every client's current licenses. Expired ones, then those expiring within 30 days, come first. Licenses are added and retired on each client's page." />;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<div className="loading">Loading…</div></>;
   return <>
     {header}

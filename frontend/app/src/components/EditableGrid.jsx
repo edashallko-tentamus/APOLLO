@@ -11,6 +11,7 @@ import { useDialogs } from './dialogs/DialogProvider.jsx';
 import DataGrid from './grid/DataGrid.jsx';
 import { useGrid } from './grid/useGrid.js';
 import { useToast } from './Toasts.jsx';
+import { Button } from 'react-bootstrap';
 
 const AUTOSAVE_MS = 900;
 
@@ -92,8 +93,8 @@ export default function EditableGrid({ rows, columns, keyField = 'id', allowAdd,
   return <>
     <div className={`savebar${changes.length || errorCount ? ' show' : ''}`}>
       <span className="pending">{plural(changes.length, 'row')} changed{errorCount > 0 && <> · <b className="bad">{plural(errorCount, 'cell')} need fixing (red)</b></>}</span>
-      <button type="button" className="btn ghost" onClick={() => reset(rows)} disabled={saving}>Discard changes</button>
-      <button type="button" className="btn primary" onClick={onSave} disabled={saving}>{autosave ? 'Save now' : 'Save changes'}</button>
+      <Button type="button" variant="light" onClick={() => reset(rows)} disabled={saving}>Discard changes</Button>
+      <Button type="button" variant="primary" onClick={onSave} disabled={saving}>{autosave ? 'Save now' : 'Save changes'}</Button>
     </div>
     {note && <div className={`autosaved${note.bad ? ' bad' : ''}`}>{note.text}</div>}
     <DataGrid grid={grid} search={search} emptyText={emptyText} rowClass={rowClass} onRowOpen={onRowOpen} toolbar={toolbar}

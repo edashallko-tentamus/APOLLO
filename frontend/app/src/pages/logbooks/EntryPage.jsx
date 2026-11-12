@@ -10,6 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { dt, fmtN, limText, loc, needsReason, sensorWhen, showVal, tloc } from './calc.js';
 import './logbooks.css';
+import { Button, Card } from 'react-bootstrap';
 
 const keyed = (rows) => (rows || []).map((x, i) => ({ ...x, key: i }));
 const FLAG_COLS = [
@@ -65,7 +66,7 @@ export default function EntryPage({ params: [id] }) {
     } },
   ], [d, dialogs, toast, reload]);
 
-  if (error && !d) return <><PageHeader title="Logbook entry" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Logbook entry" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Logbook entry" /><div className="loading">Loading…</div></>;
   const e = d.entry;
   const own = e.created_by === d.me;
@@ -126,11 +127,11 @@ export default function EntryPage({ params: [id] }) {
   }
 
   const actions = <>
-    {e.sensor && d.can_record && needsReason(e) && e.sensor.kind !== 'Hour' && <button type="button" className="btn primary" onClick={giveReason}>Give the reason…</button>}
-    {d.can_review && e.status === 'Recorded' && e.review_route === 'Logbook' && !own && !needsReason(e) && <button type="button" className="btn primary" onClick={approve}>Approve (QA)</button>}
-    {d.can_review && ['Recorded', 'Approved'].includes(e.status) && e.review_route === 'Logbook' && !own && <button type="button" className="btn" onClick={ret}>Return for correction</button>}
-    {d.can_record && e.status !== 'Voided' && !e.sensor && <button type="button" className="btn" onClick={correct}>Correct…</button>}
-    {(d.can_record || d.can_review) && e.status !== 'Voided' && <button type="button" className="btn ghost" onClick={voidIt}>Void…</button>}
+    {e.sensor && d.can_record && needsReason(e) && e.sensor.kind !== 'Hour' && <Button type="button" variant="primary" onClick={giveReason}>Give the reason…</Button>}
+    {d.can_review && e.status === 'Recorded' && e.review_route === 'Logbook' && !own && !needsReason(e) && <Button type="button" variant="primary" onClick={approve}>Approve (QA)</Button>}
+    {d.can_review && ['Recorded', 'Approved'].includes(e.status) && e.review_route === 'Logbook' && !own && <Button type="button" variant="outline-secondary" onClick={ret}>Return for correction</Button>}
+    {d.can_record && e.status !== 'Voided' && !e.sensor && <Button type="button" variant="outline-secondary" onClick={correct}>Correct…</Button>}
+    {(d.can_record || d.can_review) && e.status !== 'Voided' && <Button type="button" variant="light" onClick={voidIt}>Void…</Button>}
   </>;
   const subj = e.equipment_id ? <a href={'#/equipment/' + e.equipment_id}>{e.equipment_code} {e.equipment_name}</a>
     : e.lot_id ? <a href={'#/inventory/lots/' + e.lot_id}>{e.lot_code} {e.lot_name || ''}</a>
@@ -141,7 +142,7 @@ export default function EntryPage({ params: [id] }) {
 
   return <>
     <PageHeader title={e.entry_code} subtitle={`Entry in ${e.logbook_code} ${e.logbook_name} (design v${e.version_no})`} actions={actions} audit={{ kind: 'logbook_entry', id: e.id }} />
-    <div className="card"><div className="lb-facts">
+    <Card body><div className="lb-facts">
       <div><b>Logbook</b><a href={'#/logbooks/' + e.logbook_id}>{e.logbook_code} {e.logbook_name}</a></div>
       <div><b>When</b>{e.sensor ? sensorWhen(e) : loc(e.entry_local)}</div>
       <div><b>About</b>{subj}</div>
@@ -151,7 +152,7 @@ export default function EntryPage({ params: [id] }) {
       {e.valid_until && <div><b>Usable until</b>{dt(e.valid_until)}{e.expired ? ' (expired)' : ''}</div>}
       {e.created_lot_id && <div><b>Lot made</b><a href={'#/inventory/lots/' + e.created_lot_id}>{e.created_lot_code}</a></div>}
       {d.review && <div><b>QA review</b>{d.review.by_name} {dt(d.review.created_at)}{d.review.comment ? ': ' + d.review.comment : ''}</div>}
-    </div></div>
+    </div></Card>
     {e.sensor && <SensorBox e={e} />}
     {e.result === 'Fail' && <div className="lb-failbox">
       <b>Outside its limit:</b> {(e.problems || []).join('; ')}<br />

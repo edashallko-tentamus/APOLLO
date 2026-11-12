@@ -11,13 +11,14 @@ import { useApi } from '../../hooks/useApi.js';
 import { ResultsPanel } from './ResultPanels.jsx';
 import { day, dt } from './shared.jsx';
 import StepPanel from './StepPanel.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const icon = (s) => (s.status === 'Completed' ? '✓' : s.status === 'In progress' ? '●' : '○');
 
 export default function BatchPage({ params, query }) {
   const id = params[0];
   const { data, error, reload } = useApi((o) => Promise.all([api.getBatch(id, o), api.batchOptions(id, o)]), [id]);
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
   return <BatchView d={data[0]} opts={data[1]} query={query} reload={reload} />;
 }
@@ -52,10 +53,10 @@ function BatchView({ d, opts, query, reload }) {
     <PageHeader title={`${b.batch_code}: ${b.test_name}`} audit={{ kind: 'batch', id: b.id }}
       subtitle={<><a href={'#/methods/versions/' + b.test_version_id}>{`${b.test_code} version ${b.version_no}`}</a> <Badge status={b.status} /> · {b.site_code}{b.department_code ? ' · ' + b.department_code : ''}
         {' '}· {b.sample_count} sample{Number(b.sample_count) === 1 ? '' : 's'}, {b.qc_count} QC · assigned to <b>{b.assigned_name}</b>{b.earliest_due ? ` · earliest due ${day(b.earliest_due)}` : ''}</>}
-      actions={<><a className="btn ghost" href="#/testing/batches">All batches</a>{' '}
-        <button type="button" className="btn" id="labelsb" title="Barcode labels: one per entry (Dymo, 1 x 2 1/8 in.)" onClick={() => printLabels('batch', [b.id])}>Print labels</button>
-        {d.can_assign && editable && <> <button type="button" className="btn" id="assign" onClick={assign}>Assign</button></>}
-        {(d.can_assign || d.can_review) && !b.is_verification && open && <> <button type="button" className="btn" id="cancelb" onClick={cancel}>Cancel batch</button></>}</>} />
+      actions={<><Button variant="light" href="#/testing/batches">All batches</Button>{' '}
+        <Button type="button" variant="outline-secondary" id="labelsb" title="Barcode labels: one per entry (Dymo, 1 x 2 1/8 in.)" onClick={() => printLabels('batch', [b.id])}>Print labels</Button>
+        {d.can_assign && editable && <> <Button type="button" variant="outline-secondary" id="assign" onClick={assign}>Assign</Button></>}
+        {(d.can_assign || d.can_review) && !b.is_verification && open && <> <Button type="button" variant="outline-secondary" id="cancelb" onClick={cancel}>Cancel batch</Button></>}</>} />
     <div className="tbtabs">
       {d.steps.map((s) => <a key={s.id} href={`#/testing/batches/${b.id}?step=${s.step_key}`} className={`${s.step_key === tabKey ? 'on' : ''} ${s.status === 'Completed' ? 'done' : ''}`} title={`${s.step_type}: ${s.status}`}>
         <span className="st">{icon(s)}</span>{s.step_name}</a>)}

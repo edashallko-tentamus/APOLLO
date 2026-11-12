@@ -8,6 +8,7 @@ import Section from '../../components/Section.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { dt, Failed, Kv, lineColsWithout, Loading, signed } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const COLUMNS = lineColsWithout('po_code');
 
@@ -38,15 +39,15 @@ export default function OrderPage({ params }) {
     <PageHeader title={`Purchase order ${o.po_code}`} audit={{ kind: 'purchaseorder', id }}
       subtitle={o.external_po_number ? `Finance PO ${o.external_po_number}` : 'No finance PO number recorded yet'}
       actions={<>
-        <a className="btn ghost" href="#/purchasing/orders">All orders</a>{' '}
-        {me.can_order && <><button type="button" className="btn" disabled={busy} onClick={edit}>Change PO number / confirmation</button>{' '}</>}
-        <button type="button" className="btn" onClick={() => window.print()}>Print</button>
+        <Button variant="light" href="#/purchasing/orders">All orders</Button>{' '}
+        {me.can_order && <><Button type="button" variant="outline-secondary" disabled={busy} onClick={edit}>Change PO number / confirmation</Button>{' '}</>}
+        <Button type="button" variant="outline-secondary" onClick={() => window.print()}>Print</Button>
       </>} />
     <div className="cols">
-      <div className="card"><h2>Order</h2><Kv pairs={[['Order', o.po_code], ['Finance PO number', o.external_po_number], ["Supplier's confirmation", o.confirmation_number],
-        ['Ordered', `${o.ordered_by || ''} ${dt(o.ordered_at)}`], ['Notes', o.notes]]} /></div>
-      <div className="card"><h2>Supplier</h2><Kv pairs={[['Supplier', <a href={'#/purchasing/suppliers/' + o.supplier_id}>{o.supplier_name}</a>], ['Our account #', o.account_number], ['Contact', o.contact_name],
-        ['Email', o.supplier_email], ['Phone', o.supplier_phone], ['Address', o.supplier_address]]} /></div>
+      <Card body><h2>Order</h2><Kv pairs={[['Order', o.po_code], ['Finance PO number', o.external_po_number], ["Supplier's confirmation", o.confirmation_number],
+        ['Ordered', `${o.ordered_by || ''} ${dt(o.ordered_at)}`], ['Notes', o.notes]]} /></Card>
+      <Card body><h2>Supplier</h2><Kv pairs={[['Supplier', <a href={'#/purchasing/suppliers/' + o.supplier_id}>{o.supplier_name}</a>], ['Our account #', o.account_number], ['Contact', o.contact_name],
+        ['Email', o.supplier_email], ['Phone', o.supplier_phone], ['Address', o.supplier_address]]} /></Card>
     </div>
     <Section title="Lines"><ReadGrid rows={d.lines} columns={COLUMNS} /></Section>
   </>;

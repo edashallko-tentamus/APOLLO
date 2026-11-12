@@ -4,11 +4,12 @@ import { useEffect } from 'react';
 import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import './reports.css';
+import { Card } from 'react-bootstrap';
 
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
 export const d8 = (v) => (v ? new Date(v).toLocaleDateString([], { dateStyle: 'medium' }) : '');
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 
 // A read-only grid whose selected rows a button reads through gridRef.current.selectedRows()
 const NONE = [];

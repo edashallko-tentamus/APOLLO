@@ -10,10 +10,11 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { dt, review } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const noteLast = { kind: '', on: '' }; // the note's Kind and On keep the last choice (Alex: several notes on one analyte)
 const KIND_OPTS = [{ value: 'COA', label: 'On the COA (the client sees it)' }, { value: 'Internal', label: 'Internal (never printed)' }];
-const BACK = <a className="btn ghost" href="#/reports/finalization">Back to the queue</a>;
+const BACK = <Button variant="light" href="#/reports/finalization">Back to the queue</Button>;
 
 function Kv({ pairs }) {
   return <dl>{pairs.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => <Pair key={k} k={k} v={v} />)}</dl>;
@@ -38,7 +39,7 @@ export default function ReviewPage() {
     return <>
       <PageHeader title={heading} subtitle={`${it.sample_code}${it.client_sample_id ? ' (' + it.client_sample_id + ')' : ''} · ${it.test_names.join(', ')}`}
         actions={BACK} audit={{ kind: 'sample', id: it.sample_id }} />
-      <div className="card">{error ? error.message : 'Making the COA…'}</div>
+      <Card body>{error ? error.message : 'Making the COA…'}</Card>
     </>;
   }
   const go = (k) => { session.i = k; bump(); };
@@ -116,55 +117,55 @@ function ReviewBody({ session, it, d, heading, go, bump, reload, toast, dialogs 
     })}</div>
     <div className="fz">
       <div className="hist">
-        <div className="card"><h2>Submission</h2><Kv pairs={[['Order', <a href={'#/orders/' + s.order_id}>{s.order_code}</a>], ['PO', s.po_number], ['Channel', s.channel],
+        <Card body><h2>Submission</h2><Kv pairs={[['Order', <a href={'#/orders/' + s.order_id}>{s.order_code}</a>], ['PO', s.po_number], ['Channel', s.channel],
           ['Received', dt(s.received_at || s.logged_at)], ['Logged', `${dt(s.logged_at)}${s.logged_by_name ? ' by ' + s.logged_by_name : ''}`], ['Category', s.compliance_category || 'Not given'],
           ['Condition', s.condition], ['Temperature', s.receipt_temperature === null ? '' : s.receipt_temperature + ' °C'], ['Lot', s.lot], ['Description', s.description],
-          ['Client', <>{s.client_name}{s.account_status !== 'Active' && <> <Badge status={s.account_status} /></>}</>], ['Partial reports', s.allow_partial_reports ? 'Yes' : 'No: one COA at the end']]} /></div>
-        <div className="card"><h2>Notes and comments</h2>
+          ['Client', <>{s.client_name}{s.account_status !== 'Active' && <> <Badge status={s.account_status} /></>}</>], ['Partial reports', s.allow_partial_reports ? 'Yes' : 'No: one COA at the end']]} /></Card>
+        <Card body><h2>Notes and comments</h2>
           {s.order_notes && <p className="help"><b>Order:</b> {s.order_notes}</p>}
           {testNotes.map((t) => <p key={t.requested_test_id || t.test_name} className="help"><b>{t.test_name}:</b> {t.special_instructions}</p>)}
           {x.notes.length ? x.notes.map((n) => <div key={n.id} className="note"><span className="k">{n.kind === 'Internal' ? 'Internal' : 'On the COA'}{noteOn(n, true)} · {n.by_name}</span><br />{n.note_text}</div>)
-            : (!s.order_notes && !testNotes.length && <p className="help">None.</p>)}</div>
-        <div className="card"><h2>Attachments</h2>{x.attachments.length
+            : (!s.order_notes && !testNotes.length && <p className="help">None.</p>)}</Card>
+        <Card body><h2>Attachments</h2>{x.attachments.length
           ? <ul>{x.attachments.map((a) => <li key={a.id}><a href={attachmentUrl(a.id, siteId)} target="_blank" rel="noopener noreferrer">{a.label || a.file_name}</a> <span className="help">{a.kind}{a.sample_id ? '' : ', whole order'}</span></li>)}</ul>
-          : <p className="help">No attachments.</p>}</div>
-        <div className="card"><h2>History</h2><ul>
+          : <p className="help">No attachments.</p>}</Card>
+        <Card body><h2>History</h2><ul>
           {x.batches.map((b) => <li key={'b' + b.id}><a href={'#/testing/batches/' + b.id}>{b.batch_code}</a> {b.test_name} ({b.status})</li>)}
           {x.changes.map((a, k) => <li key={'c' + k}>{dt(a.changed_at)} {a.full_name}: {changed(a)}{a.reason ? ` (${a.reason})` : ''}</li>)}
           {x.versions.map((v) => <li key={'v' + v.id}><a href={coaPdfUrl(v.id, siteId)} target="_blank" rel="noopener noreferrer">{v.report_id || v.coa_code} (version {v.version_no})</a> issued {dt(v.issued_at)} by {v.issued_by_name}</li>)}
-        </ul></div>
+        </ul></Card>
       </div>
       <div>{d.token ? <>
         <iframe className="pdf" title="COA preview" src={`${previewPdfUrl(d.token)}#navpanes=0&view=Fit`} />
         <p className="help"><a href={previewPdfUrl(d.token)} target="_blank" rel="noopener noreferrer" id="openpdf">Open the PDF in a new tab</a>. The issued PDF is made again when you sign (same content; &quot;Preview, not issued&quot; leaves the footer).</p>
-      </> : <div className="card err">The PDF could not be made: see the release check.</div>}</div>
+      </> : <Card body className="err">The PDF could not be made: see the release check.</Card>}</div>
       <div className="side">
-        <div className="card" id="checks"><h2>Release check</h2>
+        <Card body id="checks"><h2>Release check</h2>
           {d.checks.map((k) => <div key={k.code} className={`chk ${k.level}`} data-code={k.code}><span className="lv">{k.level}</span><b>{k.title}</b>{k.detail}
             {(k.links || []).map((l, j) => <a key={j} className="lk" href={l.href}>{l.text}</a>)}
             {k.level === 'Warning' && <textarea rows={2} data-ack={k.code} placeholder="Why it can be released despite this (required)" defaultValue={acks[k.code] || ''}
               onChange={(e) => { acks[k.code] = e.target.value; }} />}
           </div>)}
-        </div>
-        <div className="card"><h2>Add a note</h2>{d.can_notes ? <>
+        </Card>
+        <Card body><h2>Add a note</h2>{d.can_notes ? <>
           <div className="field"><label htmlFor="nk">Kind</label><SmartSelect id="nk" value={kind} options={KIND_OPTS} onChange={(v) => { noteLast.kind = v; setKind(v); }} /></div>
           <div className="field"><label htmlFor="nt">On</label><SmartSelect id="nt" value={on} options={onOptions} onChange={(v) => { noteLast.on = v; setOn(v); }} /></div>
           <div className="field"><label htmlFor="nc">Canned comment</label><SmartSelect id="nc" value={canned} options={cannedOpts} onChange={setCanned} /></div>
           <div className="field"><label htmlFor="nx">Or type it</label><textarea id="nx" rows={2} value={text} onChange={(e) => setText(e.target.value)} /></div>
-          <button type="button" className="btn" disabled={busy} onClick={add}>Add the note</button>
+          <Button type="button" variant="outline-secondary" disabled={busy} onClick={add}>Add the note</Button>
           {x.notes.length > 0 && <><h3 style={{ margin: '12px 0 4px', fontSize: 13 }}>On this sample</h3>
-            {x.notes.map((n) => <div key={n.id} className="note"><button type="button" className="btn ghost" title="Remove the note" onClick={() => remove(n)}>×</button>
+            {x.notes.map((n) => <div key={n.id} className="note"><Button type="button" variant="light" title="Remove the note" onClick={() => remove(n)}>×</Button>
               <span className="k">{n.kind === 'Internal' ? 'Internal' : 'On the COA'}{noteOn(n, false)}</span><br />{n.note_text}</div>)}</>}
-        </> : <p className="help">You need reports.notes to add notes.</p>}</div>
+        </> : <p className="help">You need reports.notes to add notes.</p>}</Card>
       </div>
     </div>
     <div className="fzbar">
-      <button type="button" className="btn" disabled={!session.i} onClick={() => go(session.i - 1)}>Previous</button>
-      <button type="button" className={`btn ${ready ? '' : 'primary'}`} disabled={blocks.length > 0} onClick={markReady}>{ready ? 'Ready ✓ (undo)' : 'Mark ready and go to the next'}</button>
-      <button type="button" className="btn" disabled={session.i >= session.items.length - 1} onClick={() => go(session.i + 1)}>Next</button>
+      <Button type="button" variant="outline-secondary" disabled={!session.i} onClick={() => go(session.i - 1)}>Previous</Button>
+      <Button type="button" variant={ready ? 'outline-secondary' : 'primary'} disabled={blocks.length > 0} onClick={markReady}>{ready ? 'Ready ✓ (undo)' : 'Mark ready and go to the next'}</Button>
+      <Button type="button" variant="outline-secondary" disabled={session.i >= session.items.length - 1} onClick={() => go(session.i + 1)}>Next</Button>
       <span className="help">{nReady} of {session.items.length} ready{blocks.length ? ' · this COA is blocked: see the release check' : ''}</span>
       <span style={{ flex: 1 }} />
-      <button type="button" className="btn primary" disabled={!nReady} onClick={signAll}>Sign and issue {nReady} COA{nReady === 1 ? '' : 's'}</button>
+      <Button type="button" variant="primary" disabled={!nReady} onClick={signAll}>Sign and issue {nReady} COA{nReady === 1 ? '' : 's'}</Button>
     </div>
   </>;
 }

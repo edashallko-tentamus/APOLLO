@@ -10,6 +10,7 @@ import PagedList from '../../components/PagedList.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { day, dt, TopTabs, useNeedLab } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const SHOW = { open: 'Open', mine: 'My worklist', review: 'Awaiting review', all: 'All' };
 const AUDIT = { kind: 'batches' };
@@ -70,10 +71,10 @@ export default function BatchesPage({ query }) {
     <PageHeader audit={AUDIT} title={show === 'mine' ? 'My worklist' : show === 'review' ? 'QC Review' : 'Batches'}
       subtitle={show === 'mine' ? 'Batches assigned to you that are not finished, earliest due first.' : show === 'review' ? 'Batches whose bench work is done, waiting for a reviewer (someone who did not perform or witness their steps).' : 'Every batch in this lab: its step progress and who it is assigned to.'} />
     <TopTabs cur={show === 'mine' ? '#/testing/batches?show=mine' : show === 'review' ? '#/testing/batches?show=review' : '#/testing/batches'} />
-    {error && !d ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : <>
+    {error && !d ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : <>
       <div className="wdbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-        {Object.entries(SHOW).map(([k, l]) => <a key={k} className={`btn ${k === show ? 'primary' : ''}`} href={`#/testing/batches?show=${k}`}>{l} <small>{d.counts[k] ?? ''}</small></a>)}
-        {d.can_assign && <><span style={{ flex: 1 }} /><span className="help">Select batches (Ctrl+click to pick several), then</span> <button type="button" className="btn" id="massassign" onClick={assignSelected}>Assign selected</button></>}
+        {Object.entries(SHOW).map(([k, l]) => <Button key={k} variant={k === show ? 'primary' : 'outline-secondary'} href={`#/testing/batches?show=${k}`}>{l} <small>{d.counts[k] ?? ''}</small></Button>)}
+        {d.can_assign && <><span style={{ flex: 1 }} /><span className="help">Select batches (Ctrl+click to pick several), then</span> <Button type="button" variant="outline-secondary" id="massassign" onClick={assignSelected}>Assign selected</Button></>}
       </div>
       {made && <div className="tbnote">Batch <b>{made}</b> made and assigned to you. It is highlighted below; open it to start, or assign it with others.</div>}
       {show === 'all'

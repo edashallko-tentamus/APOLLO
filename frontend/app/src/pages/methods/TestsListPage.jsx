@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { ListTabs, Loading, NeedLab, useSigned } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const FILTERS = { all: ['All', () => true], effective: ['Effective', (r) => r.effective_version], drafts: ['Drafts', (r) => r.draft_version], lab: ['This lab only', (r) => !!r.site_id] };
 const testHref = (r) => '#/methods/tests/' + r.id;
@@ -56,15 +57,15 @@ export default function TestsListPage({ query }) {
   const asked = useRef(false);
   useEffect(() => { if (d?.can_design && q.get('new') === '1' && !asked.current) { asked.current = true; newTest(); } }); // eslint-disable-line react-hooks/exhaustive-deps
   const header = <PageHeader title="Tests and workflows" subtitle={SUB} audit={AUDIT}
-    actions={d?.can_design && <button type="button" className="btn primary" id="new" onClick={newTest}>+ New test</button>} />;
+    actions={d?.can_design && <Button type="button" variant="primary" id="new" onClick={newTest}>+ New test</Button>} />;
   if (!site) return <NeedLab />;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<Loading /></>;
   return <>
     {header}
     <ListTabs cur="#/methods" />
     <div className="wdbar">{Object.entries(FILTERS).map(([k, [l, fn]]) => (
-      <a key={k} className={`btn ${k === f ? 'primary' : ''}`} href={`#/methods?show=${k}`}>{l} <small>{d.rows.filter(fn).length}</small></a>))}</div>
+      <Button key={k} variant={k === f ? 'primary' : 'outline-secondary'} href={`#/methods?show=${k}`}>{l} <small>{d.rows.filter(fn).length}</small></Button>))}</div>
     <ReadGrid rows={rows} columns={COLUMNS} search filter={q.get('find') || ''} emptyText="No tests yet."
       onRowOpen={(r) => { location.hash = testHref(r); }} />
   </>;

@@ -4,6 +4,7 @@ import { getWidgetsAdmin, saveWidgetsAdmin } from '../../api/dashboard.js';
 import EditableGrid from '../../components/EditableGrid.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'dashboard_widgets' };
 const SUB = 'The widgets each group sees on Home at this lab. A person in several groups gets all of their widgets, then arranges and resizes their own. Widgets that need a permission (revenue, quotes) show only to people who hold it. Tick or untick, fill down with Ctrl+D, then save with a reason.';
@@ -28,11 +29,11 @@ export default function WidgetsAdminPage() {
 
   return <>
     <PageHeader title="Dashboard widgets" subtitle={SUB} audit={AUDIT} />
-    {error && !d ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : <>
-      {!d.can_edit && <div className="card warn">Changing a group&apos;s widgets needs admin.groups in this lab.</div>}
-      <div className="card">
+    {error && !d ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : <>
+      {!d.can_edit && <Card body className="warn">Changing a group&apos;s widgets needs admin.groups in this lab.</Card>}
+      <Card body>
         <EditableGrid rows={rows} columns={columns} readOnly={!d.can_edit} what="the groups' dashboard widgets" save={save} afterSave={reload} />
-      </div>
+      </Card>
     </>}
   </>;
 }

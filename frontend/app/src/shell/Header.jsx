@@ -6,7 +6,7 @@ import HeaderSearch from './HeaderSearch.jsx';
 import LabSwitcher from './LabSwitcher.jsx';
 import { Button } from 'react-bootstrap';
 
-function Header() {
+function Header({ onMenu }) {
   const { productName, user, site, groups, signOut } = useSession();
   const [pwOpen, setPwOpen] = useState(false);
   if (!user) return null; // signed in but missing from the people list: nothing to show yet
@@ -15,6 +15,7 @@ function Header() {
 
   return (
     <header className="top">
+      <Button id="menuBtn" variant="outline-light" size="sm" className="d-lg-none" onClick={onMenu}><span aria-hidden="true">☰</span> Menu</Button>
       <Brand productName={productName} />
       <HeaderSearch />
       <div className="who">

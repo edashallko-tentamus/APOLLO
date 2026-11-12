@@ -10,6 +10,7 @@ import EntriesTab from './EntriesTab.jsx';
 import EquipmentTab from './EquipmentTab.jsx';
 import RecordTab from './RecordTab.jsx';
 import './logbooks.css';
+import { Card } from 'react-bootstrap';
 
 const ABOUT = { Equipment: 'a piece of equipment', Lot: 'an inventory lot', Sample: 'a sample', None: 'nothing in particular (one per day, week...)' };
 
@@ -19,7 +20,7 @@ export default function LogbookPage({ params: [id], query }) {
   const { data: d, error, reload } = useApi((o) => getLogbook(id, filt, o), [id, filt.from, filt.to, filt.equipment, filt.status]);
   const eff = useMemo(() => (d ? d.fields.filter((f) => f.version_id === d.effective_id) : []), [d]);
   const draftF = useMemo(() => (d ? d.fields.filter((f) => f.version_id === d.draft_id) : []), [d]);
-  if (error && !d) return <><PageHeader title="Logbook" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Logbook" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Logbook" /><div className="loading">Loading…</div></>;
 
   const l = d.logbook;

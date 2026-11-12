@@ -7,6 +7,7 @@ import { useGrid } from '../../components/grid/useGrid.js';
 import { useToast } from '../../components/Toasts.jsx';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { entries, fmtN, judge } from './calc.js';
+import { Button, Card } from 'react-bootstrap';
 
 const newRow = () => ({ k: 'n' + Math.random().toString(36).slice(2) });
 
@@ -107,10 +108,10 @@ export default function RecordTab({ d, l, fields, reload }) {
   }
 
   return (
-    <div className="card">
+    <Card body>
       <div className="lb-note" style={{ marginBottom: 8 }}>{l.subject === 'Equipment' ? 'One row per piece of equipment the logbook covers; leave a row empty to skip it. ' : ''}Type or paste from Excel, fill down with Ctrl+D. Calculated values and Pass / Fail are a preview: the system calculates and judges each entry when it is saved. A row that fails needs its reason. {l.signing === 'Signature' ? 'One signature records every row.' : 'Entries are recorded under your name (no signature).'}</div>
-      <div className="lb-bar"><button type="button" className="btn primary" onClick={save} disabled={busy}>Record entries</button><span className="lb-note">{n ? `${n} row${n === 1 ? '' : 's'} to record` : ''}</span></div>
+      <div className="lb-bar"><Button type="button" variant="primary" onClick={save} disabled={busy}>Record entries</Button><span className="lb-note">{n ? `${n} row${n === 1 ? '' : 's'} to record` : ''}</span></div>
       <DataGrid grid={grid} />
-    </div>
+    </Card>
   );
 }

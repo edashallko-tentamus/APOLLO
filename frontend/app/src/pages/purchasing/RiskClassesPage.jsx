@@ -54,7 +54,7 @@ export default function RiskClassesPage() {
       subtitle={`How often vendors are re-approved, and what they can be approved for. The shared classes apply to every lab and to corporate approvals (kept by Corporate QA); ${site.site_code} can add its own (for example a Class IV re-approved every 5 years) for its own approvals.`} />
     <PuTabs />
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : <>
-      {!(canLab || canShared) && <div className="notice">QA (purchasing.qualify) keeps this lab's classes; Corporate QA the shared ones and the supply scopes.</div>}
+      {!(canLab || canShared) && <div className="alert alert-warning">QA (purchasing.qualify) keeps this lab's classes; Corporate QA the shared ones and the supply scopes.</div>}
       <Section title="Risk classes">
         <EditableGrid rows={classRows} columns={classCols} allowAdd={canLab || canShared} readOnly={!(canLab || canShared)} what="risk classes"
           newRow={newClass} rowClass={mutedInactive} sign={classSign} save={saveClasses} afterSave={reload} />

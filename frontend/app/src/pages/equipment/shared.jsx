@@ -1,5 +1,6 @@
 // Parts every equipment screen uses: formats, the tabs, the lab check, the colours of warning cells.
 import './equipment.css';
+import { Card } from 'react-bootstrap';
 
 export const d8 = (v) => (v ? String(v).slice(0, 10) : '');
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -17,9 +18,9 @@ export function EqTabs({ cur, counts = {} }) {
   return <div className="eqtabs">{TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}{counts[h] ? <> <small>{counts[h]}</small></> : null}</a>)}</div>;
 }
 
-export const NeedLab = () => <div className="card err">Choose your lab (top right) first. If none is listed, ask an administrator to add you to a group at a lab.</div>;
+export const NeedLab = () => <Card body className="err">Choose your lab (top right) first. If none is listed, ask an administrator to add you to a group at a lab.</Card>;
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 
 export function Field({ label, req, help, children }) {
   return <div className="field"><label>{label}{req && <> <span className="req">*</span></>}</label>{children}{help && <div className="help">{help}</div>}</div>;

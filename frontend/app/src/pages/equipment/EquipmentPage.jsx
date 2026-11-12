@@ -19,6 +19,7 @@ import { useSession } from '../../session/SessionProvider.jsx';
 import { EquipmentLogbooksCard } from '../logbooks/LogbookCards.jsx';
 import SensorEquipmentCard from '../sensors/SensorEquipmentCard.jsx';
 import { availCls, d8, dLocal, dt, Failed, inactiveRow, Loading, signed, today } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const REASONS = ['Maintenance', 'Repair', 'Calibration', 'Qualification'];
 const EVENT_TYPES = ['Maintenance', 'Repair', 'Service visit', 'Check', 'Note'];
@@ -134,7 +135,7 @@ export default function EquipmentPage({ params: [id] }) {
   const calText = !e.calibration_required ? 'Not required' : !e.cal_id ? 'Deficient: no calibration on record'
     : e.cal_result === 'Fail' ? 'Deficient: last calibration failed' : e.cal_days_left < 0 ? `Deficient: expired ${d8(e.cal_expires)}`
       : `${e.calibration_status}: expires ${d8(e.cal_expires)} (${plural(e.cal_days_left, 'day')})`;
-  const calClass = { Deficient: 'deficient', Alert: 'alert', Conforms: 'conforms' }[e.calibration_status] || '';
+  const calClass = { Deficient: 'deficient', Alert: 'calert', Conforms: 'conforms' }[e.calibration_status] || '';
   const avText = e.availability === 'Tagged out' ? `Tagged out: ${e.tagged_for}` : e.availability;
   const mText = e.maintenance_due ? `${e.maintenance_status}: ${e.maintenance_task} (${d8(e.maintenance_due)})` : 'No schedule';
   const name = `${e.equipment_code} ${e.equipment_name}`;
@@ -258,7 +259,7 @@ export default function EquipmentPage({ params: [id] }) {
     } catch (err) { toast(err.message, 'err'); } finally { setBusy(false); }
   }
 
-  const Btn = ({ k, label, show, primary }) => (show ? <button type="button" className={`btn${primary ? ' primary' : ''}`} disabled={busy} onClick={() => act(k)}>{label}</button> : null);
+  const Btn = ({ k, label, show, primary }) => (show ? <Button type="button" variant={primary ? 'primary' : 'outline-secondary'} disabled={busy} onClick={() => act(k)}>{label}</Button> : null);
 
   function TagCard({ t }) {
     const release = t.reason !== 'Maintenance';
@@ -275,7 +276,7 @@ export default function EquipmentPage({ params: [id] }) {
         <h3>{t.tag_code}: tagged out for {t.reason.toLowerCase()}{t.source !== 'Manual' ? ` (automatic: ${t.source.toLowerCase()})` : ''}</h3>
         <div>{t.description || t.task_name || ''}</div>
         <div className="help">Tagged out {dt(t.tagged_out_at)} by {t.tagged_out_name} · Work records: {Number(t.work_count)}</div>
-        <div className="row">
+        <div className="lrow">
           <Btn k={'work:' + t.id} label="Record work" show={me.can_tag && !release} />
           <Btn k={'calib:' + t.id} label="Record calibration" show={release && t.reason === 'Calibration' && me.can_calibrate} />
           <Btn k={'qual:' + t.id} label="Record qualification" show={release && t.reason === 'Qualification' && me.can_calibrate} />
@@ -293,9 +294,9 @@ export default function EquipmentPage({ params: [id] }) {
     <PageHeader title={e.equipment_name} audit={{ kind: 'equipment', id }}
       subtitle={<><Badge status={e.admin_status} /> <span className={availCls(e.availability)}>{avText}</span></>}
       actions={<>
-        <a className="btn ghost" href="#/equipment">All equipment</a>{' '}
-        <button type="button" className="btn" title="Barcode label with the name and calibration expiry (Dymo, 1 x 2 1/8 in.)" onClick={() => printLabels('equipment', [e.id])}>Print label</button>
-        {me.can_edit && <>{' '}<a className="btn" href={`#/equipment/new?from=${e.id}`}>Duplicate</a> <a className="btn primary" href={`#/equipment/${e.id}/edit`}>Edit</a></>}
+        <Button variant="light" href="#/equipment">All equipment</Button>{' '}
+        <Button type="button" variant="outline-secondary" title="Barcode label with the name and calibration expiry (Dymo, 1 x 2 1/8 in.)" onClick={() => printLabels('equipment', [e.id])}>Print label</Button>
+        {me.can_edit && <>{' '}<Button variant="outline-secondary" href={`#/equipment/new?from=${e.id}`}>Duplicate</Button> <Button variant="primary" href={`#/equipment/${e.id}/edit`}>Edit</Button></>}
       </>} />
     <div className="actbar">
       <Btn k="tagout" label="Tag out" show={me.can_tag && !retired} primary />
@@ -308,25 +309,25 @@ export default function EquipmentPage({ params: [id] }) {
       <Btn k="retire" label="Retire" show={me.can_edit && !retired} />
       <Btn k="transfer" label="Transfer to another lab" show={me.can_edit && !retired} />
     </div>
-    {!Number(e.owner_count) && <div className="notice">Nobody is responsible for this equipment (a group was set Inactive or a person left). Edit it and tick a group or person.</div>}
+    {!Number(e.owner_count) && <div className="alert alert-warning">Nobody is responsible for this equipment (a group was set Inactive or a person left). Edit it and tick a group or person.</div>}
     <div className="statcards">
       <StatCard label="Availability" text={avText} cls={e.availability === 'Tagged out' ? 'deficient' : e.availability === 'Available' ? 'conforms' : ''} />
       <StatCard label="Calibration" text={calText} cls={calClass} />
-      <StatCard label="Next maintenance" text={mText} cls={e.maintenance_status === 'Overdue' || e.maintenance_status === 'Due today' ? 'deficient' : e.maintenance_status === 'Due soon' ? 'alert' : ''} />
+      <StatCard label="Next maintenance" text={mText} cls={e.maintenance_status === 'Overdue' || e.maintenance_status === 'Due today' ? 'deficient' : e.maintenance_status === 'Due soon' ? 'calert' : ''} />
     </div>
     {openTags.map((t) => <TagCard key={t.id} t={t} />)}
     <div className="cols">
-      <div className="card"><h2>Identity</h2><Kv pairs={[
+      <Card body><h2>Identity</h2><Kv pairs={[
         ['Equipment ID', <>{e.equipment_code} <span className="help">(given by the system)</span></>], ['Type', e.type_name], ['Department', [e.department_code, e.department_name].filter(Boolean).join(' ')],
         ['Manufacturer', e.manufacturer], ['Model', e.model], ['Serial number', e.serial_number], ['Asset tag', e.asset_tag],
         ['Location', e.location_id ? <><a href={'#/inventory/locations/' + e.location_id}>{e.location_code}</a> <span className="help">{e.location_path || ''}</span></> : ''], ['Location note', e.location_note],
-        ['In service since', d8(e.in_service_date)], ['Notes', e.notes]]} /></div>
-      <div className="card"><h2>Responsible and settings</h2><Kv pairs={[
+        ['In service since', d8(e.in_service_date)], ['Notes', e.notes]]} /></Card>
+      <Card body><h2>Responsible and settings</h2><Kv pairs={[
         ['Responsible', d.owners.length ? <span className="ownerchips">{d.owners.map((o, i) => <span key={i} className={o.user_id ? 'person' : ''}>{o.group_name || o.full_name}</span>)}</span> : <b className="bad">Nobody</b>],
         ['Calibration', e.calibration_required ? `Required${e.calibration_interval_months ? `, every ${plural(e.calibration_interval_months, 'month')}` : ''}; warn ${plural(e.calibration_alert_days, 'day')} before expiry` : 'Not required'],
         ['IQ/OQ/PQ', e.qualification_required ? 'Required' : 'Not required'],
         ['Current calibration', e.cal_id ? `${e.cal_code}: ${d8(e.cal_date)} to ${d8(e.cal_expires)} (${e.cal_result})` : ''],
-        ['Status', e.admin_status]]} /></div>
+        ['Status', e.admin_status]]} /></Card>
     </div>
     <SensorEquipmentCard equipmentId={e.id} />
     <EquipmentLogbooksCard equipmentId={e.id} />

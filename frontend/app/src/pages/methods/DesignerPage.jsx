@@ -11,6 +11,7 @@ import TabReview from './TabReview.jsx';
 import TabTest from './TabTest.jsx';
 import TabWorkflow from './TabWorkflow.jsx';
 import { useNewVersion } from './TestPage.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const TABS = [['test', '1 Test and reporting'], ['analytes', '2 Analytes'], ['workflow', '3 Workflow'], ['review', '4 Review and approve']];
 
@@ -18,7 +19,7 @@ export default function DesignerPage({ params: [vid], query }) {
   const q = new URLSearchParams(query);
   const { data, error, reload } = useApi((o) => getVersion(vid, o), [vid]);
   const startVersion = useNewVersion();
-  if (error && !data) return <><PageHeader title="Test version" /><div className="card err">{error.message}</div></>;
+  if (error && !data) return <><PageHeader title="Test version" /><Card body className="err">{error.message}</Card></>;
   if (!data) return <><PageHeader title="Test version" /><Loading /></>;
   const v = data.version; const t = data.test;
   const d = { ...data, editable: v.status === 'Draft' && data.can_design };
@@ -28,9 +29,9 @@ export default function DesignerPage({ params: [vid], query }) {
   const subtitle = <><a href={'#/methods/tests/' + t.id}>{t.test_code}</a> <Badge status={v.status} /> · {t.site_code || 'Shared by all labs'}{t.department_name ? ' · ' + t.department_name : ''}
     {' · Versions: '}{d.versions.map((x) => <span key={x.id}>{x.id === v.id ? <b>v{x.version_no}</b> : <a href={'#/methods/versions/' + x.id}>v{x.version_no}</a>}{' '}</span>)}</>;
   const actions = <>
-    <a className="btn ghost" href={`#/methods/tests/${t.id}`}>Test page</a>
-    {v.status !== 'Draft' && d.can_design && !t.draft_version && <> <button type="button" className="btn" id="newv" onClick={() => startVersion(t, 'New Draft version created and signed.')}>New version</button></>}
-    {t.draft_version_id && t.draft_version_id !== v.id && <> <a className="btn" href={`#/methods/versions/${t.draft_version_id}`}>Open draft v{t.draft_version}</a></>}
+    <Button variant="light" href={`#/methods/tests/${t.id}`}>Test page</Button>
+    {v.status !== 'Draft' && d.can_design && !t.draft_version && <> <Button type="button" variant="outline-secondary" id="newv" onClick={() => startVersion(t, 'New Draft version created and signed.')}>New version</Button></>}
+    {t.draft_version_id && t.draft_version_id !== v.id && <> <Button variant="outline-secondary" href={`#/methods/versions/${t.draft_version_id}`}>Open draft v{t.draft_version}</Button></>}
   </>;
   const Tab = { test: TabTest, analytes: TabAnalytes, workflow: TabWorkflow, review: TabReview }[tab];
   return <>

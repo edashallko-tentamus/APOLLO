@@ -8,6 +8,7 @@ import Section from '../../components/Section.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import VersionCard from '../verification/VersionCard.jsx';
 import { Card, dt } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const lim = (r) => (!r.applies ? 'Not judged' : r.shape === 'Qualitative' ? r.limit_type
   : r.shape === 'Max' ? `≤ ${r.limit_ref || (r.max_value ?? '?')}` : `${r.min_value ?? '?'} to ${r.max_value ?? '?'}`);
@@ -52,10 +53,10 @@ export default function TabReview({ d, reload }) {
       {v.status === 'Draft' ? <>
         <p>Worked on this version: <b>{d.authors.join(', ') || '—'}</b>{d.authors.length > 0 && ' (they cannot approve it).'}</p>
         {canApprove ? <>
-          <button type="button" className="btn primary" id="approve" onClick={approve}>Approve version {v.version_no}</button>
+          <Button type="button" variant="primary" id="approve" onClick={approve}>Approve version {v.version_no}</Button>
           {/* the gate (WD-6): with the lab's setting on, approval waits for a signed, passing verification of this design */}
-          {gate && gate.required && !gate.passing && <div className="notice" style={{ marginTop: 8 }}>This lab requires a passing workflow verification first (above): approving now will be refused.</div>}
-        </> : <div className="notice">{!d.can_approve ? 'Approving needs methods.approve in this lab.' : d.i_worked_on_it ? 'You worked on this version, so someone else must approve it.' : `Fix the ${errors.length} problem${errors.length === 1 ? '' : 's'} above first.`}</div>}
+          {gate && gate.required && !gate.passing && <div className="alert alert-warning" style={{ marginTop: 8 }}>This lab requires a passing workflow verification first (above): approving now will be refused.</div>}
+        </> : <div className="alert alert-warning">{!d.can_approve ? 'Approving needs methods.approve in this lab.' : d.i_worked_on_it ? 'You worked on this version, so someone else must approve it.' : `Fix the ${errors.length} problem${errors.length === 1 ? '' : 's'} above first.`}</div>}
       </> : <p>{v.status}{v.approved_by_name && <>: approved by <b>{v.approved_by_name}</b> on {dt(v.approved_at)} (electronic signature)</>}{v.effective_from && `, effective from ${dt(v.effective_from)}`}.</p>}
     </Section>
   </>;

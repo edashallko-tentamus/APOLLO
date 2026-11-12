@@ -160,7 +160,7 @@ function AddSamplesDialog({ b, rows, onDone }) {
       <div className="addlist">{rows.map((r) => (
         <label key={key(r)} className="cb"><input type="checkbox" value={key(r)} checked={picked.has(key(r))} onChange={() => flip(key(r))} />
           {' '}<b>{r.sample_code || r.client_sample_id}</b> {r.client_name || ''}{r.matrix ? ' · ' + r.matrix : ''}{r.due_date ? ' · due ' + day(r.due_date) : ''}
-          {r.priority !== 'Standard' && <> <span className="badge">{r.priority}</span></>}{r.is_media && <> <span className="badge">Lot QA testing</span></>}{r.kind === 'Re-prep' ? ` (re-prep ×${r.replicates})` : ''}</label>
+          {r.priority !== 'Standard' && <> <span className="badge text-bg-secondary">{r.priority}</span></>}{r.is_media && <> <span className="badge text-bg-secondary">Lot QA testing</span></>}{r.kind === 'Re-prep' ? ` (re-prep ×${r.replicates})` : ''}</label>
       ))}</div>
     </Modal>
   );

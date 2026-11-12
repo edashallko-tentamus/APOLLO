@@ -7,6 +7,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { plural } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { EqTabs, Failed, Loading, NeedLab } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const DEFAULTS = { calibration_required: true, calibration_alert_days: 30 };
 const newRow = () => ({ ...DEFAULTS });
@@ -41,11 +42,11 @@ export default function AddManyPage() {
   return <>
     <PageHeader title={`Add many: ${site.site_code}`}
       subtitle="For pipettes, thermometers, balances and other items you add in batches. Paste rows from Excel (Ctrl+V) and fill down (Ctrl+D) the type, maker and responsible group. One signature covers them all. To add owners beyond one group, edit each item afterwards, or use Upload XLSX on the list."
-      actions={<a className="btn ghost" href="#/equipment">Back to the list</a>} />
+      actions={<Button variant="light" href="#/equipment">Back to the list</Button>} />
     <EqTabs cur="#/equipment" />
     {error && !L ? <Failed error={error} /> : !L ? <Loading /> : (
-      <div className="card">
+      <Card body>
         <EditableGrid rows={START} columns={columns} allowAdd newRow={newRow} what="new equipment" needReason={false} sign={sign} save={save} afterSave={done} />
-      </div>)}
+      </Card>)}
   </>;
 }

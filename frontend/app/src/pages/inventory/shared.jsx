@@ -5,6 +5,8 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useHashRoute } from '../../router/useHashRoute.js';
 import './inventory.css';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from '../../components/Modal.jsx';
 
 export const d8 = (v) => (v ? String(v).slice(0, 10) : '');
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -41,9 +43,9 @@ export function InvTabs() {
 }
 
 export const NEED_LAB = 'Choose your lab (top right) first. If none is listed, ask an administrator to assign you to a lab.';
-export const NeedLab = () => <div className="card err">{NEED_LAB}</div>;
+export const NeedLab = () => <Card body className="err">{NEED_LAB}</Card>;
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 
 // Multi-value list cells (supported conditions, types): typed or pasted as "Ambient, Refrigerated"
 export function listCol(field, title, allowed, width, extra = {}) {
@@ -77,18 +79,18 @@ export const loadMeta = inventoryMeta;
 // The wide dialog (the kit's Modal has no extra-wide size): title, intro, content, an error line, Cancel and OK
 export function XModal({ title, intro, children, error, okText = 'Save', cancelText = 'Cancel', busy = false, okDisabled = false, size = 'xwide', onOk, onClose }) {
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape' && !document.querySelector('.combo-list')) onClose(); }}>
-      <div className={`modal ${size}`} role="dialog" aria-modal="true" aria-label={title}>
+    <Dialog label={title} wide={size === 'wide'} xwide={size === 'xwide'} onClose={() => onClose()}>
+      <div className="modal-body">
         <h3>{title}</h3>
         {intro && <p className="intro">{intro}</p>}
         {children}
         <div className="merr" role="alert">{error}</div>
         <div className="mbtns">
-          <button type="button" className="btn ghost" onClick={onClose}>{cancelText}</button>
-          {onOk && <button type="button" className="btn primary" disabled={busy || okDisabled} onClick={onOk}>{okText}</button>}
+          <Button type="button" variant="light" onClick={onClose}>{cancelText}</Button>
+          {onOk && <Button type="button" variant="primary" disabled={busy || okDisabled} onClick={onOk}>{okText}</Button>}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 

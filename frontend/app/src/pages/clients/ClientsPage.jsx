@@ -7,6 +7,7 @@ import PagedList from '../../components/PagedList.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useMeta } from '../../hooks/useMeta.js';
 import { clientForm } from './clientForm.jsx';
+import { Button } from 'react-bootstrap';
 
 const FILTERS = [['current', 'Current'], ['active', 'Active'], ['hold', 'On Hold'], ['inactive', 'Inactive'], ['all', 'All']];
 const href = (r) => '#/clients/' + r.id;
@@ -42,7 +43,7 @@ export default function ClientsPage({ query }) {
   return <>
     <PageHeader title="Clients" audit={AUDIT}
       subtitle="Hold and status apply to each client only. Nothing cascades from a parent client. Newest first, 50 at a time; search finds any client."
-      actions={<button type="button" className="btn primary" onClick={newClient}>+ New client</button>} />
+      actions={<Button type="button" variant="primary" onClick={newClient}>+ New client</Button>} />
     <PagedList load={listClients} query={query} filters={FILTERS} open={openClient}
       placeholder="Search by code, name or parent client; type a client code and press Enter to open it">
       {(rows) => <EditableGrid readOnly rows={rows} columns={COLUMNS} emptyText="No clients here." onRowOpen={openClient} rowClass={rowClass} />}

@@ -2,12 +2,13 @@
 import { invoicePdfUrl, issueInvoices } from '../../api/billing.js';
 import { money } from '../../lib/format.js';
 import './billing.css';
+import { Card } from 'react-bootstrap';
 
 export const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString([], { dateStyle: 'medium' }) : ''; };
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
 export const pdfOf = (id, siteId) => window.open(invoicePdfUrl(id, siteId), '_blank');
 export const Loading = () => <div className="loading">Loading…</div>;
-export const Failed = ({ error }) => <div className="card err">{error.message}</div>;
+export const Failed = ({ error }) => <Card body className="err">{error.message}</Card>;
 
 // Issue draft invoices with one signature ("Invoiced by"); gives the answer ({ issued: [...] }) or null
 export async function issueDrafts(dialogs, toast, rows) {

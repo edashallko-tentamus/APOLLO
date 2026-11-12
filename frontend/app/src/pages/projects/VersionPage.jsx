@@ -20,6 +20,7 @@ import { decideQuote, sendQuote } from '../quotes/quoteDialogs.js';
 import TestPicker from '../quotes/TestPicker.jsx';
 import '../quotes/quotes.css';
 import AnalyteDialog from './AnalyteDialog.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const NO_PACKAGES = { rows: [], options: [], allowed: false };
 const has = (v) => v !== null && v !== undefined;
@@ -39,7 +40,7 @@ export default function VersionPage({ params }) {
   const { data, error, reload } = useApi((o) => load(vid, o), [vid]);
   const stability = data?.d.version.kind === 'Stability';
   useEffect(() => { if (stability) window.location.replace('#/stability/quotes/' + data.d.version.project_id); }, [stability]); // eslint-disable-line react-hooks/exhaustive-deps -- migration 032
-  if (error && !data) return <div className="card err">{error.message}</div>;
+  if (error && !data) return <Card body className="err">{error.message}</Card>;
   if (!data || stability) return <div className="loading">Loading…</div>;
   return <Version key={vid} vid={vid} d={data.d} pk={data.pk} reload={reload} />;
 }
@@ -235,7 +236,7 @@ function Version({ vid, d, pk, reload }) {
   // ---- header
   const today = new Date().toISOString().slice(0, 10);
   const sendable = ['Draft', 'Submitted for Quote', 'Quoted'].includes(v.status) && !(v.status === 'Quoted' && v.valid_until && v.valid_until < today);
-  const B = (label, onClick, primary) => <button key={label} type="button" className={`btn${primary ? ' primary' : ''}`} onClick={onClick} disabled={busy}>{label}</button>;
+  const B = (label, onClick, primary) => <Button key={label} type="button" variant={primary ? 'primary' : 'outline-secondary'} onClick={onClick} disabled={busy}>{label}</Button>;
   const acts = [];
   if (sendable) acts.push(B(v.sent_at ? 'Send again…' : 'Send to client…', send, !(v.status === 'Quoted' && v.sent_at)));
   if (isQuote && v.status === 'Quoted') acts.push(B('Accept…', () => decide('Accepted'), true), B('Reject…', () => decide('Rejected')));
@@ -266,24 +267,24 @@ function Version({ vid, d, pk, reload }) {
         <Badge status={v.status} /> {lpa && <Badge status="List price acceptance" />} {v.account_status !== 'Active' && <Badge status={'Client ' + v.account_status} />}
         {v.latest_version_no > v.version_no && <> <Badge status="Newer version exists" /></>}</>}
       actions={<>
-        {isQuote ? <><a className="btn ghost" href="#/quotes">All quotes</a> <button type="button" className="btn ghost" onClick={details}>Details…</button></> : <a className="btn ghost" href={`#/projects/${v.project_id}`}>All versions</a>}
-        {' '}<a className="btn ghost" target="_blank" rel="noopener" href={pdfHref}>Quotation PDF</a> <a className="btn ghost" href={`#/print/${vid}`}>Print</a> {acts.flatMap(sp)}
+        {isQuote ? <><Button variant="light" href="#/quotes">All quotes</Button> <Button type="button" variant="light" onClick={details}>Details…</Button></> : <Button variant="light" href={`#/projects/${v.project_id}`}>All versions</Button>}
+        {' '}<Button variant="light" target="_blank" rel="noopener" href={pdfHref}>Quotation PDF</Button> <Button variant="light" href={`#/print/${vid}`}>Print</Button> {acts.flatMap(sp)}
       </>} />
-    <div className="card meta3">
+    <Card body className="meta3">
       {isQuote && <><div><span>For</span><b>{contactName}</b></div><div><span>Prepared by</span><b>{v.owner_name || '—'}</b></div></>}
       <div><span>Quoting lab</span><b title="The lab this quote was made in: its own tests are in-house, other labs' tests are subcontracted">{v.quote_site_code || 'Not recorded (made before 0.16.1)'}</b></div>
       <div><span>Valid until</span><b>{v.valid_until || 'Set when issued'}</b></div>
       <div><span>Quoted</span><b>{v.quoted_at ? new Date(v.quoted_at).toLocaleDateString() + (v.quoted_by_name ? ' by ' + v.quoted_by_name : '') : '—'}</b></div>
       <div><span>{v.status === 'Rejected' ? 'Rejected' : 'Accepted by'}</span><b>{v.status === 'Rejected' ? (v.rejected_reason || 'No reason given') + (v.decided_via === 'Client link' ? ' (online)' : '')
         : (v.accepted_by || '—') + (v.decided_via === 'Client link' && v.status === 'Accepted' ? ' (online)' : '')}</b></div>
-    </div>
+    </Card>
     {v.sent_at && <div className="qsent">Sent {new Date(v.sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} to <b>{v.sent_to_name || ''}</b> &lt;{v.sent_to_email || ''}&gt;. The client accepts or declines through the link in the email
       {v.client_token ? <>; you can also paste it in a chat or email yourself:<input readOnly value={`${window.location.origin}/quote-response.html?t=${v.client_token}`} onFocus={(e) => e.target.select()} /></> : '.'}</div>}
-    {!ed && <div className="notice">This version is {v.status} and locked. {v.status === 'Accepted' ? 'Orders use these terms.' : ''} To change prices or tests, start a new version.</div>}
+    {!ed && <div className="alert alert-warning">This version is {v.status} and locked. {v.status === 'Accepted' ? 'Orders use these terms.' : ''} To change prices or tests, start a new version.</div>}
 
     <Section title="Tests on this quote"
       help={lpa ? 'List price acceptance: final price always equals list price.' : 'List price comes from the catalogue and cannot be typed over. Type the final price per sample, or the discount % (the final price follows); paste and fill down work in both. For analyte-priced tests, click the analyte button to remove analytes: the list price recalculates and the discount % is kept.'}
-      actions={ed && !lpa && <button type="button" className="btn" onClick={pctAll}>Apply a discount % to every line…</button>}>
+      actions={ed && !lpa && <Button type="button" variant="outline-secondary" onClick={pctAll}>Apply a discount % to every line…</Button>}>
       <SaveBar n={nLines} what="line" onUndo={() => lg.reset(lineRows)} onSave={saveLines} saveText="Save lines" busy={busy} />
       <DataGrid grid={lg} rowClass={(r) => (r.status === 'Removed' ? 'mutedrow' : '')} />
     </Section>
@@ -294,22 +295,22 @@ function Version({ vid, d, pk, reload }) {
       {ed && pk.allowed && <div className="pkadd">
         <SmartSelect className="pkpick" value={pkPick} options={[{ value: '', label: 'Add a package…' }, ...pkOptions]} onChange={setPkPick} />
         <input type="number" min="1" value={pkQty} style={{ width: 70 }} title="Samples" onChange={(e) => setPkQty(e.target.value)} />
-        <button type="button" className="btn" onClick={addPackage} disabled={busy}>+ Add package</button>
+        <Button type="button" variant="outline-secondary" onClick={addPackage} disabled={busy}>+ Add package</Button>
       </div>}
     </Section>}
 
-    <div className="card"><div className="totals">
+    <Card body><div className="totals">
       <span>List value <b>{money(listV)}</b></span><span>Discount <b>{money(listV - fin)}</b> ({listV ? ((listV - fin) / listV * 100).toFixed(2) : '0.00'}%)</span><span className="big">Quote total <b>{money(fin)}</b></span>
-    </div></div>
+    </div></Card>
     <QuoteChargesCard versionId={vid} />{/* 0.36.0: kits, shipping, fees, discounts at this client's price */}
 
     {ed && <Section title="Add tests" help="Switch between labs to quote tests from any of them on the same quote; each line shows the lab that does the work."
-      actions={<button type="button" className="btn" title="Adds the lab's Serving weight or Density test at its catalogue price, so the client sees what results per serving cost" onClick={servingLine}>+ Per-serving calculation…</button>}>
+      actions={<Button type="button" variant="outline-secondary" title="Adds the lab's Serving weight or Density test at its catalogue price, so the client sees what results per serving cost" onClick={servingLine}>+ Per-serving calculation…</Button>}>
       <TestPicker versionId={vid} have={have} onAdded={reload} prefill={isQuote && !lpa} />
     </Section>}
 
     <Section title="Rush terms on this quote" help="Surcharges are copied from each rush schedule. Set a discount per tier: e.g. keep Same Day at full price, make a 5 Day rush free (100%). Example amounts use the first test on this quote with that schedule.">
-      <div className={`savebar${nRush ? ' show' : ''}`}><span className="pending">{plural(nRush, 'tier')} changed</span><button type="button" className="btn primary" onClick={saveRush} disabled={busy}>Save rush terms</button></div>
+      <div className={`savebar${nRush ? ' show' : ''}`}><span className="pending">{plural(nRush, 'tier')} changed</span><Button type="button" variant="primary" onClick={saveRush} disabled={busy}>Save rush terms</Button></div>
       <DataGrid grid={rg} emptyText="No rush schedules on the tests in this quote." />
     </Section>
   </>;
@@ -319,8 +320,8 @@ function SaveBar({ n, what, onUndo, onSave, saveText, busy }) {
   return (
     <div className={`savebar${n ? ' show' : ''}`}>
       <span className="pending">{plural(n, what)} changed (not saved)</span>
-      <button type="button" className="btn ghost" onClick={onUndo} disabled={busy}>Discard</button>
-      <button type="button" className="btn primary" onClick={onSave} disabled={busy}>{saveText}</button>
+      <Button type="button" variant="light" onClick={onUndo} disabled={busy}>Discard</Button>
+      <Button type="button" variant="primary" onClick={onSave} disabled={busy}>{saveText}</Button>
     </div>
   );
 }

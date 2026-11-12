@@ -14,6 +14,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { ATTEMPT_COLS, d8, documentsOf, stateCls } from './shared.js';
+import { Button, Card } from 'react-bootstrap';
 
 const DEPT_COLS = [
   { field: 'department_name', title: 'Department', type: 'readonly', width: 200 },
@@ -117,7 +118,7 @@ export default function PersonPage({ params: [id] }) {
       if (v) { toast('Qualification withdrawn.'); reload(); }
     });
   }, [d, dialogs, toast, reload]);
-  if (error && !d) return <><PageHeader title="Training" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Training" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Training" /><div className="loading">Loading…</div></>;
   const p = d.person;
 
@@ -126,8 +127,8 @@ export default function PersonPage({ params: [id] }) {
     if (newId) { toast('Competency started.'); window.location.hash = '#/training/attempts/' + newId; }
   }
   const actions = <>
-    <a className="btn" href={reportUrl(p.id, site?.id)} target="_blank" rel="noopener noreferrer" id="report">Training report (PDF)</a>
-    {(d.can.record || d.tests.length > 0) && <> <button type="button" className="btn primary" id="start" onClick={start}>Start competency…</button></>}
+    <Button variant="outline-secondary" href={reportUrl(p.id, site?.id)} target="_blank" rel="noopener noreferrer" id="report">Training report (PDF)</Button>
+    {(d.can.record || d.tests.length > 0) && <> <Button type="button" variant="primary" id="start" onClick={start}>Start competency…</Button></>}
   </>;
   return <>
     <PageHeader title={`Training: ${p.full_name}`} subtitle={`${p.title || ''} Qualifications, competency (initial and continuing), departments and the work done. The training report prints all of it.`}

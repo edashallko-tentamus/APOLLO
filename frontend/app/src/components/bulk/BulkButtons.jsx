@@ -14,6 +14,8 @@ import DataGrid from '../grid/DataGrid.jsx';
 import { useGrid } from '../grid/useGrid.js';
 import { useToast } from '../Toasts.jsx';
 import './bulk.css';
+import { Button } from 'react-bootstrap';
+import { Dialog } from '../Modal.jsx';
 
 const UPLOAD_PERMISSION = { lots: 'inventory.upload', equipment: 'equipment.edit' }; // who may upload (the backend and database check too)
 const MAX_PREVIEW_W = 760;
@@ -89,8 +91,8 @@ function UploadDialog({ kind, onDone }) {
   }
 
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(null); }}>
-      <div ref={box} className="modal xwide" role="dialog" aria-modal="true" aria-label="Upload from Excel">
+    <Dialog label="Upload from Excel" xwide onClose={() => onDone(null)}>
+      <div ref={box} className="modal-body">
         <h3>Upload from Excel</h3>
         <p className="intro">Export the list first, edit it in Excel (change cells, or add rows with an empty ID), save it, and upload it here.
           Rows are matched on their ID. You will see every change before anything is saved. <a href="#" onClick={(e) => { e.preventDefault(); exportList(kind, [], true); }}>Download an empty template</a>.</p>
@@ -105,12 +107,12 @@ function UploadDialog({ kind, onDone }) {
         </>}
         <div className="merr" role="alert">{error}</div>
         <div className="mbtns">
-          <button type="button" className="btn ghost" onClick={() => onDone(null)}>Cancel</button>
-          <button type="button" className="btn primary" disabled={!canSave} onClick={save}>
-            {canSave ? `Sign and save ${c.creates + c.updates} row${c.creates + c.updates === 1 ? '' : 's'}` : 'Save changes'}</button>
+          <Button type="button" variant="light" onClick={() => onDone(null)}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={!canSave} onClick={save}>
+            {canSave ? `Sign and save ${c.creates + c.updates} row${c.creates + c.updates === 1 ? '' : 's'}` : 'Save changes'}</Button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -127,7 +129,7 @@ export default function BulkButtons({ kind, selected = () => [], onDone }) {
     onDone?.();
   }
   return <>
-    <button type="button" className="btn" title="Download this list as an Excel file (only the ticked rows, if any are ticked)" onClick={() => exportList(kind, selected())}>Export XLSX</button>
-    {mayUpload && <> <button type="button" className="btn" title="Upload an edited Excel file to update or add rows in bulk" onClick={upload}>Upload XLSX</button></>}
+    <Button type="button" variant="outline-secondary" title="Download this list as an Excel file (only the ticked rows, if any are ticked)" onClick={() => exportList(kind, selected())}>Export XLSX</Button>
+    {mayUpload && <> <Button type="button" variant="outline-secondary" title="Upload an edited Excel file to update or add rows in bulk" onClick={upload}>Upload XLSX</Button></>}
   </>;
 }

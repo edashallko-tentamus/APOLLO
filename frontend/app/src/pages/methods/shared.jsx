@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import './methods.css';
+import { Card as BsCard } from 'react-bootstrap';
 
 export const STEP_TYPES = ['Batching', 'Weighing', 'Preparation', 'Plating/Inoculation', 'Incubation', 'Dilution', 'Split off Test', 'Hold Point', 'Calculation', 'Data Entry', 'QC Review'];
 export const TYPE_COLOR = { Batching: '#E3ECFB', Weighing: '#EAF4EE', Preparation: '#F3EEFA', 'Plating/Inoculation': '#FDEFE3', Incubation: '#FFF6D9', Dilution: '#E6F4F7',
@@ -57,5 +58,5 @@ export function useSigned() {
     submit: ({ reason, signature }) => fn(reason, signature) }), [dialogs]);
 }
 
-export const NeedLab = () => <div className="card err">Choose your lab (top right) first.</div>;
+export const NeedLab = () => <BsCard body className="err">Choose your lab (top right) first.</BsCard>;
 export const Loading = () => <div className="loading">Loading…</div>;

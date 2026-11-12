@@ -6,6 +6,7 @@ import { onAuthRequired, setApiSite, clearCache } from '../api/client.js';
 import { DEFAULT_PRODUCT_NAME, SITE_STORAGE_KEY } from '../config.js';
 import { confirmLeave, forgetUnsaved } from '../router/useHashRoute.js';
 import LoginScreen from './LoginScreen.jsx';
+import { Card } from 'react-bootstrap';
 
 const SessionContext = createContext(null);
 export const useSession = () => useContext(SessionContext);
@@ -97,7 +98,7 @@ export default function SessionProvider({ children }) {
     };
   }, [productName, me, siteId, setSite, signOut, refreshUsers]);
 
-  if (status === 'error') return <div className="card err" style={{ margin: 20 }}>Cannot reach the server: {error?.message}</div>;
+  if (status === 'error') return <Card body className="err" style={{ margin: 20 }}>Cannot reach the server: {error?.message}</Card>;
   if (status === 'loading') return <div className="loading" style={{ margin: 20 }}>Loading…</div>;
   const login = signIn && <LoginScreen {...signIn} productName={productName} onDone={afterSignIn} />;
   if (status === 'signin') return login;

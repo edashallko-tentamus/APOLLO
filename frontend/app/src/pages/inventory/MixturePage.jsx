@@ -15,6 +15,7 @@ import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { signed } from './dialogs.jsx';
 import { d8, Failed, Field, fmtN, isMixture, loadLookups, Loading, NeedLab, opts, qty, withBlank } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const PREFER = { L: 'mL', kg: 'g' }; // how analysts usually measure
 const PREVIEW_DELAY_MS = 250;
@@ -124,10 +125,10 @@ function MixtureForm({ M, L, usable, conv }) {
   return <>
     <PageHeader title="New in-house mixture"
       subtitle="Pick the component lots and how much of each was used. The quantity made defaults to the total of the components, and the concentration of each analyte is calculated from the components using the Units and Unit conversions tables. The mixture gets a Resource ID (its lab ID) and cannot expire after its earliest-expiring component."
-      actions={<><a className="btn ghost" href="#/inventory">Cancel</a> <button type="button" className="btn primary" disabled={saving} onClick={save}>Prepare mixture</button></>} />
+      actions={<><Button variant="light" href="#/inventory">Cancel</Button> <Button type="button" variant="primary" disabled={saving} onClick={save}>Prepare mixture</Button></>} />
     <div className="itemform">
       <div className="cols">
-        <div className="card"><h2>Identity</h2>
+        <Card body><h2>Identity</h2>
           <Field label="Name" req help={'e.g. "Sodium Working Solution 10 ppm"'}><input id="m_name" value={f.name} onChange={(e) => set('name')(e.target.value)} /></Field>
           <Field label="Solid or liquid" req help="Liquid: concentrations per volume (mg/L, ppm). Solid: per mass (mg/kg)."><div className="checks">
             {['Liquid', 'Solid'].map((x) => <label key={x}><input type="radio" name="mform" value={x} checked={f.form === x} onChange={() => setForm(x)} /> {x}</label>)}</div></Field>
@@ -138,8 +139,8 @@ function MixtureForm({ M, L, usable, conv }) {
           <div className="grid2"><Field label="Expiration date" help="Empty: the earliest-expiring component"><input id="m_exp" type="date" value={f.exp} onChange={(e) => set('exp')(e.target.value)} /></Field>
             <Field label="Retest date"><input id="m_retest" type="date" value={f.retest} onChange={(e) => set('retest')(e.target.value)} /></Field></div>
           <Field label="Notes (work instruction)"><input id="m_notes" value={f.notes} onChange={(e) => set('notes')(e.target.value)} /></Field>
-        </div>
-        <div className="card"><h2>Quantitative</h2>
+        </Card>
+        <Card body><h2>Quantitative</h2>
           <div className="grid2">
             <Field label="Quantity made" req help={defaultQty ? `Defaulted to the total of the components that can be expressed in ${f.unit}: ${fmtN(defaultQty)} ${f.unit}. Change it if you made it up to a different volume.` : ''}>
               <input id="m_qty" type="number" step="any" value={f.qty} onChange={(e) => { setQtyTouched(e.target.value.trim() !== ''); set('qty')(e.target.value); }} /></Field>
@@ -148,7 +149,7 @@ function MixtureForm({ M, L, usable, conv }) {
             <div title={calc.map((a) => `${a.analyte_name}: ${a.calc_note}`).join('\n')}><DataGrid grid={cg} emptyText="Add component lots that carry analytes to see their concentration here." /></div>
             {calc.length > 0 && <div id="cgnotes" className="calcnote">{calc.map((a) => <div key={a.analyte_id}>{a.analyte_name}: {a.calc_note || ''}</div>)}</div>}
             <div className="help">Set the unit to report in, and a target ± tolerance to check the result.</div></div>
-        </div>
+        </Card>
       </div>
       <Section title="Component lots" help="Only usable lots of this lab are offered (received, in date, not on hold). Each component is drawn from stock when the mixture is prepared.">
         <DataGrid grid={comp} /></Section>

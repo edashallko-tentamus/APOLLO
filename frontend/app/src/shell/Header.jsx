@@ -4,6 +4,7 @@ import Brand from './Brand.jsx';
 import ChangePasswordDialog from './ChangePasswordDialog.jsx';
 import HeaderSearch from './HeaderSearch.jsx';
 import LabSwitcher from './LabSwitcher.jsx';
+import { Button } from 'react-bootstrap';
 
 function Header() {
   const { productName, user, site, groups, signOut } = useSession();
@@ -19,8 +20,8 @@ function Header() {
       <div className="who">
         <LabSwitcher />
         <span id="whoName" className="whoname">{user.full_name}<small title={g.join(', ')}>{user.username}{detail}</small></span>
-        <button id="pwBtn" className="btn ghost small" onClick={() => setPwOpen(true)}>Change password</button>
-        <button id="outBtn" className="btn ghost small" onClick={signOut}>Sign out</button>
+        <Button id="pwBtn" variant="outline-light" size="sm" onClick={() => setPwOpen(true)}>Change password</Button>
+        <Button id="outBtn" variant="outline-light" size="sm" onClick={signOut}>Sign out</Button>
       </div>
       {pwOpen && <ChangePasswordDialog onClose={() => setPwOpen(false)} />}
     </header>

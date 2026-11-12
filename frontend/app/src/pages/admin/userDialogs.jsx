@@ -4,6 +4,8 @@ import { authEvents, saveUserSignature, setTempPassword, userSignatureUrl } from
 import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useApi } from '../../hooks/useApi.js';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from '../../components/Modal.jsx';
 
 // A one-time password made in the browser, shown once to the administrator to pass on; the person must change it at sign-in
 export function makeTempPassword() {
@@ -70,14 +72,14 @@ export function SignInHistoryDialog({ onDone }) {
   const { reset } = grid;
   useEffect(() => { reset(rows); }, [rows, reset]);
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(); }}>
-      <div className="modal xwide" role="dialog" aria-modal="true" aria-label="Sign-in history">
+    <Dialog label="Sign-in history" xwide onClose={() => onDone()}>
+      <div className="modal-body">
         <h3>Sign-in history</h3>
         <p className="intro">Every sign-in, failed attempt, lockout, sign-out, password change and failed signature, newest first (latest 300). Written by the system; it cannot be edited.</p>
-        {error ? <div className="card err">{error.message}</div> : loading && !data ? <div className="loading">Loading…</div>
+        {error ? <Card body className="err">{error.message}</Card> : loading && !data ? <div className="loading">Loading…</div>
           : <DataGrid grid={grid} search emptyText="Nothing recorded yet." maxHeight="60vh" />}
-        <div className="mbtns"><button type="button" className="btn primary" onClick={() => onDone()} autoFocus>Close</button></div>
+        <div className="mbtns"><Button type="button" variant="primary" onClick={() => onDone()} autoFocus>Close</Button></div>
       </div>
-    </div>
+    </Dialog>
   );
 }

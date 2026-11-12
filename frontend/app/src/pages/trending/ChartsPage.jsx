@@ -4,6 +4,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { SOURCES, TrendTabs } from './TrendPanel.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const SUB = 'Charts saved for the lab. Watched charts are on Trend watch; QC charts can also be shown in QC Review of the test\'s batches. A QA reviewable chart counts once QA has approved it and its limits.';
@@ -26,8 +27,8 @@ const waits = (r) => r.status === 'Active' && r.qa_status === 'Awaiting QA';
 export default function ChartsPage({ query }) {
   const { data: d, error } = useApi((o) => listCharts(o), []);
   const qaOnly = new URLSearchParams(query).get('show') === 'qa';
-  const header = <><PageHeader title="Saved charts" subtitle={SUB} audit={AUDIT} actions={d?.can_manage && <a className="btn primary" href="#/trending/build">Build a chart</a>} /><TrendTabs on="charts" /></>;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  const header = <><PageHeader title="Saved charts" subtitle={SUB} audit={AUDIT} actions={d?.can_manage && <Button variant="primary" href="#/trending/build">Build a chart</Button>} /><TrendTabs on="charts" /></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<div className="loading">Loading…</div></>;
   const waiting = d.rows.filter(waits).length;
   const rows = qaOnly ? d.rows.filter(waits) : d.rows;
@@ -35,6 +36,6 @@ export default function ChartsPage({ query }) {
     {header}
     <div className="trbar"><span className={`trpill ${waiting ? 'bad' : 'ok'}`}>{waiting ? `${waiting} chart${waiting === 1 ? '' : 's'} awaiting QA approval` : 'No chart awaiting QA'}</span><span className="sp" />
       <label><input type="checkbox" id="qaonly" checked={qaOnly} onChange={(e) => { window.location.hash = e.target.checked ? '#/trending/charts?show=qa' : '#/trending/charts'; }} /> Only charts awaiting QA</label></div>
-    <div className="card"><ReadGrid rows={rows} columns={COLUMNS} search rowClass={rowClass} emptyText={qaOnly ? 'No chart is waiting for QA.' : 'No saved charts yet.'} /></div>
+    <Card body><ReadGrid rows={rows} columns={COLUMNS} search rowClass={rowClass} emptyText={qaOnly ? 'No chart is waiting for QA.' : 'No saved charts yet.'} /></Card>
   </>;
 }

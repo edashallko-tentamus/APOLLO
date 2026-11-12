@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { CONTROL, Panels, TrendTabs, d10, n3, safe } from './TrendPanel.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 // The chart's QA state, and the actions on it: QA's approval, the limits into the test
 function QaBanner({ ch, d, onApprove, onApply }) {
@@ -18,11 +19,11 @@ function QaBanner({ ch, d, onApprove, onApply }) {
     {ch.qa_review && (ch.qa_status === 'Approved'
       ? <div className="trfrozen trqa ok"><b>Approved by QA</b>: {ch.qa_approved_by_name || ''} on {d10(ch.qa_approved_at)} (electronic signature). A change to what it charts, its rules or its limits sends it back to QA.</div>
       : <div className="trfrozen trqa wait"><b>Awaiting QA approval.</b> This chart is QA reviewable: it counts{ch.show_in_review ? ' (and appears in QC Review)' : ''} once QA has approved it and its limits. Someone with trending.approve who did not make or change it approves it.
-        {d.can_approve && !retired && <> <button type="button" className="btn primary" id="qaok" onClick={onApprove}>Approve chart and limits…</button></>}</div>)}
+        {d.can_approve && !retired && <> <Button type="button" variant="primary" id="qaok" onClick={onApprove}>Approve chart and limits…</Button></>}</div>)}
     {l && (l.problem
       ? <div className="trfrozen trqa"><b>QC limits for the test</b>: {l.problem}.{applied}</div>
       : <div className="trfrozen trqa"><b>QC limits for the test</b>: {l.qc_type} {l.limit_type} {n3(l.lcl)} to {n3(l.ucl)} (centre line ± 3 sigma, frozen, approved by QA).{applied}
-        {d.can_design && !retired && <> <button type="button" className="btn" id="apply" onClick={onApply}>Use these limits for the test…</button></>}
+        {d.can_design && !retired && <> <Button type="button" variant="outline-secondary" id="apply" onClick={onApply}>Use these limits for the test…</Button></>}
         <div className="help" style={{ fontSize: 11.5, color: 'var(--muted)' }}>They go into the test&apos;s Draft version (a new one from the effective version if there is none), signed with a reason; the version is then approved in the designer as usual.</div></div>)}
   </>;
 }
@@ -35,7 +36,7 @@ export default function ChartPage({ params: [id], query }) {
   const from = q.get('from') || ''; const to = q.get('to') || '';
   const [f, setF] = useState(from); const [t, setT] = useState(to);
   const { data: d, error, reload } = useApi((o) => getChart(id, from, to, o), [id, from, to]);
-  if (error && !d) return <><PageHeader title="Chart" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Chart" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Chart" /><div className="loading">Loading…</div></>;
 
   const ch = d.chart; const multi = d.panels.length > 1; const ctl = CONTROL.includes(ch.source);
@@ -76,11 +77,11 @@ export default function ChartPage({ params: [id], query }) {
 
   const actions = <>
     {d.can_manage && !retired && <>
-      <a className="btn" href={`#/trending/build?chart=${ch.id}`}>Change</a>
-      {ctl && !multi && (frozen ? <button type="button" className="btn" id="unfz" onClick={unfreeze}>Recalculate limits…</button> : <button type="button" className="btn" id="fz" onClick={freeze}>Freeze limits…</button>)}
-      <button type="button" className="btn ghost" id="ret" onClick={retire}>Retire…</button>
+      <Button variant="outline-secondary" href={`#/trending/build?chart=${ch.id}`}>Change</Button>
+      {ctl && !multi && (frozen ? <Button type="button" variant="outline-secondary" id="unfz" onClick={unfreeze}>Recalculate limits…</Button> : <Button type="button" variant="outline-secondary" id="fz" onClick={freeze}>Freeze limits…</Button>)}
+      <Button type="button" variant="light" id="ret" onClick={retire}>Retire…</Button>
     </>}
-    <button type="button" className="btn ghost" id="pdf" onClick={pdf}>PDF of the chart</button>
+    <Button type="button" variant="light" id="pdf" onClick={pdf}>PDF of the chart</Button>
   </>;
   const subtitle = <>{ch.description || ''}{ch.description && <br />}Made by {ch.created_by_name}. {retired && <><b>Retired.</b> </>}{ch.watch ? 'On Trend watch. ' : ''}{ch.show_in_review ? 'Shown in QC Review of this test\'s batches.' : ''}</>;
   const ctx = { chartId: ch.id, canManage: d.can_manage && !retired, reload, multi, from, to, rules: ch.rules, frozen: frozen ? { cl: ch.frozen_cl, sigma: ch.frozen_sigma } : null };
@@ -90,7 +91,7 @@ export default function ChartPage({ params: [id], query }) {
     <QaBanner ch={ch} d={d} onApprove={approve} onApply={apply} />
     {frozen && <div className="trfrozen"><b>Limits frozen</b> by {ch.frozen_by_name || ''} on {d10(ch.frozen_at)}: centre line {n3(ch.frozen_cl)}{Number(ch.frozen_sigma) ? `, sigma ${n3(ch.frozen_sigma)}` : ''}, from {ch.frozen_n} points{ch.frozen_from || ch.frozen_to ? ` between ${d10(ch.frozen_from) || 'the start'} and ${d10(ch.frozen_to) || 'then'}` : ''}. New points are judged against this baseline.</div>}
     <div className="trbar"><label>From <input type="date" id="from" value={f} onChange={(e) => setF(e.target.value)} /></label><label>To <input type="date" id="to" value={t} onChange={(e) => setT(e.target.value)} /></label>
-      <button type="button" className="btn" id="go" onClick={show}>Show</button>
+      <Button type="button" variant="outline-secondary" id="go" onClick={show}>Show</Button>
       <span className="sp" /><span className="help" style={{ fontSize: 12, color: 'var(--muted)' }}>Default: the last 12 months.</span></div>
     <div id="ps"><Panels panels={d.panels} ctx={ctx} withTitles={multi} margin="6px 0 6px" /></div>
   </>;

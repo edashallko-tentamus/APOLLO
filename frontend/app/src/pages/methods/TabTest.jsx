@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { Card, Field, Pick, ROUNDING, useSigned } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 function initial(d) {
   const v = d.version; const t = d.test;
@@ -91,9 +92,9 @@ export default function TabTest({ d, reload }) {
     <Section title="Pricing and turnaround" help="Kept in the Test catalogue, outside the validated version: a price change never needs a new version.">
       {e ? <div className="wdcards"><Card label="List price">{money(e.list_price || 0)}</Card><Card label="Pricing">{e.pricing_mode}</Card>
         <Card label="Turnaround">{e.standard_tat} {String(e.tat_unit).replace(' Days', ' days').toLowerCase()}</Card><Card label="Rush schedule">{e.rush_schedule || 'None'}</Card></div>
-        : <div className="notice">Not in the catalogue yet.</div>}
-      <a className="btn" href={`#/catalog/${t.id}`}>Open pricing and turnaround</a>
+        : <div className="alert alert-warning">Not in the catalogue yet.</div>}
+      <Button variant="outline-secondary" href={`#/catalog/${t.id}`}>Open pricing and turnaround</Button>
     </Section>
-    {ed && <div className="wdbar"><span className="sp" /><button type="button" className="btn primary" id="save" disabled={saving} onClick={save}>Save</button></div>}
+    {ed && <div className="wdbar"><span className="sp" /><Button type="button" variant="primary" id="save" disabled={saving} onClick={save}>Save</Button></div>}
   </>;
 }

@@ -13,6 +13,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { money, plural } from '../../lib/format.js';
 import PickList from './PickList.jsx';
+import { Button } from 'react-bootstrap';
 
 const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString([], { dateStyle: 'medium' }) : ''; };
 const itemLabel = (c) => `${c.charge_name} (${c.kind}, ${money(c.client_price ?? c.price)}${c.client_price !== null && c.client_price !== undefined ? ' from ' + c.project_code : ''})`;
@@ -83,7 +84,7 @@ export function OrderChargesCard({ orderId, samples = [], onChange }) {
 
   return (
     <Section title="Charges" help="Kits, shipping, report fees, surcharges and discounts on this order. Ready to invoice as soon as they are added; never printed on a COA."
-      actions={d.can_edit && <button type="button" className="btn" onClick={add}>+ Add a charge…</button>}>
+      actions={d.can_edit && <Button type="button" variant="outline-secondary" onClick={add}>+ Add a charge…</Button>}>
       <div className="blsum"><div><b>{money(active.reduce((s, r) => s + Number(r.amount || 0), 0))}</b><span>{plural(active.length, 'charge')}</span></div></div>
       <EditableGrid readOnly rows={d.rows} columns={columns} emptyText="No charges on this order." rowClass={mutedCancelled} />
     </Section>
@@ -140,7 +141,7 @@ export function QuoteChargesCard({ versionId, onChange }) {
   return (
     <Section title="Charges on this quote"
       help={d.editable ? 'Kits, shipping, fees and discounts at this client\'s price. Once accepted, they are used whenever the charge goes on one of the client\'s orders.' : 'Locked with the quote: create a new version to change them.'}
-      actions={d.editable && <button type="button" className="btn" onClick={add}>+ Add a charge…</button>}>
+      actions={d.editable && <Button type="button" variant="outline-secondary" onClick={add}>+ Add a charge…</Button>}>
       <EditableGrid readOnly rows={d.rows} columns={columns} emptyText="No charges on this quote." />
       <p className="help">{d.rows.length ? `Charges total: ${money(d.rows.reduce((s, r) => s + Number(r.line_total || 0), 0))}` : ''}</p>
     </Section>
@@ -166,8 +167,8 @@ export function ClientServiceLinesCard({ clientId, canEdit }) {
 
   return (
     <Section title="Service lines" help="What this client buys from us. The test picker on their orders opens on these first."
-      actions={canEdit && <button type="button" className="btn" onClick={change}>Change…</button>}>
-      <p>{chosen.length ? chosen.map((x, i) => <span key={x.id}>{i > 0 && ' '}<span className="badge">{x.line_name}</span></span>) : <span className="help">None chosen yet.</span>}</p>
+      actions={canEdit && <Button type="button" variant="outline-secondary" onClick={change}>Change…</Button>}>
+      <p>{chosen.length ? chosen.map((x, i) => <span key={x.id}>{i > 0 && ' '}<span className="badge text-bg-secondary">{x.line_name}</span></span>) : <span className="help">None chosen yet.</span>}</p>
     </Section>
   );
 }

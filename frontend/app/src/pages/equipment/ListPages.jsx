@@ -14,6 +14,7 @@ import Section from '../../components/Section.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { calCls, d8, EqTabs, Failed, inactiveRow, Loading, mntCls, NeedLab } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 // ================================================================ THE REGISTER
 const FILTERS = [['active', 'In use'], ['tagged', 'Tagged out'], ['caldue', 'Calibration due'], ['mine', 'Mine'], ['retired', 'Retired']];
@@ -73,8 +74,8 @@ export function RegisterPage({ query }) {
     <EqTabs cur="#/equipment" />
     <div className="eqbar">
       <span className="sp" /><BulkButtons kind="equipment" selected={() => picked().map((r) => r.id)} onDone={() => reloadRef.current()} />
-      <button type="button" className="btn" onClick={() => { const p = picked(); printTable(`Equipment: ${site.site_code} (${FILTER_NAME[filterRef.current] || 'In use'})`, PRINT_COLS, p.length ? p : shown()); }}>Print</button>
-      {me.can_edit && <><a className="btn" href="#/equipment/add">Add many (paste)</a><a className="btn primary" href="#/equipment/new">+ New equipment</a></>}
+      <Button type="button" variant="outline-secondary" onClick={() => { const p = picked(); printTable(`Equipment: ${site.site_code} (${FILTER_NAME[filterRef.current] || 'In use'})`, PRINT_COLS, p.length ? p : shown()); }}>Print</Button>
+      {me.can_edit && <><Button variant="outline-secondary" href="#/equipment/add">Add many (paste)</Button><Button variant="primary" href="#/equipment/new">+ New equipment</Button></>}
     </div>
     <PagedList load={load} query={query} filters={FILTERS} open={openEq}
       placeholder="Search by ID, name, type, maker, model, serial or owner; scan or type an ID and press Enter">
@@ -138,7 +139,7 @@ export function TypesDeptsPage() {
       subtitle={`${site.site_name}'s own lists, picked on each piece of equipment. A type or department in use cannot be removed: set it Inactive.`} />
     <EqTabs cur="#/equipment/lists" />
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : <>
-      {!me.can_lists && <div className="notice">You can view these lists. Changing them needs the equipment.lists permission in this lab.</div>}
+      {!me.can_lists && <div className="alert alert-warning">You can view these lists. Changing them needs the equipment.lists permission in this lab.</div>}
       <div className="cols">
         <Section title="Equipment types">
           <EditableGrid rows={L.types} columns={TYPE_COLS} allowAdd={me.can_lists} readOnly={!me.can_lists} what="equipment types" search

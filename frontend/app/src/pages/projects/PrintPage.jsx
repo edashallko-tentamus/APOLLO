@@ -4,6 +4,7 @@ import { getVersion, versionPackages } from '../../api/projects.js';
 
 import { useApi } from '../../hooks/useApi.js';
 import { money, pct } from '../../lib/format.js';
+import { Button, Card } from 'react-bootstrap';
 
 const days = (n, unit) => `${n} ${unit === 'Business Days' ? 'business' : 'calendar'} days`;
 const rushPays = (r) => (r.surcharge_type === 'Flat' ? money(r.surcharge_value * (1 - r.discount_pct / 100)) : (r.surcharge_value * (1 - r.discount_pct / 100)).toFixed(1) + '% of price');
@@ -12,7 +13,7 @@ export default function PrintPage({ params }) {
   const vid = params[0];
   const { data, error } = useApi(() => Promise.all([getVersion(vid, { fresh: true }), versionPackages(vid, { fresh: true }).catch(() => ({ rows: [] }))]), [vid]);
   useEffect(() => { document.body.classList.add('printing'); return () => document.body.classList.remove('printing'); }, []);
-  if (error) return <div className="card err">{error.message}</div>;
+  if (error) return <Card body className="err">{error.message}</Card>;
   if (!data) return <div className="loading">Loading…</div>;
 
   const [d, pk] = data;
@@ -22,7 +23,7 @@ export default function PrintPage({ params }) {
   const scheds = [...new Set(d.rush.map((r) => r.schedule_name))];
 
   return <>
-    <div className="noprint printbar"><a className="btn ghost" href={`#/quote/${vid}`}>Back to quote</a> <button type="button" className="btn primary" onClick={() => window.print()}>Print or save as PDF</button>
+    <div className="noprint printbar"><Button variant="light" href={`#/quote/${vid}`}>Back to quote</Button> <Button type="button" variant="primary" onClick={() => window.print()}>Print or save as PDF</Button>
       {['Draft', 'Submitted for Quote'].includes(v.status) && <span className="help">Draft: prices are not final until the quote is issued.</span>}</div>
     <div className="quote">
       <div className="qhead"><div><div className="qlogo">Tentamus North America</div><div className="help">Laboratory testing services · LIMS3 Sandbox (demo)</div></div>

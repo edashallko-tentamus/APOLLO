@@ -11,6 +11,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { newRequest, placeOrder } from './dialogs.jsx';
 import { closedRow, Failed, Loading, money, NeedLab, openRequest, PuTabs, QUEUE_COLS, signed } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const FILTERS = [['approve', 'To approve'], ['order', 'Approved, to order'], ['receive', 'Ordered, to receive'], ['mine', 'My requests'], ['all', 'All']];
 const AUDIT = { kind: 'purchasing' };
@@ -64,10 +65,10 @@ export default function RequestsPage({ query }) {
     <PuTabs />
     <div className="pubar"><span className="sp" />
       {(me.can_approve || me.can_approve_over) && <>
-        <button type="button" className="btn" onClick={approve}>Approve ticked</button>
-        <button type="button" className="btn" onClick={reject}>Reject ticked</button></>}
-      {me.can_order && <button type="button" className="btn" onClick={order}>Order ticked</button>}
-      {me.can_request && <button type="button" className="btn primary" onClick={() => newRequest(ui)}>+ New request</button>}
+        <Button type="button" variant="outline-secondary" onClick={approve}>Approve ticked</Button>
+        <Button type="button" variant="outline-secondary" onClick={reject}>Reject ticked</Button></>}
+      {me.can_order && <Button type="button" variant="outline-secondary" onClick={order}>Order ticked</Button>}
+      {me.can_request && <Button type="button" variant="primary" onClick={() => newRequest(ui)}>+ New request</Button>}
     </div>
     <div className="help" style={{ marginBottom: 8 }}>Inventory items are requested from Inventory (+ New Inventory Item as a request, or Reorder on any item); they appear here too.</div>
     {/* one page at a time from the server (0.35.0) */}

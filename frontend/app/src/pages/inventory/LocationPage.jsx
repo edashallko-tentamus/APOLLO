@@ -5,6 +5,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import Section from '../../components/Section.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { amtCls, d8, expCls, Failed, Kv, Loading, qty, ReadGrid } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const CHILD_COLS = [
   { field: 'location_code', title: 'Code', type: 'link', width: 110, href: (r) => '#/inventory/locations/' + r.id },
@@ -25,14 +26,14 @@ export default function LocationPage({ params: [id] }) {
   const l = d.location;
   return <>
     <div className="eyebrow">{l.site_code} · {l.path || ''}</div>
-    <PageHeader title={`${l.location_code}: ${l.location_name}`} audit={{ kind: 'location', id }} actions={<a className="btn ghost" href="#/inventory/locations">All locations</a>}
-      subtitle={<>{l.location_type} <Badge status={l.status} />{l.holds_samples && <> <span className="badge w-info">Holds samples</span></>}</>} />
+    <PageHeader title={`${l.location_code}: ${l.location_name}`} audit={{ kind: 'location', id }} actions={<Button variant="light" href="#/inventory/locations">All locations</Button>}
+      subtitle={<>{l.location_type} <Badge status={l.status} />{l.holds_samples && <> <span className="badge text-bg-info">Holds samples</span></>}</>} />
     <div className="cols">
-      <div className="card"><h2>Location</h2><Kv pairs={[
+      <Card body><h2>Location</h2><Kv pairs={[
         ['Code', l.location_code], ['Inside', l.parent_location_id ? <a href={'#/inventory/locations/' + l.parent_location_id}>{l.parent_code}</a> : 'Top level'],
         ['Full path', l.path], ['Conditions it provides', (l.supported_conditions || []).join(', ') || 'Not checked (none listed)'],
-        ['Holds samples', l.holds_samples ? 'Yes' : 'No']]} /></div>
-      <div className="card"><h2>Inside this location</h2><ReadGrid rows={d.children} columns={CHILD_COLS} emptyText="Nothing inside." /></div>
+        ['Holds samples', l.holds_samples ? 'Yes' : 'No']]} /></Card>
+      <Card body><h2>Inside this location</h2><ReadGrid rows={d.children} columns={CHILD_COLS} emptyText="Nothing inside." /></Card>
     </div>
     <Section title={`Inventory stored here (${d.lots.length})`}><ReadGrid rows={d.lots} columns={LOT_COLS} emptyText="No open lots here." /></Section>
     {(d.samples.length > 0 || l.holds_samples) && <Section title={`Samples stored here (${d.samples.length})`}><ReadGrid rows={d.samples} columns={SAMPLE_COLS} emptyText="No samples here." /></Section>}

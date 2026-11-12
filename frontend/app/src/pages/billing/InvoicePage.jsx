@@ -14,6 +14,7 @@ import { money } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { SelectGrid } from '../reports/shared.jsx';
 import { d8, dt, Failed, issueDrafts, Loading, pdfOf } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const late = (l) => Number(l.late_days) > 0 && l.rush_ordered;
 const lineRow = (l) => (late(l) ? 'bllate' : l.retest_of_id ? 'blretest' : l.is_charge ? 'blcharge' : '');
@@ -142,16 +143,16 @@ export default function InvoicePage({ params: [id] }) {
   const pay = i.payment_status && <span className={`blpay ${i.payment_status}`}>{i.payment_status}</span>;
   return <>
     <PageHeader title={title} subtitle={sub} audit={{ kind: 'invoice', id: i.id }} actions={<>
-      <button type="button" className="btn" onClick={() => pdfOf(i.id, siteId)}>{draft ? 'Preview PDF' : 'PDF'}</button>{' '}
-      {mine && <><button type="button" className="btn primary" onClick={issue}>Issue…</button>{' '}<button type="button" className="btn" disabled={busy} onClick={release}>Release draft</button></>}{' '}
-      {issuedInvoice && d.can_issue && Number(i.total) !== 0 && <button type="button" className="btn" onClick={creditIt}>Credit…</button>}</>} />
+      <Button type="button" variant="outline-secondary" onClick={() => pdfOf(i.id, siteId)}>{draft ? 'Preview PDF' : 'PDF'}</Button>{' '}
+      {mine && <><Button type="button" variant="primary" onClick={issue}>Issue…</Button>{' '}<Button type="button" variant="outline-secondary" disabled={busy} onClick={release}>Release draft</Button></>}{' '}
+      {issuedInvoice && d.can_issue && Number(i.total) !== 0 && <Button type="button" variant="outline-secondary" onClick={creditIt}>Credit…</Button>}</>} />
     {i.catchup && <div className="blbanner">Catch-up invoice: work completed before invoicing moved into LIMS3, dated the Friday of the week its COA was issued. It was not emailed or queued for QuickBooks.</div>}
     {credit && <div className="blbanner cn">Credits invoice <a href={'#/billing/invoices/' + i.credit_of_id}>{i.credits_number}</a>. Reason: {i.reason || ''}</div>}
     {d.credits.length > 0 && <div className="blbanner cn">Credited by {d.credits.map((x, k) => <span key={x.id}>{k > 0 && '; '}<a href={'#/billing/invoices/' + x.id}>{x.code}</a> ({money(-Number(x.total))}, {x.reason || ''})</span>)}.</div>}
     <Section title={credit ? 'Credit note details' : 'Invoice details'} actions={<>
-      {mine && <button type="button" className="btn" onClick={editDetails}>Change…</button>}{' '}
-      {issuedInvoice && d.can_issue && <button type="button" className="btn" onClick={payment}>{i.paid_on ? 'Change payment…' : 'Record payment…'}</button>}{' '}
-      {issuedInvoice && d.can_issue && !i.catchup && <button type="button" className="btn" onClick={fixPo}>Correct PO…</button>}</>}>
+      {mine && <Button type="button" variant="outline-secondary" onClick={editDetails}>Change…</Button>}{' '}
+      {issuedInvoice && d.can_issue && <Button type="button" variant="outline-secondary" onClick={payment}>{i.paid_on ? 'Change payment…' : 'Record payment…'}</Button>}{' '}
+      {issuedInvoice && d.can_issue && !i.catchup && <Button type="button" variant="outline-secondary" onClick={fixPo}>Correct PO…</Button>}</>}>
       <div className="bldet">
         <Cell label="Client"><a href={'#/clients/' + i.client_id}>{i.client_name}</a></Cell>
         <Cell label="Order"><a href={'#/orders/' + i.lab_order_id}>{i.order_code}</a></Cell>
@@ -166,7 +167,7 @@ export default function InvoicePage({ params: [id] }) {
     </Section>
     <div className="blinv"><div>
       <Section title="Lines" help={draft ? (mine ? 'Check each line against the quote. Price… corrects the price billed (with a reason, printed under the line); Rush… bills a late rush at the tier whose turnaround was met, or standard. Take off what should not be invoiced yet. Add a charge… puts a kit, shipping, a fee or a discount on this invoice (it is recorded on the order too).' : 'Only the person checking this draft changes it.') : ''}>
-        {mine && <div className="blfil"><button type="button" className="btn" onClick={addCharge}>Add a charge…</button> <button type="button" className="btn" disabled={busy} onClick={takeOff}>Take selected lines off</button></div>}
+        {mine && <div className="blfil"><Button type="button" variant="outline-secondary" onClick={addCharge}>Add a charge…</Button> <Button type="button" variant="outline-secondary" disabled={busy} onClick={takeOff}>Take selected lines off</Button></div>}
         <SelectGrid gridRef={g} rows={d.lines} columns={columns} rowClass={lineRow} />
       </Section>
       {(d.corrections || []).length > 0 && <Section title="Corrections" help="Each correction changed the PO number only, was signed with a reason, and sent the client a corrected copy. The original PDF is kept unchanged.">
@@ -174,7 +175,7 @@ export default function InvoicePage({ params: [id] }) {
           {k.document_id && <a href={correctionPdfUrl(k.id, siteId)} target="_blank" rel="noopener noreferrer">Corrected copy</a>} <span className="help">QuickBooks: {k.push_status}</span></li>)}</ul>
       </Section>}
       {d.push && <Section title="QuickBooks Online" help={`Queued ${dt(d.push.created_at)} as ${d.push.entity}: ${d.push.status}${d.push.last_error ? ' (' + d.push.last_error + ')' : ''}.`}
-        actions={<button type="button" className="btn ghost" onClick={() => setShowJson((x) => !x)}>Show what is sent</button>}>
+        actions={<Button type="button" variant="light" onClick={() => setShowJson((x) => !x)}>Show what is sent</Button>}>
         {showJson && <pre className="bljson">{JSON.stringify(d.push.payload, null, 2)}</pre>}
       </Section>}
       {d.emails.length > 0 && <Section title="Emailed" help="Sandbox: stored in the Outbox, not actually sent.">

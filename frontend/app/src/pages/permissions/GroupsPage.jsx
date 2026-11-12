@@ -9,6 +9,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import NeedLab from './NeedLab.jsx';
 import './permissions.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'groups' };
 const newGroup = () => ({ status: 'Active' });
@@ -62,9 +63,9 @@ function Groups() {
   return <>
     <PageHeader title={`Groups and permissions: ${code}`} audit={AUDIT}
       subtitle={`Admin. ${site.site_name}'s groups are its "roles": each holds a set of permissions from the list below, and a person's permissions are everything their groups give them, added together. Build any group the lab needs (for example an HPTLC group next to Lab Supervisor). The standard groups are a starting point the lab may change. Whoever holds "admin.groups" here approves these changes with their signature; the lab decides who that is (QA in 21 CFR 211 labs). The all-labs Executive group is view only and kept by system administrators.`}
-      actions={<><a className="btn" href="#/admin/users">People and groups</a> <a className="btn" href="#/admin/permissions">Permission matrix</a></>} />
-    {error ? <div className="card err">{error.message}</div> : !d ? <div className="loading">Loading…</div> : <>
-      {!d.canEdit && <div className="notice">You can view the groups. Changing them needs the admin.groups permission in this lab.</div>}
+      actions={<><Button variant="outline-secondary" href="#/admin/users">People and groups</Button> <Button variant="outline-secondary" href="#/admin/permissions">Permission matrix</Button></>} />
+    {error ? <Card body className="err">{error.message}</Card> : !d ? <div className="loading">Loading…</div> : <>
+      {!d.canEdit && <div className="alert alert-warning">You can view the groups. Changing them needs the admin.groups permission in this lab.</div>}
       <Section title="Groups" help="Add a group, rename it, describe what it is for, or set it Inactive (its members then lose what it gave them; history is kept). A group marked with a Department stands for that department: its members do that department's workflow steps.">
         <EditableGrid rows={parts.lab} columns={parts.groupColumns} allowAdd={d.canEdit} readOnly={!d.canEdit} what="groups" newRow={newGroup} rowClass={rowClass}
           sign={signGroups} save={saveGroups} afterSave={afterSave} />

@@ -6,6 +6,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { canonRows, Failed, listCol, loadLookups, Loading, NeedLab } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 const NO_ROWS = [];
 const newRow = () => ({}); // received date defaults to today when saved
@@ -50,7 +51,7 @@ export default function ReceiveManyPage() {
   const { data, error } = useApi(() => Promise.all([inventoryMeta(), loadLookups()]), []);
   if (!site) return <NeedLab />;
   return <>
-    <PageHeader title="Receive many" audit={{ kind: 'inventory' }} actions={<a className="btn ghost" href="#/inventory">Inventory</a>}
+    <PageHeader title="Receive many" audit={{ kind: 'inventory' }} actions={<Button variant="light" href="#/inventory">Inventory</Button>}
       subtitle="Paste a packing list from Excel (Name, Type, Solid or liquid, Analyte, Concentration, Unit, Lot #, Quantity, Unit, Expires, …) or add rows, then fill down (Ctrl+D) the location and storage condition. For one item at a time, use + New Inventory Item." />
     {error && !data ? <Failed error={error} /> : !data ? <Loading /> : <ReceiveGrid M={data[0]} L={data[1]} />}
   </>;

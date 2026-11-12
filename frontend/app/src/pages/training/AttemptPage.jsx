@@ -12,6 +12,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { d8, documentsOf } from './shared.js';
+import { Button, Card } from 'react-bootstrap';
 
 const SAMPLE_COLS = [
   { field: 'sample_code', title: 'Training sample', type: 'link', width: 160, href: (r) => '#/samples/' + r.id }, { field: 'status', title: 'Test', type: 'readonly', width: 110 }];
@@ -35,7 +36,7 @@ export default function AttemptPage({ params: [id] }) {
   const dialogs = useDialogs();
   const toast = useToast();
   const { data: d, error, reload } = useApi((o) => getAttempt(id, o), [id]);
-  if (error && !d) return <><PageHeader title="Competency" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Competency" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Competency" /><div className="loading">Loading…</div></>;
   const a = d.attempt;
   const open = a.status === 'In progress';
@@ -72,23 +73,23 @@ export default function AttemptPage({ params: [id] }) {
   }
 
   const actions = <>
-    {open && d.can.evaluate && <button type="button" className="btn primary" id="eval" onClick={evaluate}>Evaluate…</button>}
-    {a.status === 'Evaluated' && d.can.approve && d.me !== a.user_id && d.me !== a.evaluated_by && <> <button type="button" className="btn primary" id="ok" onClick={() => decide('Approved')}>Approve…</button> <button type="button" className="btn" id="rej" onClick={() => decide('Rejected')}>Reject…</button></>}
-    {['In progress', 'Evaluated'].includes(a.status) && (d.can.evaluate || d.can.approve) && <> <button type="button" className="btn ghost" id="wd" onClick={withdraw}>Withdraw…</button></>}
+    {open && d.can.evaluate && <Button type="button" variant="primary" id="eval" onClick={evaluate}>Evaluate…</Button>}
+    {a.status === 'Evaluated' && d.can.approve && d.me !== a.user_id && d.me !== a.evaluated_by && <> <Button type="button" variant="primary" id="ok" onClick={() => decide('Approved')}>Approve…</Button> <Button type="button" variant="outline-secondary" id="rej" onClick={() => decide('Rejected')}>Reject…</Button></>}
+    {['In progress', 'Evaluated'].includes(a.status) && (d.can.evaluate || d.can.approve) && <> <Button type="button" variant="light" id="wd" onClick={withdraw}>Withdraw…</Button></>}
   </>;
   return <>
     <PageHeader title={`Competency ${a.attempt_code}`} subtitle={<><a href={'#/training/people/' + a.user_id}>{a.full_name}</a>: {a.kind} competency on {a.test_name} <Badge status={a.status} /></>}
       actions={actions} audit={{ kind: 'competency', id }} />
-    <div className="card meta3 wide">
+    <Card body className="meta3 wide">
       <div><span>How</span><b>{a.route}</b></div><div><span>Started by</span><b>{a.started_by_name}, {d8(a.created_at)}</b></div>
       <div><span>Evaluation</span><b>{a.evaluation || 'Not yet'}{a.evaluated_by_name ? ` (${a.evaluated_by_name})` : ''}</b></div>
       <div><span>QA</span><b>{a.decided_by_name ? `${a.status} by ${a.decided_by_name}` : 'Not yet'}</b></div>
       {a.evaluation_note && <div><span>Evaluator&apos;s note</span><b>{a.evaluation_note}</b></div>}
       {a.decision_note && <div><span>QA&apos;s note</span><b>{a.decision_note}</b></div>}
       {a.withdrawn_reason && <div><span>Withdrawn</span><b>{a.withdrawn_reason}</b></div>}
-    </div>
+    </Card>
     {a.route === 'Record'
-      ? <Section title="The training" help={`${a.description || ''} (${d8(a.trained_on)})`} actions={open && <button type="button" className="btn" id="addev" onClick={attach}>Attach evidence…</button>}>
+      ? <Section title="The training" help={`${a.description || ''} (${d8(a.trained_on)})`} actions={open && <Button type="button" variant="outline-secondary" id="addev" onClick={attach}>Attach evidence…</Button>}>
         <ReadGrid rows={d.evidence} columns={evidenceCols} emptyText="No evidence attached yet." /></Section>
       : <Section title="Training samples" help={`Run them like any sample (Testing > Backlog, ${a.sample_tests_done} of ${a.sample_tests} with final results). Each result is compared with the known value (its specification) in QC Review. The trainer evaluates once all have final results.`}>
         <ReadGrid rows={d.samples} columns={SAMPLE_COLS} />

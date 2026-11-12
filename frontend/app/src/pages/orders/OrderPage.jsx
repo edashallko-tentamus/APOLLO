@@ -26,6 +26,7 @@ import { showEmail } from '../intake/EmailDialog.jsx';
 import { openTestPicker } from '../picker/TestPicker.jsx';
 import { openAnalyteDialog } from './AnalyteDialog.jsx';
 import { d8, dt, hasVal, quoteHref, quoteText, sampleName, unit } from './orderFormat.js';
+import { Button, Card } from 'react-bootstrap';
 
 const CONDITIONS = ['Acceptable', 'Damaged', 'Temperature excursion', 'Short shipped', 'Leaking', 'Other'];
 const SAMPLE_SKIP = ['_pick', '_open', 'id'];
@@ -42,7 +43,7 @@ export default function OrderPage({ params }) {
   const coas = useApi((o) => api.orderCoas(id, o).catch(() => ({ rows: [] })), [id]);
   const { reload: r1 } = order; const { reload: r2 } = custody; const { reload: r3 } = coas;
   const reload = useCallback(() => { r1(); r2(); r3(); }, [r1, r2, r3]);
-  if (order.error && !order.data) return <div className="card err">{order.error.message}</div>;
+  if (order.error && !order.data) return <Card body className="err">{order.error.message}</Card>;
   if (!order.data) return <div className="loading">Loading…</div>;
   return <OrderView id={id} d={order.data} cus={custody.data} coas={coas.data?.rows || []} reload={reload} reloadCustody={r2} />;
 }
@@ -58,9 +59,9 @@ function TestPanel({ sample, tests, columns, rowClass, projects, hasPackages, on
   return (
     <div onMouseDown={stop} onMouseOver={stop} onDoubleClick={stop} onKeyDown={stop} onContextMenu={stop} onClick={stop}>
       <div className="dtool"><span className="dtitle">Tests on {sample.sample_code || sample.client_sample_id || 'this sample'}</span>
-        <button type="button" className="mini" data-addt onClick={() => onAddTests([sample.id])}>+ Add tests</button>{' '}
-        <button type="button" className="mini" data-applyp disabled={!projects.length} onClick={() => onApplyProject([sample.id])}>+ Apply a project</button>
-        {hasPackages && <> <button type="button" className="mini" data-addpk onClick={() => onAddPackage([sample.id])}>+ Add a package</button></>}
+        <Button type="button" variant="outline-secondary" size="sm" className="mini" data-addt onClick={() => onAddTests([sample.id])}>+ Add tests</Button>{' '}
+        <Button type="button" variant="outline-secondary" size="sm" className="mini" data-applyp disabled={!projects.length} onClick={() => onApplyProject([sample.id])}>+ Apply a project</Button>
+        {hasPackages && <> <Button type="button" variant="outline-secondary" size="sm" className="mini" data-addpk onClick={() => onAddPackage([sample.id])}>+ Add a package</Button></>}
       </div>
       <div className="stests">
         <DataGrid grid={grid} rowClass={rowClass} emptyText="No tests yet: add a test or apply a project." onContextMenu={onMenu} />
@@ -369,35 +370,35 @@ function OrderView({ id, d, cus, coas, reload, reloadCustody }) {
     <PageHeader title={`Lab order ${o.order_code}`} audit={{ kind: 'order', id }}
       subtitle={<><a href={'#/clients/' + o.client_id}>{o.client_code} {o.client_name}</a> · {o.site_code} · {o.submission_channel} <Badge status={o.status} /> {o.is_gmp_client && <Badge status="GMP" />}</>}
       actions={<>
-        <a className="btn ghost" href="#/orders">All orders</a>{' '}
-        {o.status === 'Draft' && <><button type="button" className="btn" id="submit" onClick={() => run(submitOrder)} disabled={busy}>Submit order</button>{' '}</>}
-        <button type="button" className="btn" id="edit" onClick={editOrder}>Edit order</button>{' '}
-        <button type="button" className="btn" id="labels" disabled={!d.samples.some((x) => x.sample_code)} title={d.samples.some((x) => x.sample_code) ? undefined : 'Labels print once samples are logged (they need their sample ID)'}
-          onClick={() => printLabels('sample', d.samples.filter((x) => x.sample_code && x.status !== 'Cancelled').map((x) => x.id))}>Print labels</button>{' '}
-        <button type="button" className="btn primary" id="receive" disabled={!expected.length} title="Log the ticked samples and sign the chain of custody (Received by)" onClick={receive}>Receive and sign ({expected.length})</button>
-        {!(cus && cus.required) && <> <button type="button" className="btn ghost" id="log" disabled={!expected.length || busy} title="Log without a signed receipt on the chain of custody" onClick={() => run(logNow)}>Log samples without signing ({expected.length})</button></>}
+        <Button variant="light" href="#/orders">All orders</Button>{' '}
+        {o.status === 'Draft' && <><Button type="button" variant="outline-secondary" id="submit" onClick={() => run(submitOrder)} disabled={busy}>Submit order</Button>{' '}</>}
+        <Button type="button" variant="outline-secondary" id="edit" onClick={editOrder}>Edit order</Button>{' '}
+        <Button type="button" variant="outline-secondary" id="labels" disabled={!d.samples.some((x) => x.sample_code)} title={d.samples.some((x) => x.sample_code) ? undefined : 'Labels print once samples are logged (they need their sample ID)'}
+          onClick={() => printLabels('sample', d.samples.filter((x) => x.sample_code && x.status !== 'Cancelled').map((x) => x.id))}>Print labels</Button>{' '}
+        <Button type="button" variant="primary" id="receive" disabled={!expected.length} title="Log the ticked samples and sign the chain of custody (Received by)" onClick={receive}>Receive and sign ({expected.length})</Button>
+        {!(cus && cus.required) && <> <Button type="button" variant="light" id="log" disabled={!expected.length || busy} title="Log without a signed receipt on the chain of custody" onClick={() => run(logNow)}>Log samples without signing ({expected.length})</Button></>}
       </>} />
-    {o.account_status === 'On Hold' && <div className="notice"><b>Client is On Hold.</b> Samples can be logged and tested, but reports cannot be released until the hold is lifted.</div>}
-    <div className="card meta3 wide">
+    {o.account_status === 'On Hold' && <div className="alert alert-warning"><b>Client is On Hold.</b> Samples can be logged and tested, but reports cannot be released until the hold is lifted.</div>}
+    <Card body className="meta3 wide">
       <div><span>Ordering contact</span><b><a href={'#/contacts?find=' + encodeURIComponent(o.ordering_contact_code)}>{o.ordering_contact}</a></b></div><div><span>PO</span><b>{o.po_number || '—'}</b></div>
       <div><span>Client license</span><b className={curLic && curLic.state === 'Expired' ? 'bad' : undefined}>{licText(curLic)}</b></div>
       <div><span>Samples logged</span><b>{o.logged_count} of {o.sample_count}</b></div><div><span>Order due</span><b>{d8(o.due_date) || '—'}</b></div>
       <div><span>Order value</span><b>{money(o.order_value)}</b></div><div><span>Rush</span><b>{o.rush_pending ? o.rush_pending + ' awaiting approval' : o.rush_active ? o.rush_active + ' active' : 'None'}</b></div>
-    </div>
+    </Card>
     <Section title="Samples and tests" help="Add rows, paste from Excel, fill down with Ctrl+D. Several bottles or bags can be one sample (Containers). Each sample's tests are listed under it (▾ shows or hides them). Logging assigns the sample ID and starts the clock (Day 0)."
       actions={<>
-        <button type="button" className="btn" id="applyP" disabled={!projects.length} onClick={() => applyProject(picked().map((r) => r.id))}>Apply project to ticked samples</button>{' '}
-        <button type="button" className="btn" id="addT" onClick={() => addTest(picked().map((r) => r.id))}>Add tests to ticked samples…</button>{' '}
-        {hasPackages && <><button type="button" className="btn" id="addPk" onClick={() => addPackage(picked().map((r) => r.id))}>Add a package to ticked samples</button>{' '}</>}
-        <button type="button" className="btn" id="rushAll" onClick={rushAll}>Rush the whole order</button>{' '}
-        <button type="button" className="btn ghost" id="cancelS" title="Cancel the ticked samples and their tests (kept, greyed; a reason is asked)" onClick={() => cancelItems({ samples: picked().filter((r) => r.status !== 'Cancelled') })}>Cancel ticked samples…</button>{' '}
-        <button type="button" className="btn ghost" id="toggleAll" disabled={!d.samples.length} onClick={toggleAll}>{anyShown ? 'Hide all tests' : 'Show all tests'}</button>
+        <Button type="button" variant="outline-secondary" id="applyP" disabled={!projects.length} onClick={() => applyProject(picked().map((r) => r.id))}>Apply project to ticked samples</Button>{' '}
+        <Button type="button" variant="outline-secondary" id="addT" onClick={() => addTest(picked().map((r) => r.id))}>Add tests to ticked samples…</Button>{' '}
+        {hasPackages && <><Button type="button" variant="outline-secondary" id="addPk" onClick={() => addPackage(picked().map((r) => r.id))}>Add a package to ticked samples</Button>{' '}</>}
+        <Button type="button" variant="outline-secondary" id="rushAll" onClick={rushAll}>Rush the whole order</Button>{' '}
+        <Button type="button" variant="light" id="cancelS" title="Cancel the ticked samples and their tests (kept, greyed; a reason is asked)" onClick={() => cancelItems({ samples: picked().filter((r) => r.status !== 'Cancelled') })}>Cancel ticked samples…</Button>{' '}
+        <Button type="button" variant="light" id="toggleAll" disabled={!d.samples.length} onClick={toggleAll}>{anyShown ? 'Hide all tests' : 'Show all tests'}</Button>
       </>}>
       {(d.elsewhere || []).length > 0 && <p className="help" id="subc">Quoted tests that belong to another lab are subcontracted from {o.site_code} and cannot be ordered here yet: {d.elsewhere.map((x) => `${x.test_name} (${x.site_code})`).join(', ')}. Order them at that lab.</p>}
       <div className={`savebar${testChanges || testErrors ? ' show' : ''}`} id="tsb"><span className="pending">{plural(testChanges, 'test')} changed{testErrors > 0 && <> · <b className="bad">fix red cells</b></>}</span>
-        <button type="button" className="btn ghost" id="tundo" onClick={discardTests}>Discard test changes</button><button type="button" className="btn primary" id="tsave" onClick={() => run(saveTestRows)} disabled={busy}>Save tests</button></div>
+        <Button type="button" variant="light" id="tundo" onClick={discardTests}>Discard test changes</Button><Button type="button" variant="primary" id="tsave" onClick={() => run(saveTestRows)} disabled={busy}>Save tests</Button></div>
       <div className={`savebar${sampleChanges.length || sampleErrors ? ' show' : ''}`}><span className="pending">{plural(sampleChanges.length, 'sample')} changed{sampleErrors > 0 && <> · <b className="bad">fix red cells</b></>}</span>
-        <button type="button" className="btn ghost" onClick={() => resetSamples(sRows)}>Discard</button><button type="button" className="btn primary" onClick={() => run(saveSampleRows)} disabled={busy}>Save samples</button></div>
+        <Button type="button" variant="light" onClick={() => resetSamples(sRows)}>Discard</Button><Button type="button" variant="primary" onClick={() => run(saveSampleRows)} disabled={busy}>Save samples</Button></div>
       <div id="sg"><DataGrid grid={sg} rowClass={sampleRowClass} detail={detail} onContextMenu={sampleMenu} emptyText="No samples yet: add rows or paste from Excel." /></div>
     </Section>
     {d.attachments && d.attachments.length > 0 && <Section title="Attachments" help="Submission forms, chains of custody and other files (added from a sample's page).">

@@ -12,6 +12,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { dt, OutcomeChip, resCls, text } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const WHO = { executor: 'Executed by', analyst: 'Verification analyst', reviewer: 'Verification reviewer', witness: 'Verification witness' };
 const evName = (n) => 'E-' + String(n).padStart(2, '0');
@@ -53,7 +54,7 @@ export default function VerificationPage({ params: [id] }) {
   const { data: d, error, reload } = useApi((o) => getVerification(id, o), [id]);
   // refresh while the server captures, as long as this page is open
   useEffect(() => { if (!d?.capturing) return undefined; const t = setTimeout(reload, 3000); return () => clearTimeout(t); }, [d, reload]);
-  if (error && !d) return <><PageHeader title="Workflow verification" /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Workflow verification" /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Workflow verification" /><div className="loading">Loading…</div></>;
 
   const w = d.verification; const S = d.signatures;
@@ -94,15 +95,15 @@ export default function VerificationPage({ params: [id] }) {
   const subtitle = <>Workflow verification <Badge status={w.status} /> <OutcomeChip o={w.outcome} /> · <a href={back}>{`${w.test_code} version ${w.version_no} (${w.version_status})`}</a> · {w.site_code}</>;
   return <>
     <PageHeader title={`${w.verification_code}: ${w.test_name} v${w.version_no}`} subtitle={subtitle} audit={{ kind: 'verification', id: w.id }}
-      actions={<a className="btn ghost" href={back}>Back to the version</a>} />
+      actions={<Button variant="light" href={back}>Back to the version</Button>} />
     <div className="vacts noprint">
-      {w.status === 'Protocol draft' && isQa && <button type="button" className="btn primary" id="vapprove" onClick={approve}>Approve the protocol (QA)</button>}
-      {w.status === 'Protocol approved' && isDesigner && <button type="button" className="btn primary" id="vexec" onClick={execute}>Execute the run</button>}
-      {w.status === 'Executed' && !hasEv && !d.capturing && (isQa || isDesigner) && <button type="button" className="btn primary" id="vcapture" onClick={capture}>Capture the evidence</button>}
-      {w.status === 'Executed' && hasEv && isQa && <button type="button" className="btn primary" id="vsign" onClick={sign}>Sign the report (QA)</button>}
-      {['Protocol draft', 'Protocol approved', 'Executed'].includes(w.status) && (isQa || isDesigner) && <button type="button" className="btn" id="vcancel" onClick={cancel}>Cancel</button>}
-      <a className="btn ghost" id="vdocx" href={docxUrl(w.id, site?.id)}>Word document</a>
-      <button type="button" className="btn ghost" id="vprint" onClick={() => window.print()}>Print</button>
+      {w.status === 'Protocol draft' && isQa && <Button type="button" variant="primary" id="vapprove" onClick={approve}>Approve the protocol (QA)</Button>}
+      {w.status === 'Protocol approved' && isDesigner && <Button type="button" variant="primary" id="vexec" onClick={execute}>Execute the run</Button>}
+      {w.status === 'Executed' && !hasEv && !d.capturing && (isQa || isDesigner) && <Button type="button" variant="primary" id="vcapture" onClick={capture}>Capture the evidence</Button>}
+      {w.status === 'Executed' && hasEv && isQa && <Button type="button" variant="primary" id="vsign" onClick={sign}>Sign the report (QA)</Button>}
+      {['Protocol draft', 'Protocol approved', 'Executed'].includes(w.status) && (isQa || isDesigner) && <Button type="button" variant="outline-secondary" id="vcancel" onClick={cancel}>Cancel</Button>}
+      <Button variant="light" id="vdocx" href={docxUrl(w.id, site?.id)}>Word document</Button>
+      <Button type="button" variant="light" id="vprint" onClick={() => window.print()}>Print</Button>
     </div>
     {!w.current && !['Report signed', 'Cancelled'].includes(w.status) && <div className="vwarn"><b>The version changed after this protocol was written.</b> It can no longer be approved or executed: write a new protocol from the version&apos;s Review tab.</div>}
     {d.capturing && <div className="vnote"><b>Capturing the evidence:</b> the server is taking screenshots of the run&apos;s pages (about a minute). This page refreshes by itself.</div>}

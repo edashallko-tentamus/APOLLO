@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { dt, KINDS } from './calc.js';
 import './logbooks.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'logbooks' };
 const SUB = 'Equipment checks, temperatures, cultures, inocula, daily controls and sample weights, recorded in a grid and signed once. QA approves each logbook\'s entries daily or weekly; a failed entry on a piece of equipment flags the batches that used it in QC Review.';
@@ -39,7 +40,7 @@ export default function LogbooksPage() {
   const toast = useToast();
   const { data: d, error } = useApi((o) => listLogbooks(o), []);
   const due = useMemo(() => (d?.due || []).map((x, i) => ({ ...x, key: i })), [d]);
-  if (error && !d) return <><PageHeader title="Logbooks" audit={AUDIT} /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Logbooks" audit={AUDIT} /><Card body className="err">{error.message}</Card></>;
   if (!d) return <><PageHeader title="Logbooks" audit={AUDIT} /><div className="loading">Loading…</div></>;
 
   async function newLogbook() {
@@ -65,14 +66,14 @@ export default function LogbooksPage() {
 
   return <>
     <PageHeader title="Logbooks" subtitle={SUB} audit={AUDIT} actions={<>
-      {d.can_review && <a className="btn" href="#/logbooks/review">Logbook review ({d.to_review}{d.overdue ? `, ${d.overdue} overdue` : ''})</a>}
-      {d.can_design && <button type="button" className="btn primary" onClick={newLogbook}>+ New logbook</button>}
+      {d.can_review && <Button variant="outline-secondary" href="#/logbooks/review">Logbook review ({d.to_review}{d.overdue ? `, ${d.overdue} overdue` : ''})</Button>}
+      {d.can_design && <Button type="button" variant="primary" onClick={newLogbook}>+ New logbook</Button>}
     </>} />
-    {due.length > 0 && <div className="card">
+    {due.length > 0 && <Card body>
       <h3 style={{ margin: '0 0 6px' }}>Due now</h3>
       <div className="lb-note">Entries the lab owes today, this week or this month (a Daily, Weekly or Monthly logbook, per piece of equipment it covers).</div>
       <ReadGrid rows={due} columns={DUE_COLS} keyField="key" />
-    </div>}
-    <div className="card"><ReadGrid rows={d.rows} columns={COLS} search emptyText="No logbooks yet." rowClass={mutedInactive} /></div>
+    </Card>}
+    <Card body><ReadGrid rows={d.rows} columns={COLS} search emptyText="No logbooks yet." rowClass={mutedInactive} /></Card>
   </>;
 }

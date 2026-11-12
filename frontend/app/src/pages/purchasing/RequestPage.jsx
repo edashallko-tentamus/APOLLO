@@ -11,6 +11,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { editRequest, placeOrder, receiveDialog } from './dialogs.jsx';
 import { d8, dt, Failed, Kv, Loading, money, num, signed } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 function receiptColumns(unit, siteId) {
   return [
@@ -56,13 +57,13 @@ export default function RequestPage({ params }) {
       if (done) { toast('Saved and signed.'); reload(); }
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
-  const Btn = ({ k, label, show, primary }) => (show ? <button type="button" className={`btn${primary ? ' primary' : ''}`} disabled={busy} onClick={() => act(k)}>{label}</button> : null);
+  const Btn = ({ k, label, show, primary }) => (show ? <Button type="button" variant={primary ? 'primary' : 'outline-secondary'} disabled={busy} onClick={() => act(k)}>{label}</Button> : null);
   const supOk = l.supplier_status === 'Approved';
 
   return <>
     <div className="eyebrow">{l.line_code} · {l.site_code} · {l.line_type}</div>
     <PageHeader title={l.description} subtitle={<Badge status={l.status} />} audit={{ kind: 'purchaseline', id }}
-      actions={<a className="btn ghost" href="#/purchasing">All requests</a>} />
+      actions={<Button variant="light" href="#/purchasing">All requests</Button>} />
     <div className="actbar">
       <Btn k="approve" label={l.status === 'Awaiting second approval' ? 'Give second approval' : 'Approve'} show={open && (l.status === 'Requested' ? me.can_approve : me.can_approve_over)} primary />
       <Btn k="reject" label="Reject" show={open && me.can_approve} />
@@ -71,16 +72,16 @@ export default function RequestPage({ params }) {
       <Btn k="edit" label="Change" show={open && l.line_type !== 'Inventory item'} />
       <Btn k="cancel" label="Cancel request" show={['Requested', 'Awaiting second approval', 'Approved'].includes(l.status)} />
     </div>
-    {l.supplier_id && !supOk && !['Received', 'Cancelled', 'Rejected'].includes(l.status) && <div className="notice">{l.supplier_name} is {String(l.supplier_status).toLowerCase()} for this lab: this request cannot be approved or ordered until QA qualifies the supplier.</div>}
-    {l.status === 'Rejected' && <div className="notice">Rejected: {l.rejected_reason || ''}</div>}
+    {l.supplier_id && !supOk && !['Received', 'Cancelled', 'Rejected'].includes(l.status) && <div className="alert alert-warning">{l.supplier_name} is {String(l.supplier_status).toLowerCase()} for this lab: this request cannot be approved or ordered until QA qualifies the supplier.</div>}
+    {l.status === 'Rejected' && <div className="alert alert-warning">Rejected: {l.rejected_reason || ''}</div>}
     <div className="statcards">
-      <div className={`statcard ${open ? 'alert' : l.status === 'Rejected' ? 'deficient' : 'conforms'}`}><span>Status</span><b>{l.status}</b></div>
-      <div className={`statcard ${l.needs_second ? 'alert' : ''}`}><span>Amount</span><b>{l.amount === null ? 'No price given' : money(l.amount)}{l.needs_second ? ' (second approval)' : ''}</b></div>
+      <div className={`statcard ${open ? 'calert' : l.status === 'Rejected' ? 'deficient' : 'conforms'}`}><span>Status</span><b>{l.status}</b></div>
+      <div className={`statcard ${l.needs_second ? 'calert' : ''}`}><span>Amount</span><b>{l.amount === null ? 'No price given' : money(l.amount)}{l.needs_second ? ' (second approval)' : ''}</b></div>
       <div className="statcard"><span>Received</span><b>{num(l.received_quantity)} of {num(l.quantity)} {l.unit || ''}</b></div>
       {l.actual_amount !== null && l.actual_amount !== undefined && <div className="statcard"><span>Actually paid (received so far)</span><b>{money(l.actual_amount)}</b></div>}
     </div>
     <div className="cols">
-      <div className="card"><h2>Request</h2><Kv pairs={[
+      <Card body><h2>Request</h2><Kv pairs={[
         ['Kind', l.line_type], ['What', l.description], ['For', l.scope_text || ''],
         ['Supplier', l.supplier_id ? <><a href={'#/purchasing/suppliers/' + l.supplier_id}>{l.supplier_name}</a> <span className={supOk ? 'okc' : 'bad'}>({l.supplier_status})</span></> : ''],
         ['Catalog / quote #', l.catalog_number],
@@ -88,11 +89,11 @@ export default function RequestPage({ params }) {
         ['Quantity', `${num(l.quantity)} ${l.unit || ''}`], ['Estimated price per unit', money(l.unit_price)],
         ['Needed by', d8(l.needed_by)], ['Why', l.justification],
         ['Inventory item', l.lot_code ? (d.lots || []).map((x, i) => <span key={x.id}>{i > 0 && ', '}<a href={'#/inventory/lots/' + x.id}>{x.lot_code}</a> ({x.receipt_status})</span>) : ''],
-        ['Equipment', l.equipment_id ? <a href={'#/equipment/' + l.equipment_id}>{l.equipment_code}</a> : '']]} /></div>
-      <div className="card"><h2>Approvals and order</h2><Kv pairs={[
+        ['Equipment', l.equipment_id ? <a href={'#/equipment/' + l.equipment_id}>{l.equipment_code}</a> : '']]} /></Card>
+      <Card body><h2>Approvals and order</h2><Kv pairs={[
         ['Requested', `${l.requested_by_name || ''} ${dt(l.requested_at)}`], ['Approved', l.approved_by ? `${l.approved_by_name} ${dt(l.approved_at)}` : ''],
         ['Second approval', l.approved2_by ? `${l.approved2_by_name} ${dt(l.approved2_at)}` : l.needs_second ? 'Needed (General Manager)' : 'Not needed'],
-        ['Order', l.purchase_order_id ? <><a href={'#/purchasing/orders/' + l.purchase_order_id}>{l.po_code}</a>{l.external_po_number ? ` (finance PO ${l.external_po_number})` : ''}</> : '']]} /></div>
+        ['Order', l.purchase_order_id ? <><a href={'#/purchasing/orders/' + l.purchase_order_id}>{l.po_code}</a>{l.external_po_number ? ` (finance PO ${l.external_po_number})` : ''}</> : '']]} /></Card>
     </div>
     <Section title="Receipts" help="Each delivery against this request: how much, any problem, and the packing slip. What is not yet received stays open as a back-order.">
       <ReadGrid rows={d.receipts} columns={rcols} emptyText="Nothing received yet." />

@@ -11,6 +11,7 @@ import { IncubationPanel, PreparationForm, SplitPanel } from './MicroPanels.jsx'
 import ReviewPanel from './QcReview.jsx';
 import { CalcGrid } from './ResultPanels.jsx';
 import { BENCH_TYPES, dt, isPast, nfmt, runsAt } from './shared.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const REPREP_TYPES = ['Data Entry', 'Calculation', 'Weighing', 'Preparation', 'Dilution'];
 const AUTOSAVE_TYPES = ['Weighing', 'Dilution', 'Data Entry', 'Plating/Inoculation']; // bench grids flushed before Complete step
@@ -26,7 +27,7 @@ function ReviewBar({ ctx, s }) {
     <div className={`rvbar ${m.mark_id ? 'ok' : ''}`}>
       <span>{m.mark_id ? <>✓ Approved in QC Review by <b>{m.marked_by_name || ''}</b> {dt(m.marked_at)}</>
         : can ? <><b>QC Review:</b> check this step as recorded, then approve it.</> : 'Waiting for the reviewer to approve this step.'}</span>
-      {can && <button type="button" className={`btn ${m.mark_id ? '' : 'primary'}`} data-mark={m.mark_id ? 'undo' : 'approve'} onClick={() => A.markStep(ctx, s.id, !!m.mark_id)}>{m.mark_id ? 'Undo' : 'Approve step'}</button>}
+      {can && <Button type="button" variant={m.mark_id ? 'outline-secondary' : 'primary'} data-mark={m.mark_id ? 'undo' : 'approve'} onClick={() => A.markStep(ctx, s.id, !!m.mark_id)}>{m.mark_id ? 'Undo' : 'Approve step'}</Button>}
     </div>
   );
 }
@@ -102,7 +103,7 @@ export default function StepPanel({ ctx, s, run }) {
     rmsamples: () => A.removeSamples(ctx, rowsSel()),
     aliquot: () => A.scanAliquot(ctx, s),
   };
-  const btn = (a, label, primary, title) => <button key={a} type="button" className={`btn${primary ? ' primary' : ''}`} data-a={a} title={title} onClick={H[a]}>{label}</button>;
+  const btn = (a, label, primary, title) => <Button key={a} type="button" variant={primary ? 'primary' : 'outline-secondary'} data-a={a} title={title} onClick={H[a]}>{label}</Button>;
   const acts = [];
   if (canWork && isEq) acts.push(btn('eq', 'Add equipment'));
   if (canWork && isMat) acts.push(btn('mat', 'Add material'));
@@ -156,7 +157,7 @@ export default function StepPanel({ ctx, s, run }) {
 
   const curRunInfo = d.runs.find((x) => x.step_run_id === s.id && Number(x.run_no) === curRun);
   return (
-    <div className="card">
+    <Card body>
       <div className="tbhead"><div><div className="t">{s.step_name} <Badge status={s.status} /></div>
         <div className="m">{T}{types ? ' · equipment: ' + types : ''}{witness !== 'None' ? ` · witness ${witness.toLowerCase()}` : ''}
           {s.status === 'Completed' && <> · performed by <b>{s.performed_name || ''}</b> {dt(s.completed_at)}{s.witness_name && <>, witnessed by <b>{s.witness_name}</b></>}</>}</div></div>
@@ -179,7 +180,7 @@ export default function StepPanel({ ctx, s, run }) {
       {chips.length > 0 && <div className="tbused">{chips}</div>}
       <ReviewBar ctx={ctx} s={s} />
       <div id="body">{body}</div>
-    </div>
+    </Card>
   );
 }
 

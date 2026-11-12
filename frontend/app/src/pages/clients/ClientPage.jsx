@@ -14,6 +14,7 @@ import { openNewProject } from '../projects/newProject.js';
 import { openNewOrder } from '../orders/newOrder.jsx';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { clientForm, day, licenseStateCls } from './clientForm.jsx';
+import { Button, Card } from 'react-bootstrap';
 
 const LICENSE_TYPES = ['Cannabis distributor', 'Cannabis manufacturer', 'Cannabis cultivator', 'Cannabis retailer', 'FDA registration', 'State manufacturer', 'State food processor', 'Business license'];
 const retiredMuted = (r) => (r.status_text === 'Retired' ? 'mutedrow' : '');
@@ -66,7 +67,7 @@ function LicenseWarning({ rows }) {
   const bad = (rows || []).filter((l) => l.status_text === 'Active' && (l.state === 'Expired' || l.state === 'Expiring soon'));
   if (!bad.length) return null;
   return (
-    <div className="notice"><b>Licenses to renew:</b>{' '}
+    <div className="alert alert-warning"><b>Licenses to renew:</b>{' '}
       {bad.map((l) => `${l.license_type} ${l.license_number} ${l.state === 'Expired' ? `expired ${day(l.expires_on)}` : `expires ${day(l.expires_on)} (${l.days_left} days)`}`).join(' · ')}
     </div>
   );
@@ -131,7 +132,7 @@ export default function ClientPage({ params }) {
     return out;
   }), reason);
 
-  if (error && !d) return <div className="card err">{error.message}</div>;
+  if (error && !d) return <Card body className="err">{error.message}</Card>;
   if (!d || !roles) return <div className="loading">Loading…</div>;
   const c = d.client;
   const shown = c.display_name || c.legal_name;
@@ -175,12 +176,12 @@ export default function ClientPage({ params }) {
     <PageHeader title={c.legal_name} audit={{ kind: 'client', id }}
       subtitle={<><a href={'#/clients/' + c.id}>{c.client_code}</a> <Badge status={c.account_status} /> {c.is_gmp_client && <Badge status="GMP" />}</>}
       actions={<>
-        <a className="btn ghost" href="#/clients">All clients</a>{' '}
-        <button type="button" className="btn" onClick={edit}>Edit client</button>{' '}
-        <button type="button" className="btn primary" onClick={newOrder}>+ New lab order</button>
+        <Button variant="light" href="#/clients">All clients</Button>{' '}
+        <Button type="button" variant="outline-secondary" onClick={edit}>Edit client</Button>{' '}
+        <Button type="button" variant="primary" onClick={newOrder}>+ New lab order</Button>
       </>} />
     <div className="cols">
-      <div className="card"><h2>Account</h2>
+      <Card body><h2>Account</h2>
         <dl className="kv">
           <dt>Display name</dt><dd>{c.display_name || ''}</dd>
           <dt>Parent client</dt><dd>{c.parent_client_id ? <a href={'#/clients/' + c.parent_client_id}>{c.parent_name}</a> : '—'}</dd>
@@ -188,27 +189,27 @@ export default function ClientPage({ params }) {
           <dt>Billing address</dt><dd>{c.billing_address || ''}</dd>
           <dt>Site address</dt><dd>{c.site_address || ''}</dd>
           <dt>Report delivery</dt><dd>{c.default_report_delivery || ''}</dd>
-        </dl></div>
-      <div className="card"><h2>What this status allows</h2>
+        </dl></Card>
+      <Card body><h2>What this status allows</h2>
         <div className="rulechips">
           <div className={`chip ${c.can_order ? 'yes' : 'no'}`}>{c.can_order ? '✓' : '✕'} New orders, sample login and testing</div>
           <div className={`chip ${c.can_release ? 'yes' : 'no'}`}>{c.can_release ? '✓' : '✕'} Release and send reports</div>
         </div>
-        <p className="help">Active: everything allowed. On Hold: testing continues, reports are held. Inactive: no new orders; reports for work already in the lab can still go out. Holds never cascade to child clients.</p></div>
+        <p className="help">Active: everything allowed. On Hold: testing continues, reports are held. Inactive: no new orders; reports for work already in the lab can still go out. Holds never cascade to child clients.</p></Card>
     </div>
     <LicenseWarning rows={d.licenses} />
     <ClientServiceLinesCard clientId={id} canEdit={d.can_edit} />
     <Section title="Licenses" help="Added over time and never deleted: when a license is renewed, add the new one; retire the old one (it stays in the history). A lab order names the license it is for, and the COA prints it."
-      actions={d.can_edit && <button type="button" className="btn" onClick={addLicense}>+ Add license</button>}>
+      actions={d.can_edit && <Button type="button" variant="outline-secondary" onClick={addLicense}>+ Add license</Button>}>
       <EditableGrid readOnly rows={d.licenses} columns={licenseColumns} rowClass={retiredMuted}
         emptyText={'No licenses yet.' + (d.can_edit ? ' "+ Add license" records one.' : '')} />
     </Section>
     <Section title="Contacts and roles" help="Roles are per client: the same person can be Ordering here and Report-only elsewhere. One Primary per client; any number of Secondary."
-      actions={<><button type="button" className="btn" onClick={linkContact}>+ Link existing contact</button>{' '}<button type="button" className="btn" onClick={newContact}>+ New contact</button></>}>
+      actions={<><Button type="button" variant="outline-secondary" onClick={linkContact}>+ Link existing contact</Button>{' '}<Button type="button" variant="outline-secondary" onClick={newContact}>+ New contact</Button></>}>
       <EditableGrid rows={linkRows} columns={contactColumns} what={`contact roles for ${c.client_code}`} emptyText="No contacts linked yet."
         save={saveContacts} afterSave={reload} />
     </Section>
-    <Section title="Projects" help="Reusable quoted test packages for this client." actions={<button type="button" className="btn" onClick={newProject}>+ New project</button>}>
+    <Section title="Projects" help="Reusable quoted test packages for this client." actions={<Button type="button" variant="outline-secondary" onClick={newProject}>+ New project</Button>}>
       <EditableGrid readOnly rows={d.projects} columns={PROJECT_COLUMNS} emptyText="No projects yet." onRowOpen={openProject} />
     </Section>
     <Section title="Quoted prices" help="Tests on accepted, unexpired quotes (including parent-client projects shared with child sites) are ordered at these prices; any other test of the lab is ordered at its list price.">

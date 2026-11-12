@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useMeta } from '../../hooks/useMeta.js';
 import { useSession } from '../../session/SessionProvider.jsx';
+import { Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'analytes' };
 const newRow = () => ({ status: 'Active', analyte_class: 'Chemical', synonyms: [] });
@@ -32,7 +33,7 @@ export default function AnalytesPage({ query }) {
 
   return <>
     <PageHeader title="Analytes" audit={AUDIT} subtitle={`Static master table, independent of Inventory. Report Name prints on the Certificate of Analysis. Molar mass converts molar standards (M, mol/L) to mg/L in mixtures; ${canMolar ? 'changing it asks for its source and your electronic signature' : 'QA and Lab Supervisors maintain it'}.`} />
-    {error ? <div className="card err">{error.message}</div> : !data ? <div className="loading">Loading…</div> : (
+    {error ? <Card body className="err">{error.message}</Card> : !data ? <div className="loading">Loading…</div> : (
       <EditableGrid rows={data} columns={columns} allowAdd search filter={new URLSearchParams(query).get('find') || ''} what="analyte master data"
         newRow={newRow} sign={sign} save={saveAnalytes} afterSave={reload} />
     )}

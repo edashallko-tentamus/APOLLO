@@ -8,6 +8,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import Section from '../../components/Section.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
+import { Button, Card } from 'react-bootstrap';
 
 const dateOf = (v) => (v ? new Date(v).toLocaleDateString() : '');
 const openVersion = (r) => { window.location.hash = '#/quote/' + r.id; };
@@ -27,7 +28,7 @@ export default function ProjectPage({ params }) {
     { field: 'accepted_at', title: 'Accepted', type: 'readonly', width: 120, format: dateOf },
   ], [p?.project_code]);
 
-  if (error && !d) return <div className="card err">{error.message}</div>;
+  if (error && !d) return <Card body className="err">{error.message}</Card>;
   if (!d) return <div className="loading">Loading…</div>;
 
   async function newVersion() {
@@ -45,7 +46,7 @@ export default function ProjectPage({ params }) {
   return <>
     <PageHeader title={p.project_name} audit={{ kind: 'project', id }}
       subtitle={<><a href={`#/projects/${p.id}`}>{p.project_code}</a> · <a href={`#/clients/${p.client_id}`}>{p.client_name}</a> {p.is_list_price_acceptance && <Badge status="List price acceptance" />}</>}
-      actions={<><a className="btn ghost" href="#/projects">All projects</a> <button type="button" className="btn" onClick={edit}>Edit project</button> <button type="button" className="btn primary" onClick={newVersion}>Start new version (re-quote)</button></>} />
+      actions={<><Button variant="light" href="#/projects">All projects</Button> <Button type="button" variant="outline-secondary" onClick={edit}>Edit project</Button> <Button type="button" variant="primary" onClick={newVersion}>Start new version (re-quote)</Button></>} />
     <Section title="Versions" help="Re-pricing or changing tests creates a new version, copied from the latest. Accepting it supersedes the previous accepted version.">
       <ReadGrid rows={d.versions} columns={columns} onRowOpen={openVersion} />
     </Section>

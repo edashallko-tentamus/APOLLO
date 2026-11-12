@@ -10,6 +10,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import NeedLab from './NeedLab.jsx';
 import './permissions.css';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'groups' };
 const NO_ROWS = [];
@@ -54,11 +55,11 @@ function Matrix() {
     <PageHeader title={`Permission matrix: ${site.site_code}`} audit={AUDIT}
       subtitle={`Who can do what in ${site.site_name}, as of ${dt(m?.generatedAt)}: one row per person, one column per permission. A tick shows the groups it comes through. For GMP and ISO 17025 audits, download it, or the full history of every change with who signed it and why.`}
       actions={<>
-        <a className="btn" href={permissionMatrixXlsx(site.id)} download>Download matrix (Excel)</a>{' '}
-        <a className="btn" href={permissionMatrixXlsx(site.id, 'history')} download>Download change history (Excel)</a>{' '}
-        <button type="button" className="btn ghost" onClick={() => window.print()}>Print</button>
+        <Button variant="outline-secondary" href={permissionMatrixXlsx(site.id)} download>Download matrix (Excel)</Button>{' '}
+        <Button variant="outline-secondary" href={permissionMatrixXlsx(site.id, 'history')} download>Download change history (Excel)</Button>{' '}
+        <Button type="button" variant="light" onClick={() => window.print()}>Print</Button>
       </>} />
-    {err ? <div className="card err">{err.message}</div> : !m || !hist ? <div className="loading">Loading…</div> : <>
+    {err ? <Card body className="err">{err.message}</Card> : !m || !hist ? <div className="loading">Loading…</div> : <>
       <Section className="permgrid" title="Who holds which permission">
         <ReadGrid rows={m.rows || NO_ROWS} columns={columns} emptyText="Nobody holds a permission in this lab yet." />
       </Section>

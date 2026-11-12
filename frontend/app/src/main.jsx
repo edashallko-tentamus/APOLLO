@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-// The app's stylesheet (moved from the old screens' public/css/app.css).
+// Bootstrap first (react-bootstrap's look), then the app's own styles (a copy of the current app's, without what Bootstrap replaces)
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './styles/app.css';
 import DialogProvider from './components/dialogs/DialogProvider.jsx';
 import ToastProvider from './components/Toasts.jsx';

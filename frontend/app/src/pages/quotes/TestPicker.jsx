@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import './quotes.css';
+import { Button, Card } from 'react-bootstrap';
 
 const pick = { lab: null, find: '', qty: 1 }; // kept between quote pages, as in the current app
 
@@ -59,7 +60,7 @@ export default function TestPicker({ versionId, have, onAdded, prefill = false }
     add(sel);
   }
 
-  if (error) return <div className="card err">{error.message}</div>;
+  if (error) return <Card body className="err">{error.message}</Card>;
   if (!cat) return <div className="loading">Loading…</div>;
   const chooseLab = (id) => { pick.lab = id; setLab(id); };
   return (
@@ -68,10 +69,10 @@ export default function TestPicker({ versionId, have, onAdded, prefill = false }
         {labs.map(([id, code]) => <button type="button" key={id} className={`tab${curLab === id ? ' on' : ''}`} onClick={() => chooseLab(id)}>{code} <small>{cat.filter((t) => t.site_id === id).length}</small></button>)}
         <button type="button" className={`tab${curLab === 'all' ? ' on' : ''}`} onClick={() => chooseLab('all')}>All labs</button>
       </div>
-      <div className="row">
+      <div className="lrow">
         <input type="search" placeholder="Find a test (name or code)" value={find} onChange={(e) => { pick.find = e.target.value; setFind(e.target.value); }} />
         <label>Quantity <input type="number" min="1" value={qty} onChange={(e) => { const n = Math.max(1, Number(e.target.value) || 1); pick.qty = n; setQty(n); }} /></label>
-        <button type="button" className="btn primary" onClick={addSelected} disabled={busy}>Add selected</button>
+        <Button type="button" variant="primary" onClick={addSelected} disabled={busy}>Add selected</Button>
       </div>
       <div className="help" style={{ marginBottom: 6 }}>Each lab&apos;s own tests. Another lab&apos;s test is <b>subcontracted</b>: its price less the in-network discount, plus your lab&apos;s markup (the 20-30 rule, lab settings). Click &quot;+ Add&quot;, or select several rows (Shift or Ctrl+click) and &quot;Add selected&quot;.{prefill ? ' New lines start at the list price: type over the final price to give a discount.' : ''}</div>
       <DataGrid grid={grid} emptyText="No more tests in this lab's catalogue." />

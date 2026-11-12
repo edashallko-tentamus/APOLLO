@@ -10,6 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { ATTEMPT_COLS_PERSON, d8 } from './shared.js';
+import { Button, Card } from 'react-bootstrap';
 
 const AUDIT = { kind: 'training' };
 const PEOPLE_COLS = [
@@ -50,7 +51,7 @@ export default function OverviewPage({ query }) {
   const rcols = useMemo(() => ruleCols(deptOpts), [deptOpts]);
   const rules = useMemo(() => (d ? d.rules.map((r) => ({ ...r, dept: r.department_id || '' })) : []), [d]);
 
-  if (error && !d) return <><PageHeader title="Training and competency" audit={AUDIT} /><div className="card err">{error.message}</div></>;
+  if (error && !d) return <><PageHeader title="Training and competency" audit={AUDIT} /><Card body className="err">{error.message}</Card></>;
   if (!d || redirect) return <><PageHeader title="Training and competency" audit={AUDIT} /><div className="loading">Loading…</div></>;
 
   async function legacy() {
@@ -62,7 +63,7 @@ export default function OverviewPage({ query }) {
   const subtitle = <>Who is qualified for which tests at {d.lab.site_code}, their initial and continuing competency, and the lab&apos;s rules. {d.lab.require_training
     ? <><b>This lab requires training:</b> bench steps are signed only by people with a current qualification for the test (or department trained, where the rule allows).</>
     : 'This lab does not require training at the bench yet (a system administrator switches it on: Sites and holidays, "Training gate"). Grant the legacy qualifications first.'}</>;
-  const actions = <>{d.can.approve && <button type="button" className="btn" id="legacy" onClick={legacy}>Grant legacy qualifications…</button>} <a className="btn" href={`#/training/people/${d.me}`}>My training</a></>;
+  const actions = <>{d.can.approve && <Button type="button" variant="outline-secondary" id="legacy" onClick={legacy}>Grant legacy qualifications…</Button>} <Button variant="outline-secondary" href={`#/training/people/${d.me}`}>My training</Button></>;
   const tabs = [['people', `People (${d.people.length})`], ['competency', `Competency (${toEval} to evaluate, ${toApprove} to approve)`], ['rules', 'Rules']];
   return <>
     <PageHeader title="Training and competency" subtitle={subtitle} actions={actions} audit={AUDIT} />

@@ -33,7 +33,7 @@ function sampleLabels(s) {
   for (let i = 6; i < tests.length; i += 10) pages.push(tests.slice(i, i + 10));
   return pages.map((list, k) => (
     <div className="lbl big"><Barcode text={s.sample_code} widthIn={3.76} heightIn={0.5} />
-      <div className="row"><div className="id">{s.sample_code}</div><div className="t" style={{ alignSelf: 'center' }}>{s.order_code || ''}{s.logged_at ? ' · logged ' + d10(s.logged_at) : ''}</div></div>
+      <div className="lrow"><div className="id">{s.sample_code}</div><div className="t" style={{ alignSelf: 'center' }}>{s.order_code || ''}{s.logged_at ? ' · logged ' + d10(s.logged_at) : ''}</div></div>
       {k === 0 ? <>
         <div className="t">{[s.client_sample_id, s.matrix, s.product_lot ? 'lot ' + s.product_lot : ''].filter(Boolean).join(' · ')}</div>
         <div className="t">{s.client_name || ''}{s.description ? ' · ' + s.description : ''}</div>

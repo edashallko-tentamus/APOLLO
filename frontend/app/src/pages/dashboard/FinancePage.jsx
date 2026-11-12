@@ -14,6 +14,8 @@ import { performanceReport } from './PerformanceReport.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { fmtv } from './WidgetBody.jsx';
 import './dashboard.css';
+import { Button, Card } from 'react-bootstrap';
+import { Dialog } from '../../components/Modal.jsx';
 
 const AUDIT = { kind: 'finance' };
 const SUB = 'The weekly finance update for each lab and the Budget Forecast and Monthly Forecast for each month. The week\'s revenue comes from the LIMS (invoices issued that week) and cannot be typed: type the costs, and the revenue from the books if you want to compare. Paste from Excel and fill down with Ctrl+D. The executive dashboard compares them by month, with EBITDA = LIMS revenue less costs.';
@@ -72,8 +74,8 @@ function UploadDialog({ onDone }) {
   }
   const canSave = rows && errors === 0 && todo > 0;
   return (
-    <div className="modal-bg" onKeyDown={(e) => { if (e.key === 'Escape') onDone(false); }}>
-      <div className="modal xwide" role="dialog" aria-modal="true" aria-label="Upload forecasts from Excel">
+    <Dialog label="Upload forecasts from Excel" xwide onClose={() => onDone(false)}>
+      <div className="modal-body">
         <h3>Upload forecasts from Excel</h3>
         <p className="intro">Download the forecasts first, change the Revenue and Costs (or add rows: Lab, Month YYYY-MM, Plan), save the file and upload it here. You see every change before anything is saved.</p>
         <div className="field"><input type="file" id="planf" accept=".xlsx,.csv" onChange={pick} /></div>
@@ -83,11 +85,11 @@ function UploadDialog({ onDone }) {
         {rows && <ReadGrid rows={shown} columns={PREVIEW_COLS} emptyText="Nothing to change: the file matches what is stored." rowClass={(r) => (r.action === 'Error' ? 'errrow' : '')} />}
         <div className="merr" role="alert">{error}</div>
         <div className="mbtns">
-          <button type="button" className="btn ghost" onClick={() => onDone(false)}>Cancel</button>
-          <button type="button" className="btn primary" disabled={!canSave || busy} onClick={save}>{canSave ? `Save ${todo} row${todo === 1 ? '' : 's'}` : 'Save changes'}</button>
+          <Button type="button" variant="light" onClick={() => onDone(false)}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={!canSave || busy} onClick={save}>{canSave ? `Save ${todo} row${todo === 1 ? '' : 's'}` : 'Save changes'}</Button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -114,7 +116,7 @@ export default function FinancePage() {
   async function upload() { if (await dialogs.open((done) => <UploadDialog onDone={done} />)) reload(); }
 
   const header = <PageHeader title="Finance figures" subtitle={SUB} audit={AUDIT} />;
-  if (error && !d) return <>{header}<div className="card err">{error.message}</div></>;
+  if (error && !d) return <>{header}<Card body className="err">{error.message}</Card></>;
   if (!d) return <>{header}<div className="loading">Loading…</div></>;
   return <>
     {header}
@@ -127,11 +129,11 @@ export default function FinancePage() {
         save={(changes, reason) => saveFinanceWeeks(full(weeks, changes), reason)} afterSave={reload} />
     </Section>
     <Section title={`Forecasts: ${lab ? lab.site_name : ''}`} help="Budget forecast (set for the year) and Monthly forecast (updated as the year goes), per month (YYYY-MM). Download them to Excel for every lab you type for, edit, and upload the file: you see every change before it is saved."
-      actions={<><button type="button" className="btn" id="plandl" onClick={downloadForecasts}>Download Excel</button> <button type="button" className="btn" id="planul" onClick={upload}>Upload Excel</button></>}>
+      actions={<><Button type="button" variant="outline-secondary" id="plandl" onClick={downloadForecasts}>Download Excel</Button> <Button type="button" variant="outline-secondary" id="planul" onClick={upload}>Upload Excel</Button></>}>
       <EditableGrid key={'p' + labCode} rows={plans} columns={PLAN_COLS} allowAdd newRow={() => ({ site_code: labCode, plan: 'Budget forecast' })} what="the forecasts"
         save={(changes, reason) => saveFinancePlans(full(plans, changes), reason)} afterSave={reload} />
     </Section>
     <Section title="Performance report" help="Everything for a period in one Excel file: a Summary for the General Manager or executive (headline by lab, by month, top clients, quality and timeliness), then the LIMS data behind it on separate tabs, with the LIMS column names."
-      actions={<button type="button" className="btn primary" id="fdreport" onClick={() => performanceReport({ dialogs, toast, labs: d.labs, siteId: site?.id })}>Performance report (Excel)</button>} />
+      actions={<Button type="button" variant="primary" id="fdreport" onClick={() => performanceReport({ dialogs, toast, labs: d.labs, siteId: site?.id })}>Performance report (Excel)</Button>} />
   </>;
 }

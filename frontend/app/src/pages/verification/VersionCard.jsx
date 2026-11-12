@@ -7,6 +7,7 @@ import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { dt, OutcomeChip } from './shared.jsx';
+import { Button } from 'react-bootstrap';
 
 export default function VersionCard({ versionId, versionStatus, onData }) {
   const dialogs = useDialogs(); const toast = useToast();
@@ -30,7 +31,7 @@ export default function VersionCard({ versionId, versionStatus, onData }) {
       {d.rows.map((r) => <tr key={r.id}><td><a href={'#/verification/' + r.id}>{r.verification_code}</a></td><td><Badge status={r.status} /></td><td><OutcomeChip o={r.outcome} /></td>
         <td>{r.status === 'Report signed' || r.status === 'Executed' ? `${r.passed} of ${r.checks}` : `${r.checks} checks`}</td>
         <td>{r.prepared_by_name}, {dt(r.created_at)}</td><td>{r.current ? 'Current' : <b>Changed since</b>}</td></tr>)}</tbody></table>}
-    {draft && (d.can_design ? <button type="button" className="btn" id="vnew" onClick={write}>Write the verification protocol</button>
+    {draft && (d.can_design ? <Button type="button" variant="outline-secondary" id="vnew" onClick={write}>Write the verification protocol</Button>
       : <div className="help">Writing the protocol needs methods.design in this lab.</div>)}
   </>;
 }

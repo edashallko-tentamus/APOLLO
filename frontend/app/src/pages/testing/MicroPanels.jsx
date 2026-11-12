@@ -6,7 +6,7 @@ import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import {
   alertText, benchEntries, eqLink, fieldKey, forWhat, incubationWindowOf, isoOf, isPast, kindOf, loc, nfmt, reprepCol, sampleHref, SelGrid,
 } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 // ---------------------------------------------------------------- Preparation
 export function PreparationForm({ ctx, s, canWork }) {
@@ -27,7 +27,7 @@ export function PreparationForm({ ctx, s, canWork }) {
     <div className="tbform">{fields.map((f) => {
       const k = fieldKey(f.label); const t = f.type === 'Number' ? 'number' : f.type === 'Date' ? 'date' : f.type === 'Time' ? 'time' : 'text';
       return <div className="field" key={k}><label htmlFor={'pf_' + k}>{f.label}</label>
-        <input id={'pf_' + k} data-k={k} type={t} step={t === 'number' ? 'any' : undefined} value={form[k] ?? ''} disabled={!canWork} onChange={(e) => setForm((x) => ({ ...x, [k]: e.target.value }))} /></div>;
+        <Form.Control id={'pf_' + k} data-k={k} type={t} step={t === 'number' ? 'any' : undefined} value={form[k] ?? ''} disabled={!canWork} onChange={(e) => setForm((x) => ({ ...x, [k]: e.target.value }))} /></div>;
     })}</div>
     {canWork && <Button type="button" variant="primary" id="pf_save" disabled={busy} onClick={save}>Save</Button>}
     <div className="help" style={{ marginTop: 6 }}>Filled once for the whole batch. Number fields feed the calculation.</div>

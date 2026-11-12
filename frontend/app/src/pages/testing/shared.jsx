@@ -5,7 +5,7 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import './testing.css';
-import { Card } from 'react-bootstrap';
+import { Card, Nav } from 'react-bootstrap';
 
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '');
 export const day = (v) => (v ? String(v).slice(0, 10) : '');
@@ -22,7 +22,7 @@ export const plural2 = (n, one, many) => `${n} ${Number(n) === 1 ? one : many}`;
 // ---------------------------------------------------------------- top tabs and the lab check
 const TOP_TABS = [['#/testing', 'Backlog'], ['#/testing/batches', 'Batches'], ['#/testing/batches?show=mine', 'My worklist'], ['#/testing/batches?show=review', 'QC Review']];
 export function TopTabs({ cur }) {
-  return <div className="tbtabs">{TOP_TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}</a>)}</div>;
+  return <Nav variant="pills" className="tbtabs">{TOP_TABS.map(([h, l]) => <Nav.Link active={h === cur} key={h} href={h}>{l}</Nav.Link>)}</Nav>;
 }
 export function useNeedLab() {
   const { site } = useSession();

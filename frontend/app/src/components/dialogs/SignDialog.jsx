@@ -9,6 +9,7 @@ import { moduleForPage } from '../../lib/moduleForPage.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import Modal from '../Modal.jsx';
 import SmartSelect from '../SmartSelect.jsx';
+import { Form } from 'react-bootstrap';
 
 const OTHER = '__other__';
 
@@ -58,14 +59,14 @@ export default function SignDialog({ title, what = '', meaning = 'Changed by', n
         <div className="field"><label htmlFor="f_rpick">Reason for change <span className="req">*</span></label>
           <SmartSelect id="f_rpick" value={pick} onChange={setPick} options={options} /></div>
         <div className="field"><label htmlFor="f_rtext">Comment {textRequired ? <span className="req">*</span> : <span className="rreq">(optional)</span>}</label>
-          <textarea id="f_rtext" rows={2} value={text} onChange={(e) => setText(e.target.value)} />
+          <Form.Control as="textarea" id="f_rtext" rows={2} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="help">Pick a reason from the list, or choose Other and type it.</div></div>
       </>}
       {sign && <div className="sigbox">
         <div className="field"><label htmlFor="f_suser">User ID <span className="req">*</span></label>
-          <input id="f_suser" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} /></div>
+          <Form.Control id="f_suser" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} /></div>
         <div className="field"><label htmlFor="f_spass">Password <span className="req">*</span></label>
-          <input id="f_spass" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+          <Form.Control id="f_spass" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
       </div>}
     </Modal>
   );

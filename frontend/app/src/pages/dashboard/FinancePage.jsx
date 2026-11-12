@@ -14,7 +14,7 @@ import { performanceReport } from './PerformanceReport.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { fmtv } from './WidgetBody.jsx';
 import './dashboard.css';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav, Form } from 'react-bootstrap';
 import { Dialog } from '../../components/Modal.jsx';
 
 const AUDIT = { kind: 'finance' };
@@ -78,7 +78,7 @@ function UploadDialog({ onDone }) {
       <div className="modal-body">
         <h3>Upload forecasts from Excel</h3>
         <p className="intro">Download the forecasts first, change the Revenue and Costs (or add rows: Lab, Month YYYY-MM, Plan), save the file and upload it here. You see every change before anything is saved.</p>
-        <div className="field"><input type="file" id="planf" accept=".xlsx,.csv" onChange={pick} /></div>
+        <div className="field"><Form.Control type="file" id="planf" accept=".xlsx,.csv" onChange={pick} /></div>
         {rows && <div className="bulksum"><span><b>{rows.length}</b> rows read</span><span className="c-new"><b>{n('Create')}</b> to add</span><span className="c-upd"><b>{n('Update')}</b> to change</span>
           <span><b>{n('No change')}</b> unchanged</span><span className={errors ? 'c-err' : undefined}><b>{errors}</b> with errors</span></div>}
         {rows && errors > 0 && <p className="bad">Fix the rows with errors in Excel and upload the file again. Nothing has been saved.</p>}
@@ -121,9 +121,9 @@ export default function FinancePage() {
   return <>
     {header}
     <div className="dbar">Year <SmartSelect id="fy" value={String(year)} options={YEARS} onChange={setYear} /></div>
-    <div className="ftabs" role="tablist">
-      {d.labs.map((l) => <button key={l.site_code} type="button" role="tab" className={l.site_code === labCode ? 'on' : undefined} aria-selected={l.site_code === labCode} title={l.site_name} onClick={() => pickLab(l.site_code)}>{l.site_code}</button>)}
-    </div>
+    <Nav variant="pills" className="ftabs" role="tablist">
+      {d.labs.map((l) => <Nav.Link as="button" active={l.site_code === labCode} key={l.site_code} type="button" role="tab" aria-selected={l.site_code === labCode} title={l.site_name} onClick={() => pickLab(l.site_code)}>{l.site_code}</Nav.Link>)}
+    </Nav>
     <Section title={`Weekly update: ${lab ? lab.site_name : ''}`} help="One row per week (the date the week ends). Revenue (LIMS) is worked out from the invoices and locked. Costs should exclude depreciation, amortization, interest and tax, so that revenue less costs is EBITDA: to confirm with finance.">
       <EditableGrid key={'w' + labCode} rows={weeks} columns={WEEK_COLS} allowAdd newRow={() => ({ site_code: labCode })} what="the weekly finance update"
         save={(changes, reason) => saveFinanceWeeks(full(weeks, changes), reason)} afterSave={reload} />

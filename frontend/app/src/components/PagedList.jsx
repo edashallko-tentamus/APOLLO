@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi.js';
 import { confirmLeave, replaceHash } from '../router/useHashRoute.js';
 import { useToast } from './Toasts.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav, Form } from 'react-bootstrap';
 
 const SEARCH_DELAY_MS = 350;
 
@@ -62,16 +62,16 @@ export default function PagedList({ load, query = '', filters = [], filterParam 
   return (
     <div className="pglist">
       {filters.length > 0 && (
-        <div className="tabs pgtabs">
+        <Nav variant="pills" className="tabs pgtabs">
           {filters.map(([k, label]) => (
-            <button key={k} type="button" className={`tab${(data?.filter || filter) === k ? ' on' : ''}`} data-f={k} onClick={() => go(() => { setFilter(k); setPage(1); })}>
+            <Nav.Link as="button" active={(data?.filter || filter) === k} key={k} type="button" data-f={k} onClick={() => go(() => { setFilter(k); setPage(1); })}>
               {label} <small>{data?.counts?.[k] ?? ''}</small>
-            </button>
+            </Nav.Link>
           ))}
-        </div>
+        </Nav>
       )}
       <div className="pgbar">
-        <input className="pgsearch" type="search" autoComplete="off" placeholder={placeholder || 'Search, or type or scan an ID and press Enter'}
+        <Form.Control className="pgsearch" type="search" autoComplete="off" placeholder={placeholder || 'Search, or type or scan an ID and press Enter'}
           value={typed} onChange={(e) => setTyped(e.target.value)} onKeyDown={searchNow} />
         <span className="pginfo">{info}</span><span className="sp" />
         <Button type="button" variant="light" className="pgprev" disabled={!data || data.page <= 1} onClick={() => go(() => setPage((p) => p - 1))}>‹ Previous</Button>

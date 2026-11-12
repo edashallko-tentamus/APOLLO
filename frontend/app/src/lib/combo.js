@@ -96,7 +96,7 @@ export function enhanceSelect(sel) {
   if (sel.dataset.combo || sel.multiple || sel.classList.contains('nocombo') || sel.classList.contains('cellinput')) return;
   sel.dataset.combo = '1';
   const wrap = document.createElement('span'); wrap.className = 'combo' + (sel.dataset.comboClass ? ' ' + sel.dataset.comboClass : '');
-  const input = document.createElement('input'); input.type = 'text'; input.className = 'combo-input';
+  const input = document.createElement('input'); input.type = 'text'; input.className = 'form-select combo-input';
   if (sel.title) input.title = sel.title;
   if (sel.getAttribute('aria-label')) input.setAttribute('aria-label', sel.getAttribute('aria-label'));
   const hadFocus = document.activeElement === sel;

@@ -10,7 +10,7 @@ import EntriesTab from './EntriesTab.jsx';
 import EquipmentTab from './EquipmentTab.jsx';
 import RecordTab from './RecordTab.jsx';
 import './logbooks.css';
-import { Card } from 'react-bootstrap';
+import { Card, Nav } from 'react-bootstrap';
 
 const ABOUT = { Equipment: 'a piece of equipment', Lot: 'an inventory lot', Sample: 'a sample', None: 'nothing in particular (one per day, week...)' };
 
@@ -36,9 +36,9 @@ export default function LogbookPage({ params: [id], query }) {
 
   return <>
     <PageHeader title={`${l.logbook_code} ${l.logbook_name}`} subtitle={sub} audit={{ kind: 'logbook', id: l.id }} />
-    <div className="tabs">{tabs.map(([k, t, n]) => (
-      <a key={k} className={`tab ${k === tab ? 'on' : ''}`} href={`#/logbooks/${l.id}?tab=${k}`}>{t}{n && <> <small>{n}</small></>}</a>
-    ))}</div>
+    <Nav variant="pills" className="tabs">{tabs.map(([k, t, n]) => (
+      <Nav.Link active={k === tab} key={k} href={`#/logbooks/${l.id}?tab=${k}`}>{t}{n && <> <small>{n}</small></>}</Nav.Link>
+    ))}</Nav>
     {tab === 'record' ? <RecordTab d={d} l={l} fields={eff} reload={reload} />
       : tab === 'design' ? <DesignTab key={d.draft_id || d.effective_id || 'none'} d={d} l={l} eff={eff} draftF={draftF} reload={reload} />
         : tab === 'equipment' ? <EquipmentTab d={d} l={l} fields={d.draft_id ? draftF : eff} reload={reload} />

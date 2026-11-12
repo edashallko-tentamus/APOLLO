@@ -7,7 +7,7 @@ import PagedList from '../../components/PagedList.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import PullsGrid from './PullsGrid.jsx';
 import { d8, Failed, iso, Loading } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const FILTERS = [['current', 'Current'], ['finished', 'Finished'], ['all', 'All']];
 const COLS = [
@@ -37,7 +37,7 @@ export default function StudiesPage({ query }) {
     <PageHeader title="Stability studies" audit={{ kind: 'stability_studies' }}
       subtitle={'Each accepted stability quote is a study. Place the material in the chambers when it arrives (the T0 sample is logged in then, if intake has not); each pull gets its lab order on its date, then "Record pull" takes the units out of storage and logs the sample.'}
       actions={<Button variant="light" href="#/stability/quotes">Stability quotes</Button>} />
-    <div className="tabs"><a className={`tab${tab === 'studies' ? ' on' : ''}`} href="#/stability/studies">Studies</a><a className={`tab${tab === 'pulls' ? ' on' : ''}`} href="#/stability/studies?tab=pulls" id="tpulls">Pulls due ({due})</a></div>
+    <Nav variant="pills" className="tabs"><Nav.Link active={tab === 'studies'} href="#/stability/studies">Studies</Nav.Link><Nav.Link active={tab === 'pulls'} href="#/stability/studies?tab=pulls" id="tpulls">Pulls due ({due})</Nav.Link></Nav>
     <Card body>
       {tab === 'studies'
         ? <PagedList load={load} query={query} filters={FILTERS} open={openStudy}

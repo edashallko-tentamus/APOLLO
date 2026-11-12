@@ -12,7 +12,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { d8, documentsOf } from './shared.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const SAMPLE_COLS = [
   { field: 'sample_code', title: 'Training sample', type: 'link', width: 160, href: (r) => '#/samples/' + r.id }, { field: 'status', title: 'Test', type: 'readonly', width: 110 }];
@@ -26,7 +26,7 @@ function FilesDialog({ onDone }) {
   const [files, setFiles] = useState([]);
   return (
     <Modal title="Attach evidence" okText="Attach" onOk={() => onDone(files)} onClose={() => onDone(null)}>
-      <div className="field"><label htmlFor="f_files">Files</label><input id="f_files" type="file" multiple onChange={(e) => setFiles([...e.target.files])} /></div>
+      <div className="field"><label htmlFor="f_files">Files</label><Form.Control id="f_files" type="file" multiple onChange={(e) => setFiles([...e.target.files])} /></div>
     </Modal>
   );
 }

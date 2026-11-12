@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { Field, numOf, Pick, slug, str } from './shared.jsx';
+import { Form } from 'react-bootstrap';
 
 // a grid of settings (no save bar: it is saved with the step)
 export function useCfgGrid(rows, columns, ed, newRow = () => ({})) {
@@ -16,7 +17,7 @@ export const CfgGrid = ({ grid, id, emptyText }) => <div id={id}><DataGrid grid=
 
 // a text or number box bound to a string state
 export function Box({ id, value, set, ed, type = 'text', ...rest }) {
-  return <input id={id} type={type} step={type === 'number' ? rest.step || 'any' : undefined} value={value} disabled={!ed} onChange={(e) => set(e.target.value)} {...rest} />;
+  return <Form.Control id={id} type={type} step={type === 'number' ? rest.step || 'any' : undefined} value={value} disabled={!ed} onChange={(e) => set(e.target.value)} {...rest} />;
 }
 const useText = (v) => useState(str(v));
 const catOptions = (d) => (d.lists.categories || []).map((c) => ({ value: c.id, label: c.category_name }));
@@ -64,7 +65,7 @@ export function WeighingConfig({ cfg, d, ed, readRef }) {
     {mode === 'By product category' && <div id="c_catwrap"><Field label="Weight range per product category" help={'The sample\'s matrix gives its product category (Admin > Matrices). Each sample is checked against its own category\'s range at the bench (outside is flagged). Tick "Not weighed" for a category that is not weighed (e.g. swabs): the step does not wait for its samples.'}>
       <CfgGrid id="c_cat" grid={cg} /></Field></div>}
     <Field label="Controls" help="e.g. a positive control made from a strain: the step does not wait for a weight from it">
-      <label className="cb"><input type="checkbox" id="c_qcnw" checked={qcnw} disabled={!ed} onChange={(e) => setQcnw(e.target.checked)} /> Prep QC (controls) are not weighed</label></Field>
+      <label className="cb"><Form.Check.Input type="checkbox" id="c_qcnw" checked={qcnw} disabled={!ed} onChange={(e) => setQcnw(e.target.checked)} /> Prep QC (controls) are not weighed</label></Field>
     <div className="help">Weighs client samples and Prep QC; the actual weight and the balance used are always recorded per entry at the bench.</div>
   </>;
 }
@@ -202,16 +203,16 @@ export function SplitHoldConfig({ type, cfg, d, step, anc, ed, readRef }) {
     </div>
     {!hold && <>
       <Field label="Customer consent" help="Ticked: the request waits until the customer's consent is recorded, then the test is ordered. Not ticked: the test is ordered at once from the client's accepted quote.">
-        <label className="cb"><input type="checkbox" id="c_consent" checked={consent} disabled={!ed} onChange={(e) => setConsent(e.target.checked)} /> Customer consent required</label></Field>
+        <label className="cb"><Form.Check.Input type="checkbox" id="c_consent" checked={consent} disabled={!ed} onChange={(e) => setConsent(e.target.checked)} /> Customer consent required</label></Field>
       <Field label="Alert the client" help={'Completing this step on a finding emails the client\'s "Positive alerts" contacts (else Receives Report, else the ordering contact). The Outbox keeps who was told and when.'}>
-        <label className="cb"><input type="checkbox" id="c_alert" checked={alert} disabled={!ed} onChange={(e) => setAlert(e.target.checked)} /> Email the client at once when something is found (presumptive result)</label></Field>
+        <label className="cb"><Form.Check.Input type="checkbox" id="c_alert" checked={alert} disabled={!ed} onChange={(e) => setAlert(e.target.checked)} /> Email the client at once when something is found (presumptive result)</label></Field>
       {trig === 'On finding' && <div id="c_find">
         <div className="grid4">
           <Field label="Finding"><Pick id="c_fd" value={finding} blank={false} options={FINDINGS} disabled={!ed} onChange={setFinding} /></Field>
           <Field label="Count above"><Box id="c_ca" type="number" value={ca} set={setCa} ed={ed} /></Field>
         </div>
         <Field label="Found at"><div className="wdchecks">{entries.length ? entries.map((s) => (
-          <label key={s.id}><input type="checkbox" data-fs={s.step_key} checked={fs.includes(s.step_key)} disabled={!ed}
+          <label key={s.id}><Form.Check.Input type="checkbox" data-fs={s.step_key} checked={fs.includes(s.step_key)} disabled={!ed}
             onChange={(e) => setFs((l) => (e.target.checked ? [...l, s.step_key] : l.filter((x) => x !== s.step_key)))} /> {s.step_name}</label>))
           : <span className="help">No Data Entry step comes before this one yet.</span>}</div></Field>
       </div>}
@@ -231,11 +232,11 @@ export function DataEntryConfig({ cfg, d, ed, readRef }) {
       <Field label="Value entered" req help="e.g. Concentration in solution"><Box id="c_lbl" value={lbl} set={setLbl} ed={ed} /></Field>
       <Field label="Unit of the value"><Pick id="c_u" value={unit} options={d.lists.units} disabled={!ed} onChange={setUnit} /></Field>
       <Field label="Raw data" help="Untick for a manual observation (e.g. reading plates); then no instrument is needed.">
-        <label className="cb"><input type="checkbox" id="c_att" checked={att} disabled={!ed} onChange={(e) => setAtt(e.target.checked)} /> Instrument export must be attached</label></Field>
+        <label className="cb"><Form.Check.Input type="checkbox" id="c_att" checked={att} disabled={!ed} onChange={(e) => setAtt(e.target.checked)} /> Instrument export must be attached</label></Field>
     </div>
     <Field label="Analytes entered here" help="None ticked = all of the test's analytes.">
       <div className="wdchecks">{d.analytes.length ? d.analytes.map((a) => (
-        <label key={a.analyte_id}><input type="checkbox" data-an={a.analyte_id} checked={ids.includes(a.analyte_id)} disabled={!ed}
+        <label key={a.analyte_id}><Form.Check.Input type="checkbox" data-an={a.analyte_id} checked={ids.includes(a.analyte_id)} disabled={!ed}
           onChange={(e) => setIds((l) => (e.target.checked ? [...l, a.analyte_id] : l.filter((x) => x !== a.analyte_id)))} /> {a.analyte_name}</label>))
         : <span className="help">Add the analytes on tab 2 first.</span>}</div></Field>
   </>;

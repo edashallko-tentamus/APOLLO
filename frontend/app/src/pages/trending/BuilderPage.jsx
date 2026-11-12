@@ -9,7 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { CONTROL, Panels, SOURCES, TrendTabs } from './TrendPanel.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const SUB = 'Choose what to chart, draw it, then download it or save it for the lab. Saved charts are watched (Trend watch) and can be frozen to a baseline; QC charts can be shown in QC Review.';
@@ -102,7 +102,7 @@ function Builder({ o, editing, shared }) {
       <Sel name="analyte_id" label="Analyte" items={[['*', 'Each analyte (one chart each)'], ...o.analytes.filter((a) => a.test_id === p.test_id).map((a) => [a.id, a.analyte_name + (a.unit ? ` (${a.unit})` : '')])]} value={p.analyte_id} blank="Choose an analyte" onChange={(v) => setParam('analyte_id', v)} />
       <Sel name="client_id" label="Client" items={o.clients.map((c) => [c.id, c.name])} value={p.client_id} blank="Every client" onChange={(v) => setParam('client_id', v)} />
       <Sel name="matrix" label="Matrix" items={o.matrices.map((m) => [m, m])} value={p.matrix} blank="Every matrix" onChange={(v) => setParam('matrix', v)} />
-      <div className="field"><label htmlFor="p_product">Product contains</label><input type="text" id="p_product" value={p.product || ''} onChange={(e) => setParam('product', e.target.value)} /></div>
+      <div className="field"><label htmlFor="p_product">Product contains</label><Form.Control type="text" id="p_product" value={p.product || ''} onChange={(e) => setParam('product', e.target.value)} /></div>
     </>;
   } else if (s === 'qc') {
     const types = o.qcTypes.filter((q) => q.test_id === p.test_id);
@@ -147,12 +147,12 @@ function Builder({ o, editing, shared }) {
             onClick={() => { if (k !== def.source) setDef((d) => ({ ...d, source: k, params: {} })); }}>{t}<small>{h}</small></button>))}</div>
         {fields}
         <div className="row2">
-          <div className="field"><label htmlFor="p_from">From</label><input type="date" id="p_from" value={p.from || ''} onChange={(e) => setParam('from', e.target.value)} /></div>
-          <div className="field"><label htmlFor="p_to">To</label><input type="date" id="p_to" value={p.to || ''} onChange={(e) => setParam('to', e.target.value)} /></div>
+          <div className="field"><label htmlFor="p_from">From</label><Form.Control type="date" id="p_from" value={p.from || ''} onChange={(e) => setParam('from', e.target.value)} /></div>
+          <div className="field"><label htmlFor="p_to">To</label><Form.Control type="date" id="p_to" value={p.to || ''} onChange={(e) => setParam('to', e.target.value)} /></div>
         </div>
         {CONTROL.includes(s) && <><h3>Signal rules</h3><div className="trrules">
           {Object.entries(o.rules).filter(([k]) => k !== 'LIM' || s !== 'counts').map(([k, t]) => (
-            <label key={k}><input type="checkbox" checked={def.rules.includes(k)} onChange={(e) => setRule(k, e.target.checked)} /> <span><b>{k}</b> {t}</span></label>))}
+            <label key={k}><Form.Check.Input type="checkbox" checked={def.rules.includes(k)} onChange={(e) => setRule(k, e.target.checked)} /> <span><b>{k}</b> {t}</span></label>))}
         </div></>}
         <div className="acts">
           <Button type="button" variant="primary" id="draw" onClick={() => run()}>Draw</Button>

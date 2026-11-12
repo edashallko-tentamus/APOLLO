@@ -8,7 +8,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { CONTROL, Panels, TrendTabs, d10, n3, safe } from './TrendPanel.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 // The chart's QA state, and the actions on it: QA's approval, the limits into the test
 function QaBanner({ ch, d, onApprove, onApply }) {
@@ -90,7 +90,7 @@ export default function ChartPage({ params: [id], query }) {
     <TrendTabs on="charts" />
     <QaBanner ch={ch} d={d} onApprove={approve} onApply={apply} />
     {frozen && <div className="trfrozen"><b>Limits frozen</b> by {ch.frozen_by_name || ''} on {d10(ch.frozen_at)}: centre line {n3(ch.frozen_cl)}{Number(ch.frozen_sigma) ? `, sigma ${n3(ch.frozen_sigma)}` : ''}, from {ch.frozen_n} points{ch.frozen_from || ch.frozen_to ? ` between ${d10(ch.frozen_from) || 'the start'} and ${d10(ch.frozen_to) || 'then'}` : ''}. New points are judged against this baseline.</div>}
-    <div className="trbar"><label>From <input type="date" id="from" value={f} onChange={(e) => setF(e.target.value)} /></label><label>To <input type="date" id="to" value={t} onChange={(e) => setT(e.target.value)} /></label>
+    <div className="trbar"><label>From <Form.Control type="date" id="from" value={f} onChange={(e) => setF(e.target.value)} /></label><label>To <Form.Control type="date" id="to" value={t} onChange={(e) => setT(e.target.value)} /></label>
       <Button type="button" variant="outline-secondary" id="go" onClick={show}>Show</Button>
       <span className="sp" /><span className="help" style={{ fontSize: 12, color: 'var(--muted)' }}>Default: the last 12 months.</span></div>
     <div id="ps"><Panels panels={d.panels} ctx={ctx} withTitles={multi} margin="6px 0 6px" /></div>

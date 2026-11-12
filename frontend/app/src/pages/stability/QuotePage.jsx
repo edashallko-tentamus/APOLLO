@@ -15,7 +15,7 @@ import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { decideQuote, sendQuote } from '../quotes/quoteDialogs.js';
 import { d8, ext, Failed, iso, Loading, newKey } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 export default function QuotePage({ params: [pid] }) {
   const { data: d, error, reload } = useApi(() => stabilityQuote(pid), [pid]);
@@ -176,7 +176,7 @@ function QuoteDesign({ d, pid, reload }) {
 
   const setFact = (k) => (e) => { setPlan((s) => ({ ...s, [k]: e.target.value })); touch(); };
   const fact = (k, label, type = 'text', extra = {}) => (
-    <div className="field"><label htmlFor={'pf_' + k}>{label}</label><input id={'pf_' + k} type={type} {...extra} value={plan[k] ?? ''} disabled={!ed} onChange={setFact(k)} /></div>);
+    <div className="field"><label htmlFor={'pf_' + k}>{label}</label><Form.Control id={'pf_' + k} type={type} {...extra} value={plan[k] ?? ''} disabled={!ed} onChange={setFact(k)} /></div>);
   const toggleCond = (id, on) => { setConds((s) => d.conditions.map((c) => c.id).filter((x) => (x === id ? on : s.includes(x)))); touch(); };
   const lab = d.labs.find((l) => l.id === plan.site_id);
 
@@ -187,12 +187,12 @@ function QuoteDesign({ d, pid, reload }) {
         Change what the client asked for: add timepoints, tests or conditions, or untick what stops. Pulls already ordered or taken do not change, and T0 cannot change.
         When the client accepts, scheduled pulls follow the new design and new ones are scheduled; a new condition is placed in a chamber from the study page.</div>
       : d.study ? <div className="alert alert-warning">Accepted: this quote is study {studyLink} ({d.study.status}{d.study.amendment_no ? `, amendment ${d.study.amendment_no}` : ''}).</div> : null}
-    {d.link && v.status === 'Quoted' && <div className="qsent">The client can accept or decline online: <input readOnly value={d.link} /></div>}
+    {d.link && v.status === 'Quoted' && <div className="qsent">The client can accept or decline online: <Form.Control readOnly value={d.link} /></div>}
     {!ed && !d.study && <div className="alert alert-warning">{v.status === 'Draft' ? 'You can view this quote; quotes.edit is needed to change it.' : 'This version is issued: its design is locked. "New version" starts a changed one.'}</div>}
 
     <Section title="The study" help="Which lab stores and tests it, the product, and how prices move over the years. A planned placement date puts real dates on the quotation (weekends and holidays moved inside each window).">
       <div className="stb-facts" id="facts">
-        <div className="field"><label htmlFor="pf_site_id">Lab</label><input id="pf_site_id" disabled title="The quote's lab: set when the quote is made" value={lab?.site_code || ''} /></div>
+        <div className="field"><label htmlFor="pf_site_id">Lab</label><Form.Control id="pf_site_id" disabled title="The quote's lab: set when the quote is made" value={lab?.site_code || ''} /></div>
         {fact('product', 'Product')}{fact('lot', 'Lot')}{fact('protocol_ref', 'Client protocol')}
         {fact('unit_name', 'Material counted in')}{fact('planned_placement', 'Planned placement', 'date')}
         {fact('escalation_pct', 'Yearly price increase %', 'number', { step: '0.5', min: '0' })}
@@ -202,7 +202,7 @@ function QuoteDesign({ d, pid, reload }) {
     <Section title="Storage conditions" help="The chambers the material is stored in. The ICH set is preset for every lab; your lab adds its own (Admin > Lab setup > Stability chambers).">
       <div className="stb-conds" id="conds">
         {d.conditions.map((c) => { const on = conds.includes(c.id); return (
-          <label key={c.id} className={on ? 'on' : ''}><input type="checkbox" data-c={c.id} checked={on} disabled={!ed} onChange={(e) => toggleCond(c.id, e.target.checked)} />
+          <label key={c.id} className={on ? 'on' : ''}><Form.Check.Input type="checkbox" data-c={c.id} checked={on} disabled={!ed} onChange={(e) => toggleCond(c.id, e.target.checked)} />
             {' '}{c.condition_name} <small>{c.condition_type}{c.site_id ? '' : ' · ICH'}</small></label>); })}
       </div>
     </Section>

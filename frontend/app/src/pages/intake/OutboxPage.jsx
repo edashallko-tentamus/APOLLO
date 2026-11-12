@@ -9,6 +9,7 @@ import PagedList from '../../components/PagedList.jsx';
 import { dateTime } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { showEmail } from './EmailDialog.jsx';
+import { Nav } from 'react-bootstrap';
 
 export default function OutboxPage({ query }) {
   const { site } = useSession();
@@ -29,10 +30,10 @@ export default function OutboxPage({ query }) {
   return <>
     <PageHeader title="Outbox" audit={{ kind: tab === 'templates' ? 'templates' : 'outbox' }}
       subtitle={`Every automatic email the system generates for ${site ? site.site_code : 'your lab'}. In the Sandbox nothing is actually sent; this is exactly what the client would receive.`} />
-    <div className="tabs">
-      <a className={`tab${tab === 'emails' ? ' on' : ''}`} href="#/outbox">Emails</a>
-      <a className={`tab${tab === 'templates' ? ' on' : ''}`} href="#/outbox?tab=templates" id="tplTab">Templates</a>
-    </div>
+    <Nav variant="pills" className="tabs">
+      <Nav.Link active={tab === 'emails'} href="#/outbox">Emails</Nav.Link>
+      <Nav.Link active={tab === 'templates'} href="#/outbox?tab=templates" id="tplTab">Templates</Nav.Link>
+    </Nav>
     {tab === 'templates'
       ? <OutboxTemplates />
       : <PagedList load={listOutbox} query={query} placeholder="Search by subject, recipient, order, quote or type">

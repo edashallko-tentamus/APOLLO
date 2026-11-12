@@ -2,11 +2,12 @@
   :root { --ink: #1d2329; --muted: #5c6773; --line: #d9e0e4; --green: #1f3a2c; --ok: #1e7a4a; --bad: #b42318; --warn: #9a6700; }
   body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #f4f6f7; }
   main { max-width: 640px; margin: 40px auto; padding: 0 16px; }
-  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; margin-bottom: 14px; }
+  .card { --bs-card-border-color: var(--line); --bs-card-border-radius: 10px; --bs-card-spacer-y: 22px; --bs-card-spacer-x: 24px; margin-bottom: 14px; }
+  .btn { --bs-btn-font-size: 15px; }
+  .btn-primary { --bs-btn-bg: var(--green); --bs-btn-border-color: var(--green); --bs-btn-hover-bg: #14281e; --bs-btn-hover-border-color: #14281e; --bs-btn-active-bg: #14281e; --bs-btn-active-border-color: #14281e; --bs-btn-disabled-bg: var(--green); --bs-btn-disabled-border-color: var(--green); }
   h1 { font-size: 20px; margin: 0 0 4px; color: var(--green); } p { margin: 6px 0; } .muted { color: var(--muted); font-size: 13.5px; }
-  form { display: flex; gap: 8px; margin-top: 12px; } input[type=text] { flex: 1; font: 600 16px ui-monospace, Menlo, Consolas, monospace; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; text-transform: uppercase; }
-  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--green); background: var(--green); color: #fff; cursor: pointer; }
+  form { display: flex; gap: 8px; margin-top: 12px; } input[type=text] { flex: 1; font: 600 16px ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; }
   dl { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 10px 0 0; } dt { color: var(--muted); } dd { margin: 0; word-break: break-all; }
   .res { font-weight: 700; font-size: 16px; } .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
   .drop { border: 2px dashed var(--line); border-radius: 8px; padding: 16px; text-align: center; color: var(--muted); margin-top: 10px; }
-
+  .form-control:focus, .form-check-input:focus { border-color: #5fae8f; box-shadow: 0 0 0 .2rem rgba(31, 58, 44, .18); } .form-check-input:checked { background-color: var(--green); border-color: var(--green); }

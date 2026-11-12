@@ -10,7 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { ATTEMPT_COLS_PERSON, d8 } from './shared.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const AUDIT = { kind: 'training' };
 const PEOPLE_COLS = [
@@ -67,7 +67,7 @@ export default function OverviewPage({ query }) {
   const tabs = [['people', `People (${d.people.length})`], ['competency', `Competency (${toEval} to evaluate, ${toApprove} to approve)`], ['rules', 'Rules']];
   return <>
     <PageHeader title="Training and competency" subtitle={subtitle} actions={actions} audit={AUDIT} />
-    <div className="tabs">{tabs.map(([k, l]) => <a key={k} className={`tab ${k === tab ? 'on' : ''}`} href={`#/training?tab=${k}`} style={{ textDecoration: 'none' }}>{l}</a>)}</div>
+    <Nav variant="pills" className="tabs">{tabs.map(([k, l]) => <Nav.Link active={k === tab} key={k} href={`#/training?tab=${k}`} style={{ textDecoration: 'none' }}>{l}</Nav.Link>)}</Nav>
     {tab === 'people' && <Section title="People" help="Everyone in a group at this lab. Open a person for their qualifications, competency, the work they did and their training report.">
       <ReadGrid rows={d.people} columns={PEOPLE_COLS} search /></Section>}
     {tab === 'competency' && <Section title="Competency" help="Open attempts (to evaluate by a trainer, then to approve by QA) and those decided in the last 60 days. Open one to evaluate or approve it.">

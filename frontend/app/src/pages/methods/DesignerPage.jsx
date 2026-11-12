@@ -11,7 +11,7 @@ import TabReview from './TabReview.jsx';
 import TabTest from './TabTest.jsx';
 import TabWorkflow from './TabWorkflow.jsx';
 import { useNewVersion } from './TestPage.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const TABS = [['test', '1 Test and reporting'], ['analytes', '2 Analytes'], ['workflow', '3 Workflow'], ['review', '4 Review and approve']];
 
@@ -36,8 +36,8 @@ export default function DesignerPage({ params: [vid], query }) {
   const Tab = { test: TabTest, analytes: TabAnalytes, workflow: TabWorkflow, review: TabReview }[tab];
   return <>
     <PageHeader title={`${t.test_name}: version ${v.version_no}`} subtitle={subtitle} actions={actions} audit={{ kind: 'testdef', id: t.id }} />
-    <div className="wdtabs">{TABS.map(([k, l]) => <a key={k} href={`#/methods/versions/${vid}?tab=${k}`} className={k === tab ? 'on' : ''}>{l}
-      {k === 'review' && v.status === 'Draft' && errors.length > 0 && <> <small>{errors.length}</small></>}</a>)}</div>
+    <Nav variant="pills" className="wdtabs">{TABS.map(([k, l]) => <Nav.Link active={k === tab} key={k} href={`#/methods/versions/${vid}?tab=${k}`}>{l}
+      {k === 'review' && v.status === 'Draft' && errors.length> 0 && <> <small>{errors.length}</small></>}</Nav.Link>)}</Nav>
     {v.status === 'Draft'
       ? !d.can_design && <div className="wdlocked">Read only: changing a draft needs methods.design in this lab.</div>
       : <div className="wdlocked">Version {v.version_no} is <b>{v.status}</b>{v.approved_by_name ? `, approved by ${v.approved_by_name} on ${dt(v.approved_at)}` : ''}. It cannot be changed{d.can_design ? ': start a new version to make changes' : ''}.</div>}

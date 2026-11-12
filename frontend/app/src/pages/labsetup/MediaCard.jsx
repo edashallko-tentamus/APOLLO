@@ -6,7 +6,7 @@ import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import './labsetup.css';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const KINDS = [
   ['Logo', 'Printed at the top of the lab\'s COAs.'],
@@ -25,7 +25,7 @@ export default function MediaCard({ site, onChange }) {
   async function upload(kind) {
     let file = null;
     const v = await dialogs.form({ title: `${kind}: ${site.site_code}`, okText: 'Upload', intro: 'Choose the image. It is stored unchanged with its fingerprint; a replaced image is kept in the history.',
-      before: <div className="field"><label htmlFor="f_file">Image</label><input type="file" id="f_file" accept="image/png,image/jpeg,image/svg+xml" onChange={(e) => { file = e.target.files[0] || null; }} /></div>,
+      before: <div className="field"><label htmlFor="f_file">Image</label><Form.Control type="file" id="f_file" accept="image/png,image/jpeg,image/svg+xml" onChange={(e) => { file = e.target.files[0] || null; }} /></div>,
       fields: kind === 'Other' ? [{ name: 'title', label: 'What it is', required: true }] : [],
       submit: async (vals) => { if (!file) throw new Error('Choose an image file.'); return vals; } });
     if (!v || !file) return;

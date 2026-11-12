@@ -2,7 +2,9 @@
 // The PDF is fingerprinted in the browser: it never leaves the person's computer.
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './verify.css';
+import { Button, Card, Form } from 'react-bootstrap';
 
 async function sha256(file) {
   const h = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
@@ -25,7 +27,7 @@ function Result({ r }) {
       <dt>Fingerprint (SHA-256)</dt><dd><code>{r.sha256}</code></dd>
     </dl>
     <div className="drop" id="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); take(e.dataTransfer.files[0]); }}>
-      Drop your PDF here, or <label style={{ textDecoration: 'underline', cursor: 'pointer' }}>choose it<input type="file" id="file" accept="application/pdf" hidden onChange={(e) => take(e.target.files[0])} /></label>, to check it is this certificate, unchanged.
+      Drop your PDF here, or <label style={{ textDecoration: 'underline', cursor: 'pointer' }}>choose it<Form.Control type="file" id="file" accept="application/pdf" hidden onChange={(e) => take(e.target.files[0])} /></label>, to check it is this certificate, unchanged.
     </div>
     <p id="fileres">{file && (file.hash === r.sha256
       ? <span className="res ok">Your PDF is this certificate, unchanged.</span>
@@ -43,15 +45,15 @@ function VerifyPage() {
   };
   useEffect(() => { if (first) check(first); }, [first]);
   return <main>
-    <div className="card">
+    <Card body>
       <h1>Verify a Certificate of Analysis</h1>
       <p className="muted">Enter the verification code printed at the bottom of the certificate. You will see when the lab issued that version and its fingerprint; you can then check your PDF against it. The PDF never leaves your computer.</p>
       <form id="f" onSubmit={(e) => { e.preventDefault(); if (code.trim()) check(code); }}>
-        <input type="text" id="code" placeholder="XXXX-XXXX-XXXX" autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /><button>Check</button>
+        <Form.Control type="text" id="code" placeholder="XXXX-XXXX-XXXX" autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} /><Button variant="primary" type="submit">Check</Button>
       </form>
-    </div>
+    </Card>
     {/* a new check starts afresh: no PDF result from the last one */}
-    {r && <div className="card" id="out"><Result key={typeof r === 'object' ? r.sha256 : r} r={r} /></div>}
+    {r && <Card body id="out"><Result key={typeof r === 'object' ? r.sha256 : r} r={r} /></Card>}
   </main>;
 }
 

@@ -8,11 +8,11 @@ import Section from '../../components/Section.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { money } from '../../lib/format.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 export const TABS = [['tests', 'Tests'], ['packages', 'Packages'], ['prices', 'Price changes'], ['charges', 'Charges'], ['lines', 'Service lines']];
 export function TabBar({ tab }) {
-  return <div className="tabs">{TABS.map(([k, l]) => <a key={k} className={`tab${k === tab ? ' on' : ''}`} href={'#/catalog' + (k === 'tests' ? '' : '?tab=' + k)}>{l}</a>)}</div>;
+  return <Nav variant="pills" className="tabs">{TABS.map(([k, l]) => <Nav.Link active={k === tab} key={k} href={'#/catalog' + (k === 'tests' ? '' : '?tab=' + k)}>{l}</Nav.Link>)}</Nav>;
 }
 
 const inactiveMuted = (r) => (r.status === 'Inactive' ? 'mutedrow' : '');

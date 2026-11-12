@@ -2,7 +2,9 @@
 // accepts or declines it, without signing in. Accepting lets them submit samples against it at the prices shown.
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './quote.css';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const token = new URLSearchParams(location.search).get('t') || '';
@@ -33,9 +35,9 @@ function Answer({ d }) {
   };
   return <>
     <p><b>Would you like to accept this quotation?</b></p>
-    <label className="f" htmlFor="nm">Your name</label><input type="text" id="nm" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-    <label className="f" htmlFor="nt">Comments or purchase order number (optional)</label><textarea id="nt" rows="3" value={note} onChange={(e) => setNote(e.target.value)} />
-    <div className="btns"><button id="yes" disabled={busy} onClick={() => send('Accept')}>Accept the quotation</button><button id="no" className="no" disabled={busy} onClick={() => send('Decline')}>Decline</button></div>
+    <label className="f" htmlFor="nm">Your name</label><Form.Control type="text" id="nm" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+    <label className="f" htmlFor="nt">Comments or purchase order number (optional)</label><Form.Control as="textarea" id="nt" rows="3" value={note} onChange={(e) => setNote(e.target.value)} />
+    <div className="btns"><Button variant="primary" id="yes" disabled={busy} onClick={() => send('Accept')}>Accept the quotation</Button><Button id="no" variant="outline-danger" disabled={busy} onClick={() => send('Decline')}>Decline</Button></div>
     <p id="msg" className="bad">{msg}</p>
   </>;
 }
@@ -43,11 +45,11 @@ function Answer({ d }) {
 function QuotePage() {
   const [d, setD] = useState(null);
   useEffect(() => { fetch(url).then((r) => r.json()).catch(() => ({ found: false })).then(setD); }, []);
-  if (!d) return <main><div className="card" id="q"><h1>Your quotation</h1><p className="muted">Loading…</p></div></main>;
-  if (!d.found) return <main><div className="card" id="q"><h1>Your quotation</h1><p className="bad">This link is not valid.</p><p className="muted">Please contact the laboratory directly.</p></div></main>;
+  if (!d) return <main><Card body id="q"><h1>Your quotation</h1><p className="muted">Loading…</p></Card></main>;
+  if (!d.found) return <main><Card body id="q"><h1>Your quotation</h1><p className="bad">This link is not valid.</p><p className="muted">Please contact the laboratory directly.</p></Card></main>;
   const many = new Set(d.lines.map((l) => l.lab)).size > 1;
   return <main>
-    <div className="card" id="q">
+    <Card body id="q">
       <h1>Quotation {d.quote_code}</h1>
       <p className="muted">For {d.client_name}{d.contact ? ' · attention ' + d.contact : ''} · prepared by {d.prepared_by || ''} · version {d.version_no}{d.valid_until_text ? ' · valid until ' + d.valid_until_text : ''}</p>
       <div className="wrap"><table>
@@ -60,8 +62,8 @@ function QuotePage() {
       <div className="tot">Total {money(d.total)}</div>
       {d.notes && <p className="muted">{d.notes}</p>}
       <p className="muted"><a href={url + '/pdf'} target="_blank" rel="noopener">Download the quotation (PDF)</a></p>
-    </div>
-    <div className="card" id="act"><Answer d={d} /></div>
+    </Card>
+    <Card body id="act"><Answer d={d} /></Card>
   </main>;
 }
 

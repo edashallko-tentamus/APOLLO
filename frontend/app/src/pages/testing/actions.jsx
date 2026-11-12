@@ -5,6 +5,7 @@ import { useState } from 'react';
 import * as api from '../../api/testing.js';
 import Modal from '../../components/Modal.jsx';
 import { active, COUNT_WORDS, day, dilutionSteps, dt, forWhat, isPast, kindOf, lastReadingStep, nfmt, readingDilution, rlabel } from './shared.jsx';
+import { Form } from 'react-bootstrap';
 
 const fail = (ctx) => (e) => ctx.toast(e.message, 'err');
 
@@ -129,14 +130,14 @@ function CompleteDialog({ what, mode, username, submit, onDone }) {
     <Modal title="Complete step" okText="Sign and complete" error={error} busy={busy} onOk={ok} onClose={() => onDone(null)}
       intro={<>You are signing: <b>{what}</b>.<br />Your signature means <b>Performed by</b> and covers every entry in the batch; it is stored with your name, the date and time.</>}>
       <div className="sigbox">
-        <div className="field"><label htmlFor="c_user">User ID <span className="req">*</span></label><input id="c_user" autoComplete="username" value={user} onChange={(e) => setUser(e.target.value)} /></div>
-        <div className="field"><label htmlFor="c_pass">Password <span className="req">*</span></label><input id="c_pass" type="password" autoComplete="current-password" autoFocus value={pass} onChange={(e) => setPass(e.target.value)} /></div>
+        <div className="field"><label htmlFor="c_user">User ID <span className="req">*</span></label><Form.Control id="c_user" autoComplete="username" value={user} onChange={(e) => setUser(e.target.value)} /></div>
+        <div className="field"><label htmlFor="c_pass">Password <span className="req">*</span></label><Form.Control id="c_pass" type="password" autoComplete="current-password" autoFocus value={pass} onChange={(e) => setPass(e.target.value)} /></div>
       </div>
       {mode !== 'None' && <>
-        <label className="cb" style={{ display: 'block', marginTop: 10 }}><input type="checkbox" id="c_wit" checked={wit} disabled={mode === 'Required'} onChange={(e) => setWit(e.target.checked)} /> Witnessed{mode === 'Required' ? ' (this step requires a witness)' : ''}</label>
+        <label className="cb" style={{ display: 'block', marginTop: 10 }}><Form.Check.Input type="checkbox" id="c_wit" checked={wit} disabled={mode === 'Required'} onChange={(e) => setWit(e.target.checked)} /> Witnessed{mode === 'Required' ? ' (this step requires a witness)' : ''}</label>
         {wit && <div className="witbox" id="c_wbox"><div className="help">The witness signs too (<b>Witnessed by</b>): another person who does bench work in this lab, with their own user ID and password.</div>
-          <div className="two"><div className="field"><label htmlFor="c_wuser">Witness user ID <span className="req">*</span></label><input id="c_wuser" autoComplete="off" value={wuser} onChange={(e) => setWuser(e.target.value)} /></div>
-            <div className="field"><label htmlFor="c_wpass">Witness password <span className="req">*</span></label><input id="c_wpass" type="password" autoComplete="off" value={wpass} onChange={(e) => setWpass(e.target.value)} /></div></div></div>}
+          <div className="two"><div className="field"><label htmlFor="c_wuser">Witness user ID <span className="req">*</span></label><Form.Control id="c_wuser" autoComplete="off" value={wuser} onChange={(e) => setWuser(e.target.value)} /></div>
+            <div className="field"><label htmlFor="c_wpass">Witness password <span className="req">*</span></label><Form.Control id="c_wpass" type="password" autoComplete="off" value={wpass} onChange={(e) => setWpass(e.target.value)} /></div></div></div>}
       </>}
     </Modal>
   );
@@ -158,7 +159,7 @@ function AddSamplesDialog({ b, rows, onDone }) {
       intro="Waiting in the backlog for this test version, in priority order. The batch's QC follows the number of samples; a completed Batching step opens again so the batch is confirmed. Lot QA testing samples do not count toward the batch size."
       onOk={() => (picked.size ? onDone(rows.filter((r) => picked.has(key(r)))) : setError('Tick the samples to add.'))} onClose={() => onDone(null)}>
       <div className="addlist">{rows.map((r) => (
-        <label key={key(r)} className="cb"><input type="checkbox" value={key(r)} checked={picked.has(key(r))} onChange={() => flip(key(r))} />
+        <label key={key(r)} className="cb"><Form.Check.Input type="checkbox" value={key(r)} checked={picked.has(key(r))} onChange={() => flip(key(r))} />
           {' '}<b>{r.sample_code || r.client_sample_id}</b> {r.client_name || ''}{r.matrix ? ' · ' + r.matrix : ''}{r.due_date ? ' · due ' + day(r.due_date) : ''}
           {r.priority !== 'Standard' && <> <span className="badge text-bg-secondary">{r.priority}</span></>}{r.is_media && <> <span className="badge text-bg-secondary">Lot QA testing</span></>}{r.kind === 'Re-prep' ? ` (re-prep ×${r.replicates})` : ''}</label>
       ))}</div>

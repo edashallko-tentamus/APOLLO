@@ -12,7 +12,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, decisionText, dt, expCls, Failed, levelText, Loading, NeedLab, PuTabs, supCls } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Nav } from 'react-bootstrap';
 
 const AUDIT = { kind: 'vendors' };
 const days = (v) => (new Date(v) - Date.now()) / 864e5;
@@ -90,9 +90,9 @@ export default function SuppliersPage({ query }) {
           help={me.can_qualify_corporate ? 'Open a vendor to approve it for every lab or reject the proposal (you cannot decide one you proposed).' : 'Proposals from the labs, waiting for Corporate QA.'}>
           <ReadGrid rows={waiting} columns={WAITING_COLS} onRowOpen={openVendor} />
         </Section>)}
-      <div className="pubar">
-        {Object.entries(F).map(([k, [lbl, fn]]) => <a key={k} className={`tab${k === show ? ' on' : ''}`} href={`#/purchasing/suppliers?show=${k}`}>{lbl} <small>{d.rows.filter(fn).length}</small></a>)}
-      </div>
+      <Nav variant="pills" className="pubar">
+        {Object.entries(F).map(([k, [lbl, fn]]) => <Nav.Link key={k} active={k === show} href={`#/purchasing/suppliers?show=${k}`}>{lbl} <small>{d.rows.filter(fn).length}</small></Nav.Link>)}
+      </Nav>
       {!(me.can_qualify || me.can_qualify_corporate) && <div className="alert alert-warning">QA approves vendors for this lab (purchasing.qualify); Corporate QA for every lab.</div>}
       <ReadGrid rows={shown} columns={COLUMNS} search onRowOpen={openVendor} />
     </>}

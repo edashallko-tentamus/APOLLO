@@ -4,7 +4,7 @@ import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { SOURCES, TrendTabs } from './TrendPanel.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const SUB = 'Charts saved for the lab. Watched charts are on Trend watch; QC charts can also be shown in QC Review of the test\'s batches. A QA reviewable chart counts once QA has approved it and its limits.';
@@ -35,7 +35,7 @@ export default function ChartsPage({ query }) {
   return <>
     {header}
     <div className="trbar"><span className={`trpill ${waiting ? 'bad' : 'ok'}`}>{waiting ? `${waiting} chart${waiting === 1 ? '' : 's'} awaiting QA approval` : 'No chart awaiting QA'}</span><span className="sp" />
-      <label><input type="checkbox" id="qaonly" checked={qaOnly} onChange={(e) => { window.location.hash = e.target.checked ? '#/trending/charts?show=qa' : '#/trending/charts'; }} /> Only charts awaiting QA</label></div>
+      <label><Form.Check.Input type="checkbox" id="qaonly" checked={qaOnly} onChange={(e) => { window.location.hash = e.target.checked ? '#/trending/charts?show=qa' : '#/trending/charts'; }} /> Only charts awaiting QA</label></div>
     <Card body><ReadGrid rows={rows} columns={COLUMNS} search rowClass={rowClass} emptyText={qaOnly ? 'No chart is waiting for QA.' : 'No saved charts yet.'} /></Card>
   </>;
 }

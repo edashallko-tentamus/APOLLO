@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import './methods.css';
-import { Card as BsCard } from 'react-bootstrap';
+import { Card as BsCard, Nav } from 'react-bootstrap';
 
 export const STEP_TYPES = ['Batching', 'Weighing', 'Preparation', 'Plating/Inoculation', 'Incubation', 'Dilution', 'Split off Test', 'Hold Point', 'Calculation', 'Data Entry', 'QC Review'];
 export const TYPE_COLOR = { Batching: '#E3ECFB', Weighing: '#EAF4EE', Preparation: '#F3EEFA', 'Plating/Inoculation': '#FDEFE3', Incubation: '#FFF6D9', Dilution: '#E6F4F7',
@@ -48,7 +48,7 @@ export function Pick({ value, options, onChange, disabled, blank = true, ...rest
 }
 
 const LIST_TABS = [['#/methods', 'Tests and workflows'], ['#/methods/sops', 'Methods (SOPs)']];
-export const ListTabs = ({ cur }) => <div className="wdtabs">{LIST_TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}</a>)}</div>;
+export const ListTabs = ({ cur }) => <Nav variant="pills" className="wdtabs">{LIST_TABS.map(([h, l]) => <Nav.Link active={h === cur} key={h} href={h}>{l}</Nav.Link>)}</Nav>;
 
 // Every creation and change of a test workflow is signed (migration 015): Created by needs no reason, Changed by does.
 // fn(reason, signature) runs while the dialog is open, so a wrong password or a refused change keeps it open.

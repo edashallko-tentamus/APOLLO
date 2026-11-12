@@ -9,7 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { Failed, fmtN, inactiveRow, Loading, opts } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const UnitsNote = () => <div className="alert alert-warning">You can view this list. People with the Units permission (QA and administrators by default) maintain it.</div>;
 const findOf = (query) => new URLSearchParams(query).get('find') || '';
@@ -63,7 +63,7 @@ function TryConversion({ units }) {
   const set = (k) => (x) => setT((s) => ({ ...s, [k]: x }));
   return (
     <Card body><h2>Try a conversion</h2><div className="invbar">
-      <input id="c_v" type="number" step="any" value={t.v} onChange={(e) => set('v')(e.target.value)} style={{ width: 90 }} className="gsearch" />
+      <Form.Control id="c_v" type="number" step="any" value={t.v} onChange={(e) => set('v')(e.target.value)} style={{ width: 90 }} className="gsearch" />
       <SmartSelect id="c_f" value={t.from} options={codes} onChange={set('from')} /> to <SmartSelect id="c_t" value={t.to} options={codes} onChange={set('to')} />
       <SmartSelect id="c_form" value={t.form} options={FORMS} onChange={set('form')} /><Button type="button" variant="outline-secondary" onClick={go}>Convert</Button><b id="c_out">{out}</b>
     </div></Card>

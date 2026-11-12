@@ -9,7 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useMeta } from '../../hooks/useMeta.js';
 import { money } from '../../lib/format.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const AUDIT = { kind: 'rush' };
 let lastSelected = null; // the schedule shown last, as the old screen remembered it
@@ -48,9 +48,9 @@ export default function RushPage({ params }) {
     <PageHeader title="Rush fee schedules" audit={AUDIT} subtitle="Named, reusable rush options (for example micro differs from chemistry). Assigned to tests in the test catalogue."
       actions={<Button type="button" variant="primary" onClick={newSchedule}>+ New schedule</Button>} />
     {error ? <Card body className="err">{error.message}</Card> : !schedules ? <div className="loading">Loading…</div> : <>
-      <div className="tabs">{schedules.map((s) => (
-        <a key={s.id} className={`tab${cur && s.id === cur.id ? ' on' : ''}`} href={'#/rush/' + s.id}>{s.schedule_name} <small>{s.test_count} tests</small></a>
-      ))}</div>
+      <Nav variant="pills" className="tabs">{schedules.map((s) => (
+        <Nav.Link active={cur && s.id === cur.id} key={s.id} href={'#/rush/' + s.id}>{s.schedule_name} <small>{s.test_count} tests</small></Nav.Link>
+      ))}</Nav>
       {cur ? (
         <Section title={cur.schedule_name + ' tiers'} help={`${cur.description || ''} The test's standard TAT is the maximum; each tier offers a faster TAT for a surcharge. "Needs approval" is the default for tests using this schedule; each test can override it.`}>
           <EditableGrid key={cur.id} rows={cur.tiers} columns={columns} allowAdd newRow={newRow} what={`rush tiers on ${cur.schedule_name}`} save={save} afterSave={reload} />

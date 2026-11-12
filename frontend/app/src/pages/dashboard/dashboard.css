@@ -1,8 +1,7 @@
 /* copied from public/js/pages/dashboard.js */
 .rlabs { display: flex; flex-direction: column; gap: 4px; }
 .dbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: -4px 0 12px; font-size: 13px; color: var(--muted); }
-.dbar .sp { flex: 1; } .dbar select { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; }
-.dgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 100px; gap: 12px; grid-auto-flow: row dense; }
+.dbar .sp { flex: 1; } .dgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 100px; gap: 12px; grid-auto-flow: row dense; }
 .dw { background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; min-width: 0; position: relative; overflow: hidden; }
 .dw.drag-over { outline: 2px dashed var(--green-700); outline-offset: 2px; } .dw.dragging { opacity: .45; }
 .dw header { display: flex; align-items: center; gap: 6px; padding: 9px 12px 4px; cursor: grab; user-select: none; }
@@ -49,15 +48,12 @@
 .ddet .box h3 { margin: 0 0 10px; display: flex; justify-content: space-between; gap: 12px; }
 @media (max-width: 900px) { .dgrid { grid-template-columns: 1fr; } .dw { grid-column: 1 / -1 !important; } }
 /* D-1.1: tabs inside a widget, the smaller secondary figures, the line chart, the deviation cells, the lab tabs */
-.dtabs { display: flex; justify-content: flex-end; gap: 4px; margin: 0 0 4px; }
-.dtabs button { border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 14px; padding: 2px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-.dtabs button.on { background: var(--green-700, #1d6b3f); border-color: transparent; color: #fff; }
+.dtabs { justify-content: flex-end; gap: 4px; margin: 0 0 4px; --bs-nav-link-padding-y: 2px; --bs-nav-link-padding-x: 10px; --bs-nav-link-font-size: 12px; --bs-nav-pills-border-radius: 14px; --bs-nav-link-color: var(--muted); }
 .dminor { margin-top: 8px; border-top: 1px solid #EEF1F3; padding-top: 6px; }
 .dminor .t { font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
 .dk.small { gap: 6px; } .dk.small a, .dk.small div.k { background: none; padding: 2px 6px; } .dk.small b { font-size: 14px; font-weight: 600; color: var(--muted); } .dk.small span { font-size: 11px; }
 .dlinebox { width: 100%; min-height: 210px; margin-top: 4px; overflow: hidden; } .dline { display: block; } .dline text { font-size: 11px; fill: var(--muted); } .dline .grid { stroke: #EEF1F3; } .dline .zero { stroke: #b7c0c8; }
 .dt td.up { color: #1d6b3f; } .dt td.down { color: #b42318; }
-.ftabs { display: flex; gap: 6px; margin: 0 0 10px; } .ftabs button { border: 1px solid var(--line); background: #fff; border-radius: 16px; padding: 4px 14px; font: inherit; cursor: pointer; }
+.ftabs { margin: 0 0 10px; --bs-nav-link-padding-y: 4px; --bs-nav-link-padding-x: 14px; --bs-nav-pills-border-radius: 16px; }
 .dt.kt td.k-good { color: #1d6b3f; font-weight: 700; } .dt.kt td.k-warn { color: #8a5a00; font-weight: 700; } .dt.kt td.k-bad { color: #b42318; font-weight: 700; }
 .dt.kt td.k-flag { color: #b42318; font-weight: 600; } .dt.kt td { white-space: nowrap; }
-.ftabs button.on { background: var(--green-700, #1d6b3f); color: #fff; border-color: transparent; }

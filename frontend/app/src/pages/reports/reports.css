@@ -5,9 +5,8 @@
 .fz .hist ul { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; } .fz .hist li { margin: 2px 0; }
 .fz .pdf { width: 100%; height: calc(100vh - 150px); min-height: 640px; border: 1px solid var(--line); border-radius: 6px; background: #f4f6f7; }
 .fz .card { padding: 10px 12px; } .fz .chk .lk { display: block; margin-top: 4px; font-weight: 600; }
-.rftabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
-.rftabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
-.rftabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; } .rftabs small { opacity: .8; margin-left: 3px; }
+.rftabs { margin: -4px 0 12px; }
+.rftabs small { opacity: .8; margin-left: 3px; }
 .rffil { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
 .rffil button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; } .rffil button.on { border-color: var(--green-700); background: var(--green-50); font-weight: 700; }
 tr.rfover td { background: #fdecec; } tr.rfsoon td { background: #fff4d6; } tr.rftaken td { color: #8a949c; }

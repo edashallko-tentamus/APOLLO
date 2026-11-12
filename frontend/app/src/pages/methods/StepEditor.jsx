@@ -9,7 +9,7 @@ import BatchingConfig from './BatchingConfig.jsx';
 import CalculationConfig from './CalculationConfig.jsx';
 import { DataEntryConfig, DilutionConfig, IncubationConfig, PlatingConfig, PreparationConfig, QcReviewConfig, SplitHoldConfig, WeighingConfig } from './ConfigEditors.jsx';
 import { Field, Pick, stepKey, STEP_TYPES, TYPE_HELP, useSigned } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const EDITORS = { Batching: BatchingConfig, Weighing: WeighingConfig, Preparation: PreparationConfig, 'Plating/Inoculation': PlatingConfig, Incubation: IncubationConfig,
   Dilution: DilutionConfig, 'Split off Test': SplitHoldConfig, 'Hold Point': SplitHoldConfig, Calculation: CalculationConfig, 'Data Entry': DataEntryConfig, 'QC Review': QcReviewConfig };
@@ -81,9 +81,9 @@ export default function StepEditor({ d, step, afterId = null, onClose, onSaved, 
         <div className="grid4">
           <Field label="Type" req><Pick id="s_type" value={type} blank={false} options={STEP_TYPES} disabled={dis} onChange={setType} /></Field>
           <Field label="Name" req help="e.g. Microwave digestion">
-            <input id="s_name" type="text" value={name} disabled={dis} onChange={(e) => { setName(e.target.value); if (!keyTouched) setKey(stepKey(e.target.value)); }} /></Field>
+            <Form.Control id="s_name" type="text" value={name} disabled={dis} onChange={(e) => { setName(e.target.value); if (!keyTouched) setKey(stepKey(e.target.value)); }} /></Field>
           <Field label="Key" req help="Short lower-case word used in formulas">
-            <input id="s_key" type="text" className="wdmono" maxLength={30} value={key} disabled={dis} onChange={(e) => { setKeyTouched(true); setKey(e.target.value); }} /></Field>
+            <Form.Control id="s_key" type="text" className="wdmono" maxLength={30} value={key} disabled={dis} onChange={(e) => { setKeyTouched(true); setKey(e.target.value); }} /></Field>
           <Field label="Done by"><Pick id="s_dept" value={dept} blank={false} disabled={dis} onChange={setDept}
             options={[{ value: '', label: `The test's department${testDept ? ' (' + testDept.department_code + ')' : ''}` }, ...L.departments.map((x) => ({ value: x.id, label: `${x.department_code} ${x.department_name}` }))]} /></Field>
         </div>
@@ -91,22 +91,22 @@ export default function StepEditor({ d, step, afterId = null, onClose, onSaved, 
           <Field label="Comes after" help="Tick the step(s) this one follows. Tick parallel for a branch that never holds up the rest (e.g. a timepoint's QC Review).">
             <div className="wdchecks" id="s_deps">{others.length ? others.map((o) => (
               <span key={o.id} className="wddep">
-                <label><input type="checkbox" data-dep={o.id} checked={!!deps[o.id]} disabled={dis} onChange={(e) => setDeps((m) => ({ ...m, [o.id]: e.target.checked ? 'Sequential' : undefined }))} /> {o.step_name}</label>
-                <label className="wdpar" title="A parallel branch never holds up the rest"><input type="checkbox" data-par={o.id} checked={!!par[o.id]} disabled={dis} onChange={(e) => setPar((m) => ({ ...m, [o.id]: e.target.checked }))} /> parallel</label>
+                <label><Form.Check.Input type="checkbox" data-dep={o.id} checked={!!deps[o.id]} disabled={dis} onChange={(e) => setDeps((m) => ({ ...m, [o.id]: e.target.checked ? 'Sequential' : undefined }))} /> {o.step_name}</label>
+                <label className="wdpar" title="A parallel branch never holds up the rest"><Form.Check.Input type="checkbox" data-par={o.id} checked={!!par[o.id]} disabled={dis} onChange={(e) => setPar((m) => ({ ...m, [o.id]: e.target.checked }))} /> parallel</label>
               </span>)) : <span className="help">This is the first step.</span>}</div>
           </Field>
           <Field label="Equipment types" help="Weighing, Incubation and Data Entry (with an attached export) need one; mark the main instrument, the others are alternatives. The actual unit is chosen at the bench and must be in calibration.">
             <div className="wdchecks" id="s_eq">{L.types.map((tp) => (
-              <label key={tp.id}><input type="checkbox" data-eq={tp.id} checked={eq.includes(tp.id)} disabled={dis}
+              <label key={tp.id}><Form.Check.Input type="checkbox" data-eq={tp.id} checked={eq.includes(tp.id)} disabled={dis}
                 onChange={(e) => setEq((l) => (e.target.checked ? [...l, tp.id] : l.filter((x) => x !== tp.id)))} /> {tp.type_name}{' '}
-                <input type="radio" name="s_main" data-main={tp.id} checked={mainEq === tp.id} disabled={dis} title="Main instrument" onChange={() => setMainEq(tp.id)} /> <small>main</small></label>))}</div>
+                <Form.Check.Input type="radio" name="s_main" data-main={tp.id} checked={mainEq === tp.id} disabled={dis} title="Main instrument" onChange={() => setMainEq(tp.id)} /> <small>main</small></label>))}</div>
           </Field>
         </div>
         <div className="grid4">
           <Field label="Witness" help="A witness signs with the analyst when the step is completed: another person who does bench work in this lab">
             <Pick id="s_wit" value={witness} blank={false} options={WITNESS} disabled={dis} onChange={setWitness} /></Field>
         </div>
-        <Field label="Instructions for the analyst"><textarea id="s_instr" rows={2} value={instr} disabled={dis} onChange={(e) => setInstr(e.target.value)} /></Field>
+        <Field label="Instructions for the analyst"><Form.Control as="textarea" id="s_instr" rows={2} value={instr} disabled={dis} onChange={(e) => setInstr(e.target.value)} /></Field>
         <h3>{type} settings</h3>
         <div id="s_cfg"><Editor key={type} type={type} cfg={cfg} d={d} step={step} anc={anc} ed={ed} readRef={readRef} stepKey={key} /></div>
         <div className="merr" id="s_err">{err}</div>

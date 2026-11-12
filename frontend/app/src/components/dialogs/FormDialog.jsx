@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import Modal from '../Modal.jsx';
 import SmartSelect from '../SmartSelect.jsx';
+import { Form } from 'react-bootstrap';
 
 const optionList = (f) => {
   const opts = (f.options || []).map((o) => (typeof o === 'object' ? { value: String(o.value), label: String(o.label) } : { value: String(o), label: String(o) }));
@@ -14,12 +15,12 @@ function Field({ f, value, onChange }) {
   const id = 'f_' + f.name;
   let control;
   if (f.type === 'select') control = <SmartSelect id={id} value={value} options={optionList(f)} onChange={onChange} />;
-  else if (f.type === 'textarea') control = <textarea id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} />;
+  else if (f.type === 'textarea') control = <Form.Control as="textarea" id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} />;
   // a file field gives back the chosen File (or null); accept: e.g. '.pdf,image/*'
-  else if (f.type === 'file') control = <input id={id} type="file" accept={f.accept} onChange={(e) => onChange(e.target.files[0] || null)} />;
-  else if (f.type === 'checkbox') control = <label className="cb"><input type="checkbox" id={id} checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {f.cbLabel || ''}</label>;
+  else if (f.type === 'file') control = <Form.Control id={id} type="file" accept={f.accept} onChange={(e) => onChange(e.target.files[0] || null)} />;
+  else if (f.type === 'checkbox') control = <label className="cb"><Form.Check.Input type="checkbox" id={id} checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {f.cbLabel || ''}</label>;
   else control = <>
-    <input id={id} type={f.type || 'text'} value={value} list={f.list ? id + '_dl' : undefined} onChange={(e) => onChange(e.target.value)} />
+    <Form.Control id={id} type={f.type || 'text'} value={value} list={f.list ? id + '_dl' : undefined} onChange={(e) => onChange(e.target.value)} />
     {f.list && <datalist id={id + '_dl'}>{f.list.map((x) => <option key={x} value={x} />)}</datalist>}
   </>;
   return (

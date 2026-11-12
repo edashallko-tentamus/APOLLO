@@ -2,7 +2,9 @@
 // lab what they want done. No sign-in; the link is valid for 90 days from the email. Each answer waits on the OOS record.
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import './oos.css';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const q = new URLSearchParams(location.search);
 const url = '/api/public/oos/' + encodeURIComponent(q.get('t') || '');
@@ -17,7 +19,7 @@ const CHOICES = [
   ['Acknowledge', 'Acknowledge the result', 'No further testing is needed.'],
 ];
 
-function Form() {
+function AnswerForm() {
   const [choice, setChoice] = useState(PRE[q.get('a')] || '');
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
@@ -37,28 +39,28 @@ function Form() {
   };
   return <>
     <p>Would you like the laboratory to conduct Phase II re-testing of this sample, or something else? Choose one:</p>
-    {CHOICES.map(([v, t, h]) => <label className="opt" key={v}><input type="radio" name="c" value={v} checked={v === choice} onChange={() => setChoice(v)} /> <b>{t}</b><span>{h}</span></label>)}
-    <label className="f" htmlFor="nm">Your name</label><input type="text" id="nm" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-    <label className="f" htmlFor="nt">Anything the lab should know (optional)</label><textarea id="nt" rows="3" value={note} onChange={(e) => setNote(e.target.value)} />
-    <button id="go" disabled={busy} onClick={go}>Send my answer</button><p id="msg" className="bad">{msg}</p>
+    {CHOICES.map(([v, t, h]) => <label className="opt" key={v}><Form.Check.Input type="radio" name="c" value={v} checked={v === choice} onChange={() => setChoice(v)} /> <b>{t}</b><span>{h}</span></label>)}
+    <label className="f" htmlFor="nm">Your name</label><Form.Control type="text" id="nm" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+    <label className="f" htmlFor="nt">Anything the lab should know (optional)</label><Form.Control as="textarea" id="nt" rows="3" value={note} onChange={(e) => setNote(e.target.value)} />
+    <Button variant="primary" id="go" disabled={busy} onClick={go}>Send my answer</Button><p id="msg" className="bad">{msg}</p>
   </>;
 }
 
 function OosPage() {
   const [d, setD] = useState(null);
   useEffect(() => { fetch(url).then((r) => r.json()).catch(() => ({ found: false })).then(setD); }, []);
-  if (!d) return <main><div className="card" id="top"><h1>Out of specification result</h1><p className="muted">Loading…</p></div></main>;
-  if (!d.found) return <main><div className="card" id="top"><h1>Out of specification result</h1><p className="bad">This link is not valid any more.</p><p className="muted">Please contact the laboratory directly.</p></div></main>;
+  if (!d) return <main><Card body id="top"><h1>Out of specification result</h1><p className="muted">Loading…</p></Card></main>;
+  if (!d.found) return <main><Card body id="top"><h1>Out of specification result</h1><p className="bad">This link is not valid any more.</p><p className="muted">Please contact the laboratory directly.</p></Card></main>;
   return <main>
-    <div className="card" id="top">
+    <Card body id="top">
       <h1>Out of specification result</h1><p className="muted">{d.site_name} · {d.oos_code}</p>
       <dl>
         <dt>Your sample</dt><dd>{d.client_sample_id || d.sample_code} ({d.sample_code})</dd><dt>Test</dt><dd>{d.test_name}</dd>
         <dt>Analyte</dt><dd>{d.analyte_name}</dd><dt>Result</dt><dd><b>{[d.reported, d.unit].filter(Boolean).join(' ')}</b></dd><dt>Specification</dt><dd>{d.spec_text || ''}</dd>
       </dl>
       {d.answers.length > 0 && <p className="muted" style={{ marginTop: 12 }}>Answers already received: {d.answers.map((a) => `${a.choice} (${new Date(a.received_at).toLocaleString()})`).join('; ')}</p>}
-    </div>
-    <div className="card" id="form"><Form /></div>
+    </Card>
+    <Card body id="form"><AnswerForm /></Card>
   </main>;
 }
 

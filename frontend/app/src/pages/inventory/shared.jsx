@@ -5,7 +5,7 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useHashRoute } from '../../router/useHashRoute.js';
 import './inventory.css';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 import { Dialog } from '../../components/Modal.jsx';
 
 export const d8 = (v) => (v ? String(v).slice(0, 10) : '');
@@ -39,7 +39,7 @@ const TABS = [['#/inventory', 'Inventory'], ['#/inventory/samples', 'Sample stor
   ['#/inventory/locations', 'Storage locations'], ['#/inventory/thresholds', 'Warning rules'], ['#/inventory/qa-testing', 'QA testing']];
 export function InvTabs() {
   const cur = '#' + useHashRoute().path;
-  return <div className="invtabs">{TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}</a>)}</div>;
+  return <Nav variant="pills" className="invtabs">{TABS.map(([h, l]) => <Nav.Link active={h === cur} key={h} href={h}>{l}</Nav.Link>)}</Nav>;
 }
 
 export const NEED_LAB = 'Choose your lab (top right) first. If none is listed, ask an administrator to assign you to a lab.';

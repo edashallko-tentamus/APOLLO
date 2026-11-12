@@ -2,6 +2,7 @@
 // Down arrow opens the list, arrows and Enter or Tab pick, Escape closes. options: [{ value, label }].
 import { useEffect, useRef } from 'react';
 import { Combo, rankOptions } from '../lib/combo.js';
+import { Form } from 'react-bootstrap';
 
 export default function SmartSelect({ id, value, options, onChange, className = '', ...rest }) {
   const input = useRef(null);
@@ -38,7 +39,7 @@ export default function SmartSelect({ id, value, options, onChange, className = 
 
   return (
     <span className="combo">
-      <input ref={input} id={id} type="text" className={`combo-input ${className}`.trim()} onKeyDown={keyDown} onBlur={blur}
+      <Form.Control ref={input} id={id} type="text" className={`combo-input ${className}`.trim()} onKeyDown={keyDown} onBlur={blur}
         onFocus={(e) => e.target.select()} onMouseUp={(e) => { e.preventDefault(); if (!combo.current.isOpen) combo.current.open(''); }} {...rest} />
     </span>
   );

@@ -16,7 +16,7 @@ import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import PickList from '../charges/PickList.jsx';
 import { useRowQueue } from './rowQueue.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const MODE_HELP = { 'Base Price Only': 'One price for the whole test.', 'Base + Preparation Fee': 'Base price plus a preparation fee.', 'Analyte Selection': 'Each analyte has a price and can be switched on or off. Base and prep fee are added if filled in.' };
 const SERVING_ROLES = [{ value: '', label: 'No: an ordinary test' }, { value: 'Serving weight', label: 'Serving weight (its result is the average unit weight)' }, { value: 'Density', label: 'Density (g/mL)' }];
@@ -117,7 +117,7 @@ function Editor({ testId, d, schedules, analytes, reload }) {
     } catch (err) { toast(err.message, 'err'); } finally { setSaving(false); }
   }
 
-  const inp = (k, extra = {}) => <input value={form[k]} onChange={(ev) => set(k)(ev.target.value)} {...extra} />;
+  const inp = (k, extra = {}) => <Form.Control value={form[k]} onChange={(ev) => set(k)(ev.target.value)} {...extra} />;
   return <>
     <PageHeader title={d.test.test_name} audit={{ kind: 'test', id: testId }}
       subtitle={<><a href={'#/catalog/' + testId}>{d.test.test_code}</a> <Badge status={d.test.status} /> · Test Workflow Designer · Step 1 of 5: Pricing and turnaround</>}
@@ -134,7 +134,7 @@ function Editor({ testId, d, schedules, analytes, reload }) {
           <label>Service line &gt; type<SmartSelect value={form.service_line_type_id} options={lineTypeOptions} onChange={set('service_line_type_id')} />
             <small>Where the order's test picker lists this test (Test catalogue &gt; Service lines).</small></label>
           <div className="radios">{(en.pricing_mode || []).map((pm) => (
-            <label key={pm} className="radio"><input type="radio" name="pm" value={pm} checked={pm === m}
+            <label key={pm} className="radio"><Form.Check.Input type="radio" name="pm" value={pm} checked={pm === m}
               onChange={() => setForm((f) => ({ ...f, pricing_mode: pm, ...(pm === 'Base Price Only' ? { prep_fee: '0' } : {}) }))} />
               <b>{pm}</b><small>{MODE_HELP[pm]}</small></label>))}</div>
           <div className="row3">
@@ -154,7 +154,7 @@ function Editor({ testId, d, schedules, analytes, reload }) {
           </div>
           <p className="help">Day 0 is the day the test is logged. Logged after the cutoff (site local time), Day 0 moves to the next working day. The test still goes straight into the testing pool.</p>
           <label>Rush fee schedule<SmartSelect value={form.rush_schedule_id} options={scheduleOptions} onChange={set('rush_schedule_id')} /></label>
-          <label className="cb"><input type="checkbox" checked={form.show_in_public_catalogue} onChange={(ev) => set('show_in_public_catalogue')(ev.target.checked)} /> Show in public catalogue</label>
+          <label className="cb"><Form.Check.Input type="checkbox" checked={form.show_in_public_catalogue} onChange={(ev) => set('show_in_public_catalogue')(ev.target.checked)} /> Show in public catalogue</label>
           <label>Test status<SmartSelect value={form.status} options={STATUSES} onChange={set('status')} /></label>
         </div>
       </Card>

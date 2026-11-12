@@ -16,7 +16,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, dt, Failed, Loading, PHASE1 } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const CHECK_COLS = [
   { field: 'item_text', title: 'Item', type: 'readonly', width: 560 },
@@ -141,8 +141,8 @@ function SignedSection({ ctx, name, title, by, byName, at, answers, comment, ite
     {(by || editable) && <>
       <Checklist items={items} answers={answers} editable={editable} gridRef={gridRef} />
       {name === 'Analyst' && <><div className="fl">Hypothesis (what might explain the result; optional)</div>
-        {editable ? <textarea rows={2} value={hyp} onChange={(e) => setHyp(e.target.value)} /> : <div>{hypothesis || ''}</div>}</>}
-      <div className="fl">Comment</div>{editable ? <textarea rows={3} value={cm} onChange={(e) => setCm(e.target.value)} /> : <div>{comment || ''}</div>}
+        {editable ? <Form.Control as="textarea" rows={2} value={hyp} onChange={(e) => setHyp(e.target.value)} /> : <div>{hypothesis || ''}</div>}</>}
+      <div className="fl">Comment</div>{editable ? <Form.Control as="textarea" rows={3} value={cm} onChange={(e) => setCm(e.target.value)} /> : <div>{comment || ''}</div>}
       {editable && <div className="oosacts"><Button type="button" variant="primary" onClick={signIt}>Sign the {name.toLowerCase()} section</Button></div>}
     </>}
   </Card>;
@@ -174,8 +174,8 @@ function Conclusion({ ctx, title, editable, reviewerItems, waiting }) {
     {editable && <>
       <div className="help" style={{ margin: '6px 0' }}>The batch must be approved in QC Review first: the conclusion is about the approved result. Concluding makes the investigation report (PDF), stored with its fingerprint.</div>
       <div className="fl">Conclusion</div><SmartSelect id="cc_c" value={conclusion} options={CONCLUSIONS} onChange={setConclusion} />
-      <div className="fl">Assignable cause (the documented laboratory error; required for &quot;Assignable cause found&quot;)</div><textarea rows={2} value={cause} onChange={(e) => setCause(e.target.value)} />
-      <div className="fl">Justification</div><textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
+      <div className="fl">Assignable cause (the documented laboratory error; required for &quot;Assignable cause found&quot;)</div><Form.Control as="textarea" rows={2} value={cause} onChange={(e) => setCause(e.target.value)} />
+      <div className="fl">Justification</div><Form.Control as="textarea" rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
       <div className="oosacts"><Button type="button" variant="primary" onClick={conclude}>Conclude and sign…</Button></div>
     </>}
   </Card>;

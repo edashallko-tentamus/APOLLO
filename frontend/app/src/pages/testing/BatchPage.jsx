@@ -11,7 +11,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { ResultsPanel } from './ResultPanels.jsx';
 import { day, dt } from './shared.jsx';
 import StepPanel from './StepPanel.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const icon = (s) => (s.status === 'Completed' ? '✓' : s.status === 'In progress' ? '●' : '○');
 
@@ -57,11 +57,11 @@ function BatchView({ d, opts, query, reload }) {
         <Button type="button" variant="outline-secondary" id="labelsb" title="Barcode labels: one per entry (Dymo, 1 x 2 1/8 in.)" onClick={() => printLabels('batch', [b.id])}>Print labels</Button>
         {d.can_assign && editable && <> <Button type="button" variant="outline-secondary" id="assign" onClick={assign}>Assign</Button></>}
         {(d.can_assign || d.can_review) && !b.is_verification && open && <> <Button type="button" variant="outline-secondary" id="cancelb" onClick={cancel}>Cancel batch</Button></>}</>} />
-    <div className="tbtabs">
-      {d.steps.map((s) => <a key={s.id} href={`#/testing/batches/${b.id}?step=${s.step_key}`} className={`${s.step_key === tabKey ? 'on' : ''} ${s.status === 'Completed' ? 'done' : ''}`} title={`${s.step_type}: ${s.status}`}>
-        <span className="st">{icon(s)}</span>{s.step_name}</a>)}
-      <a href={`#/testing/batches/${b.id}?step=results`} className={tabKey === 'results' ? 'on' : ''}>Results and QC</a>
-    </div>
+    <Nav variant="pills" className="tbtabs">
+      {d.steps.map((s) => <Nav.Link active={s.step_key === tabKey} key={s.id} href={`#/testing/batches/${b.id}?step=${s.step_key}`} className={s.status === 'Completed' ? 'done' : undefined} title={`${s.step_type}: ${s.status}`}>
+        <span className="st">{icon(s)}</span>{s.step_name}</Nav.Link>)}
+      <Nav.Link active={tabKey === 'results'} href={`#/testing/batches/${b.id}?step=results`}>Results and QC</Nav.Link>
+    </Nav>
     {b.is_verification && <div className="tbnote"><b>Workflow verification batch</b> of <a href={'#/verification/' + b.verification_id}>{b.verification_code || 'a verification'}</a>: worked by the automated verification accounts during its run. It is not lab work, is kept out of the lab's lists and takes no changes.</div>}
     {b.status === 'Cancelled' && <div className="tbtodo"><b>Cancelled</b> by {b.cancelled_by_name || ''} {dt(b.cancelled_at)}: {b.cancelled_reason || ''}. Its samples went back to the backlog.</div>}
     {b.status === 'In Progress' && b.returned_reason && <div className="tbtodo"><b>Returned by the reviewer</b> ({b.returned_by_name || ''}, {dt(b.returned_at)}): {b.returned_reason}</div>}

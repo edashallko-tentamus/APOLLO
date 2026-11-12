@@ -5,7 +5,7 @@ import EditableGrid from '../../components/EditableGrid.jsx';
 import PageHeader from '../../components/PageHeader.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { day, licenseStateCls } from './clientForm.jsx';
-import { Card } from 'react-bootstrap';
+import { Card, Nav } from 'react-bootstrap';
 
 const COLUMNS = [
   { field: 'client_name', title: 'Client', type: 'link', width: 220, href: (r) => '#/clients/' + r.client_id },
@@ -30,10 +30,10 @@ export default function LicensesPage({ query }) {
   if (!d) return <>{header}<div className="loading">Loading…</div></>;
   return <>
     {header}
-    <div className="tabs">
-      <a className={`tab${show === 'due' ? ' on' : ''}`} href="#/licenses?show=due">Expired or expiring ({due.length})</a>
-      <a className={`tab${show === 'all' ? ' on' : ''}`} href="#/licenses?show=all">All current ({d.rows.length})</a>
-    </div>
+    <Nav variant="pills" className="tabs">
+      <Nav.Link active={show === 'due'} href="#/licenses?show=due">Expired or expiring ({due.length})</Nav.Link>
+      <Nav.Link active={show === 'all'} href="#/licenses?show=all">All current ({d.rows.length})</Nav.Link>
+    </Nav>
     <EditableGrid readOnly search rows={show === 'due' ? due : d.rows} columns={COLUMNS} onRowOpen={openClient}
       emptyText={show === 'due' ? 'No license is expired or expiring within 30 days.' : 'No licenses recorded yet.'} />
   </>;

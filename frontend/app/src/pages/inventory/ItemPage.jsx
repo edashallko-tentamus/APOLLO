@@ -15,7 +15,7 @@ import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { fileToBase64, signed } from './dialogs.jsx';
 import { d8, Failed, Field, isMixture, loadLookups, Loading, NeedLab, opts, today, withBlank } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const MAX_COA = 3.5 * 1024 * 1024;
 // COA field -> form field (onlyEmpty: fill only when nothing was typed)
@@ -179,7 +179,7 @@ function ItemForm({ M, L, QA, who, src, editId }) {
 
   const title = editing ? `Edit ${l.lot_code}: ${l.material}` : src ? `New inventory item (duplicate of ${l.lot_code})` : 'New inventory item';
   const sel = (k, options, extra = {}) => <SmartSelect id={'f_' + k} value={v[k]} options={withBlank(options)} onChange={set(k)} {...extra} />;
-  const inp = (k, type = 'text', extra = {}) => <input id={'f_' + k} type={type} step={type === 'number' ? 'any' : undefined} value={v[k]} onChange={onInput(k)} {...extra} />;
+  const inp = (k, type = 'text', extra = {}) => <Form.Control id={'f_' + k} type={type} step={type === 'number' ? 'any' : undefined} value={v[k]} onChange={onInput(k)} {...extra} />;
   const toggleType = (t) => (e) => set('chemical_types')(e.target.checked ? [...v.chemical_types, t] : v.chemical_types.filter((x) => x !== t));
 
   return <>
@@ -189,20 +189,20 @@ function ItemForm({ M, L, QA, who, src, editId }) {
       actions={<><Button variant="light" href={editing ? '#/inventory/lots/' + editId : '#/inventory'}>Cancel</Button> <Button type="button" variant="primary" disabled={saving} onClick={save}>{editing ? 'Save changes' : 'Save item'}</Button></>} />
     <div className="itemform">
       {!editing && <div className="modeswitch">
-        <label><input type="radio" name="mode" value="received" checked={mode === 'received'} onChange={() => setMode('received')} /> Received now</label>
-        <label><input type="radio" name="mode" value="request" checked={mode === 'request'} onChange={() => setMode('request')} /> Purchase request (a Lab Supervisor approves it)</label>
+        <label><Form.Check.Input type="radio" name="mode" value="received" checked={mode === 'received'} onChange={() => setMode('received')} /> Received now</label>
+        <label><Form.Check.Input type="radio" name="mode" value="request" checked={mode === 'request'} onChange={() => setMode('request')} /> Purchase request (a Lab Supervisor approves it)</label>
       </div>}
       <div className="cols">
         <Card body><h2>Identity</h2>
           <Field label="Name" req help={'As staff call it, e.g. "Sodium Standard 1000 ppm" or "Pipette tips, 1000 µL"'} className={ai('item_name')}>{inp('item_name')}</Field>
           <Field label="Type" req><div className="checks" id="f_types">{types.map((t) => (
-            <label key={t}><input type="checkbox" value={t} checked={v.chemical_types.includes(t)} disabled={mixture && t === 'In-house mixture'} onChange={toggleType(t)} /> {t}</label>))}</div></Field>
+            <label key={t}><Form.Check.Input type="checkbox" value={t} checked={v.chemical_types.includes(t)} disabled={mixture && t === 'In-house mixture'} onChange={toggleType(t)} /> {t}</label>))}</div></Field>
           {!editing && QA && <Field label="QA testing before use" help={hit.length ? `Your lab tests ${hit.join(', ')} before use.${who && who.can_qa_configure ? ' As QA you may receive it without testing.' : ' Only QA can receive it without testing.'}`
             : 'Not required for these types in your lab (Inventory > QA testing). Tick it to test this item before it is used.'}>
-            <label className="checks"><input type="checkbox" id="f_qa" checked={qaChecked} disabled={qaLocked} onChange={(e) => { setQaTouched(true); setQaPicked(e.target.checked); }} /> Send for QA testing before use</label></Field>}
+            <label className="checks"><Form.Check.Input type="checkbox" id="f_qa" checked={qaChecked} disabled={qaLocked} onChange={(e) => { setQaTouched(true); setQaPicked(e.target.checked); }} /> Send for QA testing before use</label></Field>}
           <Field label="Solid or liquid" help="Used to calculate concentrations when the item goes into a mixture"><div className="checks" id="f_form">
-            {['Solid', 'Liquid'].map((x) => <label key={x}><input type="radio" name="form" value={x} checked={v.physical_form === x} onChange={() => set('physical_form')(x)} /> {x}</label>)}
-            <label><input type="radio" name="form" value="" checked={!v.physical_form} onChange={() => set('physical_form')('')} /> Not applicable</label></div></Field>
+            {['Solid', 'Liquid'].map((x) => <label key={x}><Form.Check.Input type="radio" name="form" value={x} checked={v.physical_form === x} onChange={() => set('physical_form')(x)} /> {x}</label>)}
+            <label><Form.Check.Input type="radio" name="form" value="" checked={!v.physical_form} onChange={() => set('physical_form')('')} /> Not applicable</label></div></Field>
           <div className="field"><label>Analytes and concentrations</label><DataGrid grid={ag} emptyText="No analytes: click + Add row." />
             <div className="help">Pick from the Analytes list (type to search). A multi-element standard has one line per element. Leave empty for consumables, solvents and plain reagents.</div></div>
           <div className="grid2"><Field label="CAS" help="Filled in from a single analyte if left empty" className={ai('cas_number')}>{inp('cas_number')}</Field><Field label="Catalog #" className={ai('catalog_number')}>{inp('catalog_number')}</Field></div>
@@ -213,19 +213,19 @@ function ItemForm({ M, L, QA, who, src, editId }) {
           <div className="grid2"><Field label="Storage location">{sel('storage_location_id', L.locOpts)}</Field><Field label="Storage condition">{sel('storage_condition', opts(M.storage_conditions))}</Field></div>
         </Card>
         <Card body><h2>Quantitative</h2>
-          {!request && (mixture ? <Field label="Resource ID"><input id="f_manufacturer_lot_ro" value={l.lot_code} disabled /></Field>
+          {!request && (mixture ? <Field label="Resource ID"><Form.Control id="f_manufacturer_lot_ro" value={l.lot_code} disabled /></Field>
             : <Field label="Lot #" help="The manufacturer's lot number" className={ai('manufacturer_lot')}>{inp('manufacturer_lot')}</Field>)}
           <div className="grid3"><Field label="Concentration" help="For the item as a whole, e.g. 1.02 N acid" className={ai('concentration')}>{inp('concentration', 'number')}</Field>
             <Field label="Unit" className={ai('concentration_unit')}>{sel('concentration_unit', opts(M.conc_units))}</Field><Field label="Purity %" className={ai('purity_pct')}>{inp('purity_pct', 'number')}</Field></div>
           <div className="grid3">
             {!request && <Field label="Quantity received" req={!editing} help={received ? 'Locked after receipt: correct stock with an Adjustment' : ''}>{inp('quantity_received', 'number', { disabled: received })}</Field>}
             {request && <Field label="Quantity requested" req>{inp('requested_quantity', 'number')}</Field>}
-            <Field label="Unit" req>{received ? <input value={v.unit} disabled /> : sel('unit', opts(M.units))}</Field><Field label="Containers">{inp('container_count', 'number')}</Field></div>
+            <Field label="Unit" req>{received ? <Form.Control value={v.unit} disabled /> : sel('unit', opts(M.units))}</Field><Field label="Containers">{inp('container_count', 'number')}</Field></div>
           {!request && <>
             <div className="grid2"><Field label={mixture ? 'Date made' : 'Received date'}>{inp('received_date', 'date')}</Field><Field label="Opened date">{inp('opened_date', 'date')}</Field></div>
             <div className="grid2"><Field label="Expiration date" className={ai('expiration_date')}>{inp('expiration_date', 'date')}</Field><Field label="Retest date" className={ai('retest_date')}>{inp('retest_date', 'date')}</Field></div>
           </>}
-          <Field label="Notes"><textarea id="f_notes" rows={2} value={v.notes} onChange={onInput('notes')} /></Field>
+          <Field label="Notes"><Form.Control as="textarea" id="f_notes" rows={2} value={v.notes} onChange={onInput('notes')} /></Field>
         </Card>
       </div>
       {editing ? <Card body><h2>Supplier COA</h2><div className="help">COAs for this item are on its page: <a href={'#/inventory/lots/' + editId}>{l.lot_code}</a> (Upload Supplier COA).</div></Card>
@@ -233,7 +233,7 @@ function ItemForm({ M, L, QA, who, src, editId }) {
           <div className="help">Attach the supplier's Certificate of Analysis (PDF or image, up to 3.5 MB). It is kept with the item exactly as uploaded, with its fingerprint.{' '}
             {M.ai.enabled ? <><b>Read the COA</b> fills in this form from the document; check every value before saving (they are recorded as confirmed by you).</>
               : 'Reading the COA automatically is switched off in this Sandbox until IT and QA approve it (the document would be sent to an AI service); type the values from the COA.'}</div>
-          <div className="coarow"><input type="file" id="f_coa" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp" onChange={chooseCoa} />
+          <div className="coarow"><Form.Control type="file" id="f_coa" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp" onChange={chooseCoa} />
             {M.ai.enabled && <Button type="button" variant="outline-secondary" disabled={!coa || reading} onClick={readTheCoa}>{reading ? 'Reading…' : 'Read the COA'}</Button>}</div>
           <div className="help">{coaMsg}</div></Card>}
     </div>

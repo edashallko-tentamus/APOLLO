@@ -10,7 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { decideQuote, newQuote } from './quoteDialogs.js';
 import './quotes.css';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 export const d8 = (v) => { if (!v) return ''; const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/); return (m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v)).toLocaleDateString([], { dateStyle: 'medium' }); };
 const quoteHref = (r) => (r.kind === 'Stability' ? '#/stability/quotes/' + r.project_id : '#/quote/' + r.version_id);
@@ -62,7 +62,7 @@ export default function QuotesPage({ query }) {
     <PageHeader title="Quotes" audit={AUDIT}
       subtitle="Every quote and project quote, newest first, 50 at a time. A standalone quote is for one customer request; a project is a reusable package of tests for a product. Accept or reject a quote here when the client answers by phone or email; answers through the link in the quote email are recorded by themselves."
       actions={<>{canEdit && <Button type="button" variant="primary" onClick={() => newQuote(dialogs, toast)}>+ New quote</Button>} <Button variant="light" href="#/projects">Projects</Button></>} />
-    <div className="tabs"><a className={`tab${mine ? ' on' : ''}`} href="#/quotes?tab=mine">My open quotes</a><a className={`tab${mine ? '' : ' on'}`} href="#/quotes?tab=all">All quotes</a></div>
+    <Nav variant="pills" className="tabs"><Nav.Link active={mine} href="#/quotes?tab=mine">My open quotes</Nav.Link><Nav.Link active={!(mine)} href="#/quotes?tab=all">All quotes</Nav.Link></Nav>
     {error && !meta ? <Card body className="err">{error.message}</Card> : !meta ? <div className="loading">Loading…</div> : <>
       <div className="qfil">
         <label>Type <SmartSelect value={type} options={TYPES} onChange={pick(setType, 'type')} /></label>

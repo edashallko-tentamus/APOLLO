@@ -14,7 +14,7 @@ import { money, plural } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import PickList from '../charges/PickList.jsx';
 import { useRowQueue } from './rowQueue.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const pctOff = (list, price) => (Number(list) > 0 && Number(price) < Number(list) ? Math.round((1 - Number(price) / Number(list)) * 1000) / 10 : 0);
 const ITEM_COLUMNS = [
@@ -99,7 +99,7 @@ function Editor({ d, opts, reload }) {
     try { await api.retirePackage(p.id, reason); ig.reset(itemRows); ag.reset(anRows); setForm(orig); toast('Retired.'); reload(); } catch (e) { toast(e.message, 'err'); }
   }
 
-  const field = (k) => <input value={form[k]} disabled={!ed} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />;
+  const field = (k) => <Form.Control value={form[k]} disabled={!ed} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />;
   return <>
     <PageHeader title={p.package_name} audit={{ kind: 'test_package', id: p.id }}
       subtitle={<>{p.package_code} <Badge status={p.status} /> · {p.site_code} · Test catalogue package</>}
@@ -118,7 +118,7 @@ function Editor({ d, opts, reload }) {
           <div className="listprice"><span>Tests at catalogue price</span><b data-s="list">{money(list)}</b><small>The analytes in the package</small></div>
           <div className="listprice"><span>Discount</span><b data-s="disc">{money(Math.max(list - price, 0))}</b><small data-s="pct">{pctOff(list, price)} % off</small></div>
         </div>
-        <label className="cb"><input type="checkbox" checked={form.show_in_public_catalogue} disabled={!ed}
+        <label className="cb"><Form.Check.Input type="checkbox" checked={form.show_in_public_catalogue} disabled={!ed}
           onChange={(e) => setForm((f) => ({ ...f, show_in_public_catalogue: e.target.checked }))} /> Show in public catalogue</label>
       </div></Card>
       <Card body><h2>On quotes</h2>

@@ -10,7 +10,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, Failed, Field, Loading, NeedLab, signed } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const withBlank = (o) => [{ value: '', label: '' }, ...o];
 const str = (v) => (v === null || v === undefined ? '' : String(v));
@@ -53,7 +53,7 @@ function EquipmentForm({ L, src, editId, fromId, site }) {
   const depts = L.departments.filter((d) => d.status === 'Active' || d.id === e.department_id).map((d) => ({ value: d.id, label: `${d.department_code} ${d.department_name}` }));
   const locs = L.locations.map((l) => ({ value: l.id, label: `${l.location_code}: ${l.path}` }));
   const set = (k) => (x) => { setTouched(true); setV((s) => ({ ...s, [k]: x })); };
-  const inp = (k, type = 'text', extra = {}) => <input type={type} value={v[k]} onChange={(ev) => set(k)(type === 'checkbox' ? ev.target.checked : ev.target.value)} {...extra} />;
+  const inp = (k, type = 'text', extra = {}) => <Form.Control type={type} value={v[k]} onChange={(ev) => set(k)(type === 'checkbox' ? ev.target.checked : ev.target.value)} {...extra} />;
   const sel = (k, options) => <SmartSelect value={v[k]} options={withBlank(options)} onChange={set(k)} />;
   const toggle = (setter, id) => (ev) => { setTouched(true); const on = ev.target.checked; setter((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; }); };
 
@@ -109,18 +109,18 @@ function EquipmentForm({ L, src, editId, fromId, site }) {
         <Field label="Location note" help={'e.g. "Bench 3, left"'}>{inp('location_note')}</Field>
       </div>
       <div className="grid3">
-        <Field label="Calibration"><label className="cb"><input type="checkbox" checked={v.calibration_required} onChange={(ev) => set('calibration_required')(ev.target.checked)} /> Needs calibration</label></Field>
+        <Field label="Calibration"><label className="cb"><Form.Check.Input type="checkbox" checked={v.calibration_required} onChange={(ev) => set('calibration_required')(ev.target.checked)} /> Needs calibration</label></Field>
         <Field label="Calibration interval (months)" help="Sets the default expiry of each calibration">{inp('calibration_interval_months', 'number', { min: 1, step: 1 })}</Field>
         <Field label="Warn this many days before expiry" help="Default 30 (not yet confirmed with the labs)">{inp('calibration_alert_days', 'number', { min: 0, step: 1 })}</Field>
       </div>
-      <Field label="Qualification"><label className="cb"><input type="checkbox" checked={v.qualification_required} onChange={(ev) => set('qualification_required')(ev.target.checked)} /> Needs IQ/OQ/PQ</label></Field>
+      <Field label="Qualification"><label className="cb"><Form.Check.Input type="checkbox" checked={v.qualification_required} onChange={(ev) => set('qualification_required')(ev.target.checked)} /> Needs IQ/OQ/PQ</label></Field>
       <Field label="Responsible: groups" req help="Everyone in a ticked group is responsible (for example HPLC Team or Lab Supervisor)">
-        <div className="ownerpick">{L.groups.map((g) => <label key={g.id} title={g.description || ''}><input type="checkbox" data-og={g.id} checked={groups.has(g.id)} onChange={toggle(setGroups, g.id)} /> {g.group_name}</label>)}</div>
+        <div className="ownerpick">{L.groups.map((g) => <label key={g.id} title={g.description || ''}><Form.Check.Input type="checkbox" data-og={g.id} checked={groups.has(g.id)} onChange={toggle(setGroups, g.id)} /> {g.group_name}</label>)}</div>
       </Field>
       <Field label="Responsible: named people" help="Optional, for example a General Manager">
-        <div className="ownerpick">{L.people.map((u) => <label key={u.id}><input type="checkbox" data-ou={u.id} checked={people.has(u.id)} onChange={toggle(setPeople, u.id)} /> {u.full_name}</label>)}</div>
+        <div className="ownerpick">{L.people.map((u) => <label key={u.id}><Form.Check.Input type="checkbox" data-ou={u.id} checked={people.has(u.id)} onChange={toggle(setPeople, u.id)} /> {u.full_name}</label>)}</div>
       </Field>
-      <Field label="Notes"><textarea rows={2} value={v.notes} onChange={(ev) => set('notes')(ev.target.value)} /></Field>
+      <Field label="Notes"><Form.Control as="textarea" rows={2} value={v.notes} onChange={(ev) => set('notes')(ev.target.value)} /></Field>
       <div className="merr" role="alert">{err}</div>
       <div className="actbar"><Button type="button" variant="primary" disabled={busy} onClick={save}>{editId ? 'Save changes' : 'Create equipment'}</Button></div>
     </Card>

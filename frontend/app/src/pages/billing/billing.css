@@ -1,7 +1,6 @@
 /* Billing screens (copied from public/js/pages/billing.js) */
-.bltabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
-.bltabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
-.bltabs a.on { background: var(--s-pricing, #7a4d8c); border-color: var(--s-pricing, #7a4d8c); color: #fff; } .bltabs small { opacity: .8; margin-left: 3px; }
+.bltabs { margin: -4px 0 12px; }
+.bltabs { --bs-nav-pills-link-active-bg: var(--s-pricing, #7a4d8c); } .bltabs small { opacity: .8; margin-left: 3px; }
 .blfil { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; }
 .blfil button { border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px; cursor: pointer; font-size: 12.5px; } .blfil button.on { border-color: var(--s-pricing, #7a4d8c); font-weight: 700; background: #F3E9F6; }
 .blsum { display: flex; gap: 22px; flex-wrap: wrap; margin: 2px 0 10px; font-size: 13px; } .blsum b { font-size: 17px; display: block; color: var(--ink); } .blsum span { color: var(--muted); }

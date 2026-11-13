@@ -13,7 +13,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const dt = (v) => (v ? new Date(v).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 const localNow = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
@@ -179,11 +179,11 @@ function PhotoDialog({ sample, onDone }) {
           <div className="phgrid">{have.map((p) => <PhotoFigure key={p.id} p={p} s={s} small />)}</div>
           <div className="help">Captions, report places and retiring are changed on the sample page.</div>
         </> : <div className="help">None yet.</div>}</div>}</div>
-      <div className="field"><label htmlFor="f_ph">New photos</label><input id="f_ph" type="file" accept="image/*" capture="environment" multiple onChange={choose} /></div>
+      <div className="field"><label htmlFor="f_ph">New photos</label><Form.Control id="f_ph" type="file" accept="image/*" capture="environment" multiple onChange={choose} /></div>
       <div id="phprev" className="phprev">{shots.map((p, i) => (
         <div className="phitem" key={i}>
           <img src={p.data} alt={`Photo ${i + 1}`} />
-          <input className="phcap" placeholder="Caption" value={p.caption} onChange={(e) => change(i, { caption: e.target.value })} />
+          <Form.Control className="phcap" placeholder="Caption" value={p.caption} onChange={(e) => change(i, { caption: e.target.value })} />
           <SmartSelect className="phslot" value={p.slot} options={SLOT_OPTS(slotTaken)} onChange={(v) => change(i, { slot: v })} />
           <Button type="button" variant="light" size="sm" className="phdel" title="Remove" onClick={() => setShots((cur) => cur.filter((_, j) => j !== i))}>Remove</Button>
         </div>))}</div>

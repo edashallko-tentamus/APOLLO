@@ -5,7 +5,7 @@ import { formulaTest } from '../../api/methods.js';
 import { useDialogs } from '../../components/dialogs/DialogProvider.jsx';
 import { CfgGrid, filled, useCfgGrid } from './ConfigEditors.jsx';
 import { Field, Pick } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const WORDS = { weight: 'Sample weight', factor: 'Dilution factor', final_volume: 'Final volume', duration: 'Incubation time', reading: 'Reading', result: 'Result' };
 const OPS = [['+', ' + '], ['−', ' - '], ['×', ' * '], ['÷', ' / '], ['^', '^'], ['(', '('], [')', ')'], ['log10', 'log10('], ['ln', 'ln('], ['exp', 'exp('], ['sqrt', 'sqrt('], ['abs', 'abs('], ['min', 'min('], ['max', 'max('], ['power', 'power(']];
@@ -52,7 +52,7 @@ export default function CalculationConfig({ cfg, d, step, anc, ed, readRef }) {
 
   return <>
     <Field label="Formula (every analyte)" req help="Numbers, + − × / ^ ( ), the functions log10 ln exp sqrt abs min max power, and values from steps before this one.">
-      <input id="c_f" ref={box} type="text" className="wdmono" value={formula} disabled={!ed} onChange={(e) => setFormula(e.target.value)} /></Field>
+      <Form.Control id="c_f" ref={box} type="text" className="wdmono" value={formula} disabled={!ed} onChange={(e) => setFormula(e.target.value)} /></Field>
     <div className="wdtokens"><span className="help">Values:</span> {tokens.length ? tokens.map((x) => (
       <Button key={x.tok} type="button" variant="outline-secondary" size="sm" className="mini wdtok" data-tok={x.tok} title={x.tok} disabled={!ed} onClick={() => insert(x.tok)}>{x.label}</Button>))
       : <span className="help">{step ? 'No step before this one offers values yet (connect it after a Weighing, Dilution, Data Entry... step).' : 'Save the step after the steps it uses to see their values here.'}</span>}</div>
@@ -60,12 +60,12 @@ export default function CalculationConfig({ cfg, d, step, anc, ed, readRef }) {
       {' '}<Button type="button" variant="outline-secondary" size="sm" className="mini" id="c_const" disabled={!ed} onClick={constant}>Constant…</Button></div>
     <div className="grid3">
       <Field label="Result unit"><Pick id="c_u" value={unit} options={d.lists.units} disabled={!ed} onChange={setUnit} /></Field>
-      <Field label="Note" help="e.g. what the formula does, in words"><input id="c_note" type="text" value={note} disabled={!ed} onChange={(e) => setNote(e.target.value)} /></Field>
+      <Field label="Note" help="e.g. what the formula does, in words"><Form.Control id="c_note" type="text" value={note} disabled={!ed} onChange={(e) => setNote(e.target.value)} /></Field>
     </div>
     <Field label="Analyte exceptions" help="A different formula for some analytes; the rest use the formula above."><CfgGrid id="c_ov" grid={ovG} /></Field>
     <div className="wdtry"><b>Try it</b> <span className="help">Enter example values and calculate with the same engine the results will use.</span>
       <div className="grid4" id="c_try">{used.map((t) => (
-        <Field key={t} label={`{${t}}`}><input data-t={t} type="number" step="any" value={tries[t] ?? ''} onChange={(e) => setTries((m) => ({ ...m, [t]: e.target.value }))} /></Field>))}</div>
+        <Field key={t} label={`{${t}}`}><Form.Control data-t={t} type="number" step="any" value={tries[t] ?? ''} onChange={(e) => setTries((m) => ({ ...m, [t]: e.target.value }))} /></Field>))}</div>
       <Button type="button" variant="outline-secondary" id="c_go" onClick={calculate}>Calculate</Button> <span id="c_out">{out}</span>
     </div>
   </>;

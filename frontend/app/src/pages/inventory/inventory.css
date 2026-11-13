@@ -1,7 +1,5 @@
 /* Inventory screens (copied from public/js/pages/inventory.js; the upload preview and printed lists are in components/bulk) */
-.invtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 14px; }
-.invtabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
-.invtabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; }
+.invtabs { margin: -4px 0 14px; }
 .warnchips span { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 7px; border-radius: 9px; margin-right: 4px; }
 .w-bad { background: var(--err); color: var(--err-ink); } .w-warn { background: var(--warn); color: var(--warn-ink); } .w-info { background: #E8EEFB; color: #2F5BA8; } .w-ok { background: var(--green-50); color: var(--green-700); }
 .actbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -28,8 +26,7 @@ table.grid td.cwarn { background: #FFF4DE; color: var(--warn-ink); font-weight: 
 .itemform .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
 .itemform .field { margin-bottom: 10px; }
 .itemform .field > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 2px; }
-.itemform input:not([type=checkbox]):not([type=radio]), .itemform select, .itemform textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
-.itemform input:disabled { background: #F2F4F6; color: var(--muted); }
+.itemform input:not([type=checkbox]):not([type=radio]), .itemform select, .itemform textarea { width: 100%; }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0; }
 .checks label { display: inline-flex; gap: 6px; align-items: center; font-weight: 400 !important; font-size: 13.5px; white-space: nowrap; }
 .modeswitch { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -40,7 +37,7 @@ table.grid td.cwarn { background: #FFF4DE; color: var(--warn-ink); font-weight: 
 .coa-review iframe, .coa-review img { width: 100%; height: 62vh; border: 1px solid var(--line); border-radius: 8px; background: #F7F8FA; object-fit: contain; }
 .coa-fields .cf { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; align-items: start; margin-bottom: 10px; }
 .coa-fields label { font-weight: 600; font-size: 13px; padding-top: 6px; }
-.coa-fields input { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.coa-fields input { width: 100%; }
 .coa-fields .ev { grid-column: 2; font-size: 12px; color: var(--muted); }
 .coa-fields .cur { grid-column: 2; font-size: 12px; color: var(--muted); }
 .coa-fields .diff input { border-color: #E2A33B; background: #FFF8EC; }

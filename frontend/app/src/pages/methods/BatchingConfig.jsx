@@ -6,7 +6,7 @@ import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { CfgGrid, filled, useCfgGrid } from './ConfigEditors.jsx';
 import { Field, numOf, Pick, str } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const FREQ = [{ value: 'Once', label: 'Once' }, { value: 'Every N', label: 'Every N' }, { value: 'Daily', label: 'Daily' }];
 const MATERIAL = [{ value: '', label: '' }, { value: 'Strains', label: 'Strains of the test\'s organisms' }];
@@ -61,8 +61,8 @@ function Criterion({ k, store, d, ed, shapeOf, isOpen, toggle, onRemove }) {
         <Pick value={lt} options={d.lists.limitTypes.map((x) => x.limit_type)} disabled={!ed} onChange={setLt} aria-label="Criterion" />
         <span className="wddef">{sh === 'Qualitative' ? <span className="help">No numbers: tick the analytes it applies to.</span> : <>
           <span className="help">Default</span>{' '}
-          {sh === 'Range' ? <><input type="number" step="any" placeholder="min" value={minT} disabled={!ed} onChange={(e) => setMinT(e.target.value)} onBlur={() => applyDefault({ min: numOf(minT) })} /> to </> : 'max '}
-          <input type="number" step="any" placeholder="max" value={maxT} disabled={!ed} onChange={(e) => setMaxT(e.target.value)} onBlur={() => applyDefault({ max: numOf(maxT) })} />
+          {sh === 'Range' ? <><Form.Control type="number" step="any" placeholder="min" value={minT} disabled={!ed} onChange={(e) => setMinT(e.target.value)} onBlur={() => applyDefault({ min: numOf(minT) })} /> to </> : 'max '}
+          <Form.Control type="number" step="any" placeholder="max" value={maxT} disabled={!ed} onChange={(e) => setMaxT(e.target.value)} onBlur={() => applyDefault({ max: numOf(maxT) })} />
           {sh === 'Max' && <> or <Pick value={def.limit_ref} options={LIMIT_REFS} disabled={!ed} onChange={(v) => applyDefault({ limit_ref: v || null })} aria-label="Or limit" /></>}
           {ed && <> <Button type="button" variant="outline-secondary" size="sm" className="mini" title="Set every analyte to the default" onClick={fillAll}>Fill all</Button></>}</>}</span>
         {ed && <Button type="button" variant="light" size="sm" className="mini" onClick={onRemove}>Remove</Button>}
@@ -137,7 +137,7 @@ export default function BatchingConfig({ cfg, d, ed, readRef }) {
 
   return <>
     <div className="grid4"><Field label="Maximum client samples per batch" help="QC samples ride on top of this number">
-      <input id="c_max" type="number" min="1" value={max} disabled={!ed} onChange={(e) => setMax(e.target.value)} /></Field></div>
+      <Form.Control id="c_max" type="number" min="1" value={max} disabled={!ed} onChange={(e) => setMax(e.target.value)} /></Field></div>
     <Field label="QC each batch carries" help="One row per QC type. Prep QC travels through preparation like a sample; Analytical QC is instrument-only. Every N samples gives opening and closing (bracketing) entries; Daily is one set per method per day, shared by the day's batches.">
       <CfgGrid id="c_qc" grid={qcG} /></Field>
     <div className="field"><label>Acceptance criteria</label>

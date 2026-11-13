@@ -14,7 +14,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import PullsGrid from './PullsGrid.jsx';
 import { d8, dt, ext, Failed, iso, Loading } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const FATES = [{ value: 'Destroyed', label: 'Destroyed' }, { value: 'Returned', label: 'Returned to the client' }, { value: 'Retained', label: 'Kept as retain' }];
 const fateText = (v) => ({ Destroyed: 'Destroyed', Returned: 'Returned to the client', Retained: 'Kept as retain' }[v] || v);
@@ -263,14 +263,14 @@ function PlaceCard({ d, reload }) {
   return adding
     ? <Section title="Place the new condition's material" help={`An amendment added ${d.need.map((n) => n.condition_name).join(', ')}. Put its material in a rack of a chamber set to that condition: its pulls are scheduled from this date (no T0: the baseline was tested when the study started).`}>
       <div id="place">
-        <div className="stb-bar"><label>Placement date <input type="date" id="pl_date" value={date} max={today} min={iso(s.placement_date)} onChange={(e) => setDate(e.target.value)} /></label>{goBtn}</div>
+        <div className="stb-bar"><label>Placement date <Form.Control type="date" id="pl_date" value={date} max={today} min={iso(s.placement_date)} onChange={(e) => setDate(e.target.value)} /></label>{goBtn}</div>
         <DataGrid grid={grid} />
       </div>
     </Section>
     : <Section title="Place the material in the chambers" help={`When the client's material arrives: put each condition's share in a rack of a chamber set to that condition. This logs in the T0 sample (if intake has not), checks the material is enough (every pull plus the ${Number(s.reserve_pct)}% reserve) and schedules the pulls from the placement date.`}>
       <div id="place">
-        <div className="stb-bar"><label>Placement date <input type="date" id="pl_date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
-          <label>Units for T0 testing <input type="number" id="pl_t0" value={t0} min="1" style={{ width: 80 }} onChange={(e) => setT0(e.target.value)} /></label>{goBtn}</div>
+        <div className="stb-bar"><label>Placement date <Form.Control type="date" id="pl_date" value={date} max={today} onChange={(e) => setDate(e.target.value)} /></label>
+          <label>Units for T0 testing <Form.Control type="number" id="pl_t0" value={t0} min="1" style={{ width: 80 }} onChange={(e) => setT0(e.target.value)} /></label>{goBtn}</div>
         <DataGrid grid={grid} />
       </div>
     </Section>;

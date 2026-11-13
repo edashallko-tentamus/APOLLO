@@ -14,7 +14,7 @@ import { money } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { SelectGrid } from '../reports/shared.jsx';
 import { d8, dt, Failed, issueDrafts, Loading, pdfOf } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const late = (l) => Number(l.late_days) > 0 && l.rush_ordered;
 const lineRow = (l) => (late(l) ? 'bllate' : l.retest_of_id ? 'blretest' : l.is_charge ? 'blcharge' : '');
@@ -219,9 +219,9 @@ function RushDialog({ l, onDone }) {
       {closest ? <> The closest tier whose turnaround was met: <b>{closest.tier_name}</b>.</> : ' No rush tier\'s turnaround was met.'}</p>
     <table className="blopts"><thead><tr><th /><th>Tier</th><th>Would be due</th><th>Met?</th><th>Fee</th></tr></thead><tbody>
       {opts.map((o, k) => { const allowed = o.is_ordered || o.met; const v = o.tier_id || '';
-        return <tr key={k} className={o.met ? 'met' : 'missed'}><td>{allowed && <input type="radio" name="tier" id={'rt' + k} value={v} checked={tier === v} onChange={() => setTier(v)} />}</td>
+        return <tr key={k} className={o.met ? 'met' : 'missed'}><td>{allowed && <Form.Check.Input type="radio" name="tier" id={'rt' + k} value={v} checked={tier === v} onChange={() => setTier(v)} />}</td>
           <td><label htmlFor={'rt' + k}>{o.tier_name}{o.is_ordered && o.tier_id ? ' (ordered)' : ''}</label></td><td>{d8(o.due_date)}</td><td>{o.met ? 'Met' : 'Missed'}</td><td>{money(o.fee)}</td></tr>; })}
     </tbody></table>
-    <div className="field"><label htmlFor="f_rnote">Why (printed under the line)</label><textarea id="f_rnote" rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></div>
+    <div className="field"><label htmlFor="f_rnote">Why (printed under the line)</label><Form.Control as="textarea" id="f_rnote" rows={3} value={note} onChange={(e) => setNote(e.target.value)} /></div>
   </Modal>;
 }

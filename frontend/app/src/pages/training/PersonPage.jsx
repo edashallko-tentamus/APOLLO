@@ -14,7 +14,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import { ATTEMPT_COLS, d8, documentsOf, stateCls } from './shared.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const DEPT_COLS = [
   { field: 'department_name', title: 'Department', type: 'readonly', width: 200 },
@@ -93,11 +93,11 @@ function StartDialog({ d, onDone }) {
         <div className="help">{t ? (qualified.has(t.id) ? 'Qualified already: this keeps the qualification up.' : 'Not qualified yet: this is the initial competency.') : ''}</div></div>
       <div className="field"><label htmlFor="f_route">How</label><SmartSelect id="f_route" value={route} options={ROUTES} onChange={setRoute} /></div>
       {!smp ? <>
-        <div className="field"><label htmlFor="f_desc">What was done <span className="req">*</span></label><textarea id="f_desc" rows={3} placeholder="SOP read, runs observed, supervised runs, results reviewed" value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
-        <div className="field"><label htmlFor="f_date">Date of the training <span className="req">*</span></label><input id="f_date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-        <div className="field"><label htmlFor="f_ev">Evidence (signed form, certificate)</label><input id="f_ev" type="file" multiple onChange={(e) => setFiles([...e.target.files])} /></div>
+        <div className="field"><label htmlFor="f_desc">What was done <span className="req">*</span></label><Form.Control as="textarea" id="f_desc" rows={3} placeholder="SOP read, runs observed, supervised runs, results reviewed" value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
+        <div className="field"><label htmlFor="f_date">Date of the training <span className="req">*</span></label><Form.Control id="f_date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        <div className="field"><label htmlFor="f_ev">Evidence (signed form, certificate)</label><Form.Control id="f_ev" type="file" multiple onChange={(e) => setFiles([...e.target.files])} /></div>
       </> : <>
-        <div className="field"><label htmlFor="f_n">Training samples</label><input id="f_n" type="number" min="1" max="10" value={n} onChange={(e) => setN(e.target.value)} /></div>
+        <div className="field"><label htmlFor="f_n">Training samples</label><Form.Control id="f_n" type="number" min="1" max="10" value={n} onChange={(e) => setN(e.target.value)} /></div>
         <div className="help">Known values: the result each training sample should give, and how far from it is acceptable (±%). They become the samples&apos; specification, so QC Review says whether each result is within it.</div>
         {t && (t.version_id ? <KnownValues key={t.id} test={t} gridRef={kvGrid} /> : <p className="bad">This test has no approved version: training samples need one.</p>)}
       </>}

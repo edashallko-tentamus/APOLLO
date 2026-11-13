@@ -9,7 +9,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import './trending.css';
-import { Button } from 'react-bootstrap';
+import { Button, Nav } from 'react-bootstrap';
 
 export const SOURCES = [
   ['results', 'Results', 'One analyte of one test, from final results'],
@@ -28,7 +28,7 @@ export const safe = (s) => String(s || 'trend').replace(/:\s*/g, ' - ').replace(
 
 const TABS = [['watch', '#/trending', 'Trend watch'], ['build', '#/trending/build', 'Build a chart'], ['charts', '#/trending/charts', 'Saved charts'], ['reports', '#/trending/reports', 'Report packs']];
 export function TrendTabs({ on }) {
-  return <div className="tabs">{TABS.map(([k, h, t]) => <a key={k} className={`tab ${on === k ? 'on' : ''}`} href={h}>{t}</a>)}</div>;
+  return <Nav variant="pills" className="tabs">{TABS.map(([k, h, t]) => <Nav.Link active={on === k} key={k} href={h}>{t}</Nav.Link>)}</Nav>;
 }
 
 // The backend's chart pictures are SVG markup it draws itself from LIMS numbers (server/trending.js); they are the

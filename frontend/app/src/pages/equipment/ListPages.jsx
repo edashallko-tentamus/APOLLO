@@ -14,7 +14,7 @@ import Section from '../../components/Section.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { calCls, d8, EqTabs, Failed, inactiveRow, Loading, mntCls, NeedLab } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Nav } from 'react-bootstrap';
 
 // ================================================================ THE REGISTER
 const FILTERS = [['active', 'In use'], ['tagged', 'Tagged out'], ['caldue', 'Calibration due'], ['mine', 'Mine'], ['retired', 'Retired']];
@@ -96,7 +96,6 @@ const DUE_COLS = [
   { field: 'owners', title: 'Responsible', type: 'readonly', width: 190, format: (v) => v || 'Nobody' },
   { field: 'mine', title: 'Mine', type: 'readonly', width: 55, format: (v) => (v ? 'Yes' : '') },
 ];
-const TAB_LINK = { textDecoration: 'none' };
 const openDue = (r) => { window.location.hash = '#/equipment/' + r.equipment_id; };
 
 export function DuePage({ query }) {
@@ -110,10 +109,10 @@ export function DuePage({ query }) {
       subtitle={'Calibrations expiring or expired, maintenance due, equipment tagged out (waiting for work or release), and equipment nobody is responsible for. Expired calibrations and maintenance marked "tag out when due" are tagged out automatically.'} />
     <EqTabs cur="#/equipment/due" counts={{ '#/equipment/due': rows?.length || '' }} />
     {error && !rows ? <Failed error={error} /> : !rows ? <Loading /> : <>
-      <div className="eqbar">
-        <a className={`tab ${mineOnly ? '' : 'on'}`} href="#/equipment/due" style={TAB_LINK}>Everything <small>{rows.length}</small></a>
-        <a className={`tab ${mineOnly ? 'on' : ''}`} href="#/equipment/due?mine=1" style={TAB_LINK}>Only equipment I am responsible for <small>{rows.filter((r) => r.mine).length}</small></a>
-      </div>
+      <Nav variant="pills" className="eqbar">
+        <Nav.Link active={!mineOnly} href="#/equipment/due">Everything <small>{rows.length}</small></Nav.Link>
+        <Nav.Link active={mineOnly} href="#/equipment/due?mine=1">Only equipment I am responsible for <small>{rows.filter((r) => r.mine).length}</small></Nav.Link>
+      </Nav>
       <ReadGrid rows={shown} columns={DUE_COLS} search emptyText="Nothing due. Everything is calibrated, maintained and available." onRowOpen={openDue} />
     </>}
   </>;

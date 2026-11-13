@@ -14,7 +14,7 @@ import { openNewProject } from '../projects/newProject.js';
 import { openNewOrder } from '../orders/newOrder.jsx';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { clientForm, day, licenseStateCls } from './clientForm.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const LICENSE_TYPES = ['Cannabis distributor', 'Cannabis manufacturer', 'Cannabis cultivator', 'Cannabis retailer', 'FDA registration', 'State manufacturer', 'State food processor', 'Business license'];
 const retiredMuted = (r) => (r.status_text === 'Retired' ? 'mutedrow' : '');
@@ -55,7 +55,7 @@ async function licenseDialog(dialogs, l) {
     after: (
       <div className="field">
         <label htmlFor="f_licfile">{l && l.document_id ? 'Replace the scanned copy' : 'Scanned copy'} (optional, PDF or image)</label>
-        <input type="file" id="f_licfile" accept="application/pdf,image/png,image/jpeg" onChange={(e) => { picked.file = e.target.files[0] || null; }} />
+        <Form.Control type="file" id="f_licfile" accept="application/pdf,image/png,image/jpeg" onChange={(e) => { picked.file = e.target.files[0] || null; }} />
       </div>
     ) });
   if (!v) return null;

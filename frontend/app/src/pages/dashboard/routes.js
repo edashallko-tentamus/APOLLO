@@ -2,6 +2,7 @@ import { lazy } from 'react';
 
 const board = (name) => lazy(() => import('./Board.jsx').then((m) => ({ default: m[name] })));
 export default [
+  { pattern: /^\/?$/, page: board('HomeBoard') },
   { pattern: /^\/dashboard\/gm$/, page: board('GmBoard') },
   { pattern: /^\/dashboard\/executive$/, page: board('ExecutiveBoard') },
   { pattern: /^\/dashboard\/finance$/, page: lazy(() => import('./FinancePage.jsx')) },

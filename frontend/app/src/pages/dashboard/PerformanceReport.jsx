@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { downloadFile } from '../../api/dashboard.js';
 import Modal from '../../components/Modal.jsx';
+import { Form } from 'react-bootstrap';
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -23,10 +24,10 @@ function ReportDialog({ labs, onDone }) {
   return (
     <Modal title="Performance report (Excel)" okText="Download" error={error} onOk={ok} onClose={() => onDone(null)}
       intro="Choose the period. The file has a Summary (headline by lab, by month, top clients, quality and timeliness) and the data behind it on separate tabs, with the LIMS column names.">
-      <div className="field"><label htmlFor="f_from">From <span className="req">*</span></label><input id="f_from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-      <div className="field"><label htmlFor="f_to">To <span className="req">*</span></label><input id="f_to" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+      <div className="field"><label htmlFor="f_from">From <span className="req">*</span></label><Form.Control id="f_from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+      <div className="field"><label htmlFor="f_to">To <span className="req">*</span></label><Form.Control id="f_to" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
       {several && <div className="field"><label>Labs</label><div className="rlabs">
-        {labs.map((l) => <label key={l.site_code} className="cb"><input type="checkbox" checked={ticked.has(l.site_code)} onChange={(e) => tick(l.site_code, e.target.checked)} /> {l.site_code}: {l.site_name}</label>)}
+        {labs.map((l) => <label key={l.site_code} className="cb"><Form.Check.Input type="checkbox" checked={ticked.has(l.site_code)} onChange={(e) => tick(l.site_code, e.target.checked)} /> {l.site_code}: {l.site_name}</label>)}
       </div></div>}
     </Modal>
   );

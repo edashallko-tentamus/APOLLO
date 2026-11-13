@@ -13,7 +13,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { plural } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { d8, dt, Failed, Loading, SelectGrid, startReview } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const TABS = [['queue', 'Report Finalization Queue'], ['mine', 'Finalization worklist'], ['batches', 'Batched Finalization'], ['issued', 'Issued COAs'], ['stability', 'Stability reports']];
 const INTRO = {
@@ -66,7 +66,7 @@ export default function QueuePage({ query }) {
   const count = d ? { queue: d.rows.length, mine: mine.length, batches: d.claims.length } : {};
   return <>
     <PageHeader title="Report Finalization" subtitle={INTRO[tab]} audit={{ kind: 'finalization' }} />
-    <div className="rftabs">{TABS.map(([k, l]) => <a key={k} href={`#/reports/finalization?tab=${k}`} className={k === tab ? 'on' : ''}>{l}{count[k] !== undefined && <> <small>{count[k]}</small></>}</a>)}</div>
+    <Nav variant="pills" className="rftabs">{TABS.map(([k, l]) => <Nav.Link active={k === tab} key={k} href={`#/reports/finalization?tab=${k}`}>{l}{count[k] !== undefined && <> <small>{count[k]}</small></>}</Nav.Link>)}</Nav>
     {error && !d ? <Failed error={error} /> : !d ? <Loading /> : <>
       {!d.can_finalize && <div className="alert alert-warning">You need the &quot;Report Finalization&quot; permission (reports.finalize) in this lab to finalize. Project Managers and QA hold it.</div>}
       {tab === 'issued' ? <IssuedTab query={query} />

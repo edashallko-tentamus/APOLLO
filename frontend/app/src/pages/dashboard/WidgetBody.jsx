@@ -2,6 +2,7 @@
 // segments, figures (kpis), a smaller set of figures, lists, stacked bars, tables, tabbed tables, labs side by side and
 // the finance update with its line chart.
 import { useEffect, useRef, useState } from 'react';
+import { Nav } from 'react-bootstrap';
 
 // blue ramp (sequential, light to dark) for ages; categorical slots 1 to 3 for the segments and the finance series
 const SEQ = ['#a9c9f2', '#5b9be6', '#1f5fae'];
@@ -39,9 +40,9 @@ function Kpis({ list, cls = '', onDetail }) {
 // a widget's tabs, top right
 function TabBar({ list, on, onPick }) {
   return (
-    <div className="dtabs" role="tablist">
-      {list.map(([k, l]) => <button key={k} type="button" role="tab" className={k === on ? 'on' : undefined} aria-selected={k === on} onClick={() => onPick(k)}>{l}</button>)}
-    </div>
+    <Nav variant="pills" className="dtabs" role="tablist">
+      {list.map(([k, l]) => <Nav.Link as="button" active={k === on} key={k} type="button" role="tab" aria-selected={k === on} onClick={() => onPick(k)}>{l}</Nav.Link>)}
+    </Nav>
   );
 }
 

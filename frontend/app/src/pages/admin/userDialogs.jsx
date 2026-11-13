@@ -4,7 +4,7 @@ import { authEvents, saveUserSignature, setTempPassword, userSignatureUrl } from
 import DataGrid from '../../components/grid/DataGrid.jsx';
 import { useGrid } from '../../components/grid/useGrid.js';
 import { useApi } from '../../hooks/useApi.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 import { Dialog } from '../../components/Modal.jsx';
 
 // A one-time password made in the browser, shown once to the administrator to pass on; the person must change it at sign-in
@@ -39,7 +39,7 @@ export async function signatureDialog(dialogs, toast, u, lab, siteId) {
         ? <><p>On file:</p><img src={userSignatureUrl(u.id, siteId)} alt="Signature on file" style={{ maxWidth: 320, maxHeight: 110, border: '1px solid var(--line)', background: '#fff', padding: 4 }} /></>
         : <p className="help">No signature on file yet: this person cannot issue COAs.</p>}
       <div className="field"><label htmlFor="sigf">Signature image (PNG or JPEG, up to 1 MB){u.has_signature ? ': leave empty to keep the one on file' : ''}</label>
-        <input type="file" id="sigf" accept="image/png,image/jpeg" onChange={(e) => { file = e.target.files[0] || null; }} /></div>
+        <Form.Control type="file" id="sigf" accept="image/png,image/jpeg" onChange={(e) => { file = e.target.files[0] || null; }} /></div>
     </>,
     fields: [{ name: 'title', label: 'Title (printed under the name)', required: true, value: u.title || '', help: 'e.g. Project Manager, QA Manager' }],
     submit: async (vals) => {

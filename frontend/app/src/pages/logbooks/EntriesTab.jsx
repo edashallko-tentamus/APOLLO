@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import ReadGrid from '../../components/grid/ReadGrid.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import { dt, fmtN, loc, needsReason, resultClass, sensorWhen } from './calc.js';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const STATUSES = ['', 'Recorded', 'Approved', 'Returned', 'Voided', 'All'].map((s) => ({ value: s, label: s || 'All but voided' }));
 const entryRowClass = (x) => (x.result === 'Fail' ? 'lb-fail' : x.status === 'Voided' ? 'mutedrow' : '');
@@ -50,8 +50,8 @@ export default function EntriesTab({ d, l, filt }) {
         <span key={i} className={x.due ? '' : 'ok'}>{x.equipment_code ? x.equipment_code + ' ' + x.equipment_name : l.logbook_code}: {x.due ? 'due ' + per : 'done'}</span>
       ))}</div>}
       <div className="lb-bar">
-        <label>From <input type="date" value={f.from} onChange={(e) => set('from')(e.target.value)} /></label>
-        <label>To <input type="date" value={f.to} onChange={(e) => set('to')(e.target.value)} /></label>
+        <label>From <Form.Control type="date" value={f.from} onChange={(e) => set('from')(e.target.value)} /></label>
+        <label>To <Form.Control type="date" value={f.to} onChange={(e) => set('to')(e.target.value)} /></label>
         {l.subject === 'Equipment' && <label>Equipment <SmartSelect value={f.equipment} options={eqOpts} onChange={set('equipment')} /></label>}
         <label>Status <SmartSelect value={f.status} options={STATUSES} onChange={set('status')} /></label>
         <Button type="button" variant="outline-secondary" onClick={show}>Show</Button>

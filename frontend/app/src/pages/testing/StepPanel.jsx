@@ -11,7 +11,7 @@ import { IncubationPanel, PreparationForm, SplitPanel } from './MicroPanels.jsx'
 import ReviewPanel from './QcReview.jsx';
 import { CalcGrid } from './ResultPanels.jsx';
 import { BENCH_TYPES, dt, isPast, nfmt, runsAt } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const REPREP_TYPES = ['Data Entry', 'Calculation', 'Weighing', 'Preparation', 'Dilution'];
 const AUTOSAVE_TYPES = ['Weighing', 'Dilution', 'Data Entry', 'Plating/Inoculation']; // bench grids flushed before Complete step
@@ -168,13 +168,13 @@ export default function StepPanel({ ctx, s, run }) {
       {open && !waitingFor.length && bench && s.missing.length > 0 && <div className="tbtodo"><b>Still to do before it can be completed</b><ul>
         {s.missing.slice(0, 8).map((m, i) => <li key={i}>{m}</li>)}{s.missing.length > 8 && <li>and {s.missing.length - 8} more</li>}</ul></div>}
       {isRead && (kmax > 1 || editable) && <>
-        <div className="tbtabs tbruns"><span className="lbl">Analytical runs:</span>
+        <Nav variant="pills" className="tbtabs tbruns"><span className="lbl">Analytical runs:</span>
           {Array.from({ length: kmax }, (_, i) => i + 1).map((k) => {
             const ar = d.runs.find((x) => x.step_run_id === s.id && Number(x.run_no) === k);
-            return <a key={k} href={`#/testing/batches/${b.id}?step=${s.step_key}&run=${k}`} className={k === curRun ? 'on' : ''} title={ar ? `${ar.reason} (${ar.requested_by}, ${dt(ar.created_at)})` : 'The first run'}>Run {k}</a>;
+            return <Nav.Link active={k === curRun} key={k} href={`#/testing/batches/${b.id}?step=${s.step_key}&run=${k}`} title={ar ? `${ar.reason} (${ar.requested_by}, ${dt(ar.created_at)})` : 'The first run'}>Run {k}</Nav.Link>;
           })}
           {editable && <a href="#" data-a="rean" title="Read chosen samples again in a new run, with the run's own ICV and CCVs" onClick={(e) => { e.preventDefault(); H.rean(); }}>+ Add analytical run</a>}
-        </div>
+        </Nav>
         {kmax > 1 && <div className="help" style={{ margin: '-4px 0 8px' }}>Run {curRun}{curRun > 1 ? `: ${curRunInfo?.reason || ''}` : ''}. Each run has its own readings, raw data file, instrument and analytical QC; the reviewer chooses what is reported.</div>}
       </>}
       {chips.length > 0 && <div className="tbused">{chips}</div>}

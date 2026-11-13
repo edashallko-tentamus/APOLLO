@@ -1,7 +1,7 @@
 // Page title (with the audit-trail icon when the page has an audit scope), subtitle and the page's buttons.
 // audit: { kind, id } for a record page, { kind } for a list page (scopes are defined by the backend's audit module).
 // The title wears its menu item's icon (beside the title, so the title's text is unchanged).
-import { iconFor } from '../../../public/js/icons.js';
+import { iconFor } from '../lib/icons.js';
 import { useHashRoute } from '../router/useHashRoute.js';
 import { activeMenuItem } from '../shell/Nav.jsx';
 import AuditButton from './audit/AuditButton.jsx';

@@ -14,7 +14,7 @@ import DataGrid from '../grid/DataGrid.jsx';
 import { useGrid } from '../grid/useGrid.js';
 import { useToast } from '../Toasts.jsx';
 import './bulk.css';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 import { Dialog } from '../Modal.jsx';
 
 const UPLOAD_PERMISSION = { lots: 'inventory.upload', equipment: 'equipment.edit' }; // who may upload (the backend and database check too)
@@ -96,7 +96,7 @@ function UploadDialog({ kind, onDone }) {
         <h3>Upload from Excel</h3>
         <p className="intro">Export the list first, edit it in Excel (change cells, or add rows with an empty ID), save it, and upload it here.
           Rows are matched on their ID. You will see every change before anything is saved. <a href="#" onClick={(e) => { e.preventDefault(); exportList(kind, [], true); }}>Download an empty template</a>.</p>
-        <div className="field"><input type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={choose} /></div>
+        <div className="field"><Form.Control type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" onChange={choose} /></div>
         {reading && <p className="help">Reading the file…</p>}
         {c && <>
           <div className="bulksum"><span><b>{p.total}</b> rows read</span><span className="c-new"><b>{c.creates}</b> to create</span>

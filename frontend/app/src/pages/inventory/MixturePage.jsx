@@ -15,7 +15,7 @@ import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { signed } from './dialogs.jsx';
 import { d8, Failed, Field, fmtN, isMixture, loadLookups, Loading, NeedLab, opts, qty, withBlank } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const PREFER = { L: 'mL', kg: 'g' }; // how analysts usually measure
 const PREVIEW_DELAY_MS = 250;
@@ -129,21 +129,21 @@ function MixtureForm({ M, L, usable, conv }) {
     <div className="itemform">
       <div className="cols">
         <Card body><h2>Identity</h2>
-          <Field label="Name" req help={'e.g. "Sodium Working Solution 10 ppm"'}><input id="m_name" value={f.name} onChange={(e) => set('name')(e.target.value)} /></Field>
+          <Field label="Name" req help={'e.g. "Sodium Working Solution 10 ppm"'}><Form.Control id="m_name" value={f.name} onChange={(e) => set('name')(e.target.value)} /></Field>
           <Field label="Solid or liquid" req help="Liquid: concentrations per volume (mg/L, ppm). Solid: per mass (mg/kg)."><div className="checks">
-            {['Liquid', 'Solid'].map((x) => <label key={x}><input type="radio" name="mform" value={x} checked={f.form === x} onChange={() => setForm(x)} /> {x}</label>)}</div></Field>
+            {['Liquid', 'Solid'].map((x) => <label key={x}><Form.Check.Input type="radio" name="mform" value={x} checked={f.form === x} onChange={() => setForm(x)} /> {x}</label>)}</div></Field>
           <Field label="Also a" help="It is always an In-house mixture; tick Reference Standard for a working standard."><div className="checks" id="m_types">
-            {extraTypes.map((t) => <label key={t}><input type="checkbox" value={t} checked={f.types.includes(t)} onChange={(e) => set('types')(e.target.checked ? [...f.types, t] : f.types.filter((x) => x !== t))} /> {t}</label>)}</div></Field>
+            {extraTypes.map((t) => <label key={t}><Form.Check.Input type="checkbox" value={t} checked={f.types.includes(t)} onChange={(e) => set('types')(e.target.checked ? [...f.types, t] : f.types.filter((x) => x !== t))} /> {t}</label>)}</div></Field>
           <div className="grid2"><Field label="Storage location"><SmartSelect id="m_loc" value={f.loc} options={withBlank(L.locOpts)} onChange={set('loc')} /></Field>
             <Field label="Storage condition"><SmartSelect id="m_cond" value={f.cond} options={withBlank(opts(M.storage_conditions))} onChange={set('cond')} /></Field></div>
-          <div className="grid2"><Field label="Expiration date" help="Empty: the earliest-expiring component"><input id="m_exp" type="date" value={f.exp} onChange={(e) => set('exp')(e.target.value)} /></Field>
-            <Field label="Retest date"><input id="m_retest" type="date" value={f.retest} onChange={(e) => set('retest')(e.target.value)} /></Field></div>
-          <Field label="Notes (work instruction)"><input id="m_notes" value={f.notes} onChange={(e) => set('notes')(e.target.value)} /></Field>
+          <div className="grid2"><Field label="Expiration date" help="Empty: the earliest-expiring component"><Form.Control id="m_exp" type="date" value={f.exp} onChange={(e) => set('exp')(e.target.value)} /></Field>
+            <Field label="Retest date"><Form.Control id="m_retest" type="date" value={f.retest} onChange={(e) => set('retest')(e.target.value)} /></Field></div>
+          <Field label="Notes (work instruction)"><Form.Control id="m_notes" value={f.notes} onChange={(e) => set('notes')(e.target.value)} /></Field>
         </Card>
         <Card body><h2>Quantitative</h2>
           <div className="grid2">
             <Field label="Quantity made" req help={defaultQty ? `Defaulted to the total of the components that can be expressed in ${f.unit}: ${fmtN(defaultQty)} ${f.unit}. Change it if you made it up to a different volume.` : ''}>
-              <input id="m_qty" type="number" step="any" value={f.qty} onChange={(e) => { setQtyTouched(e.target.value.trim() !== ''); set('qty')(e.target.value); }} /></Field>
+              <Form.Control id="m_qty" type="number" step="any" value={f.qty} onChange={(e) => { setQtyTouched(e.target.value.trim() !== ''); set('qty')(e.target.value); }} /></Field>
             <Field label="Unit" req><SmartSelect id="m_unit" value={f.unit} options={opts(M.units)} onChange={set('unit')} /></Field></div>
           <div className="field"><label>Calculated concentration</label>
             <div title={calc.map((a) => `${a.analyte_name}: ${a.calc_note}`).join('\n')}><DataGrid grid={cg} emptyText="Add component lots that carry analytes to see their concentration here." /></div>

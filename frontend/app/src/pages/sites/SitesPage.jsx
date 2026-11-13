@@ -8,7 +8,7 @@ import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import MediaCard from '../labsetup/MediaCard.jsx';
 import ProductNameCard from '../labsetup/ProductNameCard.jsx';
-import { Card } from 'react-bootstrap';
+import { Card, Nav } from 'react-bootstrap';
 
 const AUDIT = { kind: 'sites' };
 const d8 = (v) => (v ? new Date(v + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '');
@@ -57,9 +57,9 @@ export default function SitesPage({ params }) {
         <EditableGrid rows={rows} columns={columns} allowAdd={sysAdmin} readOnly={!sysAdmin} what="site settings" newRow={newSite} save={saveSites} afterSave={reload} />
       </Section>
       <Section title={cur ? `Holidays: ${cur.site_code}` : 'Holidays'} help="Paste a holiday list from Excel (date, description) or add rows.">
-        <div className="tabs">{rows.map((s) => (
-          <button key={s.id} type="button" className={`tab${cur && s.id === cur.id ? ' on' : ''}`} onClick={() => { window.location.hash = '#/admin/sites/' + s.id; }}>{s.site_code} <small>{s.holiday_count}</small></button>
-        ))}</div>
+        <Nav variant="pills" className="tabs">{rows.map((s) => (
+          <Nav.Link as="button" active={cur && s.id === cur.id} key={s.id} type="button" onClick={() => { window.location.hash = '#/admin/sites/' + s.id; }}>{s.site_code} <small>{s.holiday_count}</small></Nav.Link>
+        ))}</Nav>
         {cur && <Holidays key={cur.id} site={cur} onSaved={reload} />}
       </Section>
       {cur && <>

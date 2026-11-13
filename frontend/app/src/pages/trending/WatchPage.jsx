@@ -6,7 +6,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { TrendTabs, d10, n3 } from './TrendPanel.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const AUDIT = { kind: 'trending' };
 const SUB = 'Every chart on watch, its latest point and the signals nobody has reviewed yet. A signal is a pattern that is unlikely by chance (a point beyond 3 sigma, a run on one side, a steady climb): open the chart to see it and record what was found.';
@@ -64,7 +64,7 @@ export default function WatchPage({ query }) {
   return <>
     {header}
     <div className="trbar"><span className={`trpill ${open ? 'bad' : 'ok'}`}>{open ? `${open} chart${open === 1 ? '' : 's'} with signals to review` : 'Nothing to review'}</span><span className="sp" />
-      <label><input type="checkbox" id="onlyopen" checked={only} onChange={(e) => { window.location.hash = e.target.checked ? '#/trending?show=open' : '#/trending'; }} /> Only charts with signals to review</label>
+      <label><Form.Check.Input type="checkbox" id="onlyopen" checked={only} onChange={(e) => { window.location.hash = e.target.checked ? '#/trending?show=open' : '#/trending'; }} /> Only charts with signals to review</label>
       <Button type="button" variant="primary" id="dlall" disabled={making} onClick={all} title="Every saved chart of the lab, each with all its panels (every analyte, QC check or piece of equipment), in one PDF">{making ? 'Making the PDF…' : 'Download all (PDF)'}</Button></div>
     {!rows.length ? <Card body className="trempty">{d.rows.length ? 'No watched chart has a signal to review.' : 'No charts on watch yet. Build a chart (a fridge temperature, a QC recovery, OOS per month), save it, and it is watched here.'}</Card>
       : <div className="trwatch" id="w">{rows.map((r, i) => <Tile key={i} r={r} />)}</div>}

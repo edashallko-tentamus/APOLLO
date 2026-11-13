@@ -4,13 +4,13 @@ import { changePassword, login, setupAdmin } from '../api/auth.js';
 import { PASSWORD_RULE } from '../config.js';
 import SmartSelect from '../components/SmartSelect.jsx';
 import Brand from '../shell/Brand.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const TITLES = { login: 'Sign in', setup: 'First-time setup', change: 'Choose a new password' };
 const BUTTONS = { login: 'Sign in', setup: 'Set password and sign in', change: 'Save new password' };
 
 function Field({ id, label, ...input }) {
-  return <div className="field"><label htmlFor={id}>{label}</label><input id={id} {...input} /></div>;
+  return <div className="field"><label htmlFor={id}>{label}</label><Form.Control id={id} {...input} /></div>;
 }
 
 export default function LoginScreen({ mode, message, username = '', setupUsers = [], productName, onDone }) {

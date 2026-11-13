@@ -6,7 +6,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { money } from '../../lib/format.js';
 import { useUnsavedChanges } from '../../router/useHashRoute.js';
 import { Card, Field, Pick, ROUNDING, useSigned } from './shared.jsx';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 function initial(d) {
   const v = d.version; const t = d.test;
@@ -53,7 +53,7 @@ export default function TabTest({ d, reload }) {
     <Section className="wdform" title="Test" help="The report-facing name and the department that does the test (its people do the steps unless a step names another department).">
       <div className="grid2">
         <Field label="Test name" req help="As shown on the catalogue, quotes and the Certificate of Analysis">
-          <input id="f_name" type="text" value={f.test.test_name} disabled={dis} onChange={(x) => setT('test_name', x.target.value)} /></Field>
+          <Form.Control id="f_name" type="text" value={f.test.test_name} disabled={dis} onChange={(x) => setT('test_name', x.target.value)} /></Field>
         <Field label="Department" req help={<>Departments are kept on Equipment &gt; Equipment types and departments; mark a group as the department on Admin &gt; Groups and permissions.</>}>
           <Pick id="f_dept" value={f.test.department_id} disabled={dis} onChange={(x) => setT('department_id', x || null)}
             options={L.departments.map((x) => ({ value: x.id, label: `${x.department_code} ${x.department_name}${x.has_people ? '' : ' (nobody in a group for it yet)'}` }))} /></Field>
@@ -65,23 +65,23 @@ export default function TabTest({ d, reload }) {
           <Pick id="f_method" value={f.version.method_id} disabled={dis} onChange={(x) => setV('method_id', x || null)}
             options={L.methods.filter((m) => m.status === 'Active' || m.id === v.method_id).map((m) => ({ value: m.id, label: `${m.method_name}${m.sop_code ? ' (' + m.sop_code + ')' : ''}` }))} /></Field>
         <Field label="What changed in this version" help='Shown in the version history, e.g. "Hold time added"'>
-          <input id="f_change" type="text" value={f.version.change_summary || ''} disabled={dis} onChange={(x) => setV('change_summary', x.target.value)} /></Field>
+          <Form.Control id="f_change" type="text" value={f.version.change_summary || ''} disabled={dis} onChange={(x) => setV('change_summary', x.target.value)} /></Field>
       </div>
       <Field label="Procedure summary" help="Shown to the analyst; the SOP stays the controlled document.">
-        <textarea id="f_proc" rows={3} value={f.version.procedure_text || ''} disabled={dis} onChange={(x) => setV('procedure_text', x.target.value)} /></Field>
+        <Form.Control as="textarea" id="f_proc" rows={3} value={f.version.procedure_text || ''} disabled={dis} onChange={(x) => setV('procedure_text', x.target.value)} /></Field>
     </Section>
     <Section className="wdform" title="Reporting" help="How results are rounded and reported below the limits. Each analyte can override the rounding (tab 2).">
       <div className="grid3">
         <Field label="Rounding" help="Round half up (away from zero)">
           <Pick id="f_rmode" value={f.version.rounding_mode} blank={false} disabled={dis} options={ROUNDING} onChange={(x) => setV('rounding_mode', x)} /></Field>
         <Field label="Digits" help="Default: 3 significant figures">
-          <input id="f_rdig" type="number" min="0" max="10" value={Number.isNaN(dig) ? '' : f.version.rounding_digits} disabled={dis} onChange={(x) => setV('rounding_digits', Number(x.target.value))} /></Field>
+          <Form.Control id="f_rdig" type="number" min="0" max="10" value={Number.isNaN(dig) ? '' : f.version.rounding_digits} disabled={dis} onChange={(x) => setV('rounding_digits', Number(x.target.value))} /></Field>
         <Field label="Below the limits" help='Below the LOQ is always reported as "< LOQ" (e.g. < 0.010).'>
-          <label className="cb"><input type="checkbox" id="f_nd" checked={f.version.nd_below_lod} disabled={dis} onChange={(x) => setV('nd_below_lod', x.target.checked)} /> Report &quot;ND&quot; below the LOD</label></Field>
+          <label className="cb"><Form.Check.Input type="checkbox" id="f_nd" checked={f.version.nd_below_lod} disabled={dis} onChange={(x) => setV('nd_below_lod', x.target.checked)} /> Report &quot;ND&quot; below the LOD</label></Field>
       </div>
       <div className="grid3">
         <Field label="Per serving" help={'The COA adds a "Per serving" column: the result times the sample\'s serving size (entered on the order), e.g. 0.4 mg/kg in a 2.5 g serving = 0.001 mg.'}>
-          <label className="cb"><input type="checkbox" id="f_serv" checked={f.version.report_per_serving} disabled={dis} onChange={(x) => setV('report_per_serving', x.target.checked)} /> Also report the amount per serving</label></Field>
+          <label className="cb"><Form.Check.Input type="checkbox" id="f_serv" checked={f.version.report_per_serving} disabled={dis} onChange={(x) => setV('report_per_serving', x.target.checked)} /> Also report the amount per serving</label></Field>
         <Field label="Report template" help={<>The COA layout this test&apos;s results print in. Blank: the lab&apos;s default. Tests with different templates on one sample print in separate parts of the same COA. <a href="#/admin/report-templates">Report templates</a></>}>
           <Pick id="f_tpl" value={f.version.report_template_id} disabled={dis} onChange={(x) => setV('report_template_id', x || null)}
             options={(L.report_templates || []).filter((x) => x.status === 'Active' || x.id === v.report_template_id)

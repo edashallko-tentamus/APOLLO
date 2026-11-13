@@ -16,7 +16,7 @@ import { money } from '../../lib/format.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { SelectGrid } from '../reports/shared.jsx';
 import { d8, dt, Failed, issueDrafts, Loading, pdfOf } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav } from 'react-bootstrap';
 
 const TABS = [['ready', 'Ready to invoice'], ['mine', 'My draft invoices'], ['drafts', 'All drafts'], ['issued', 'Invoices and credit notes'], ['queue', 'QuickBooks queue'], ['settings', 'Settings']];
 const INTRO = {
@@ -35,7 +35,7 @@ export default function BillingPage({ query }) {
   const tab = TABS.some(([k]) => k === t) ? t : 'ready';
   return <>
     <PageHeader title="Billing" subtitle={INTRO[tab]} audit={{ kind: 'billing' }} />
-    <div className="bltabs">{TABS.map(([k, l]) => <a key={k} href={`#/billing?tab=${k}`} className={k === tab ? 'on' : ''}>{l}</a>)}</div>
+    <Nav variant="pills" className="bltabs">{TABS.map(([k, l]) => <Nav.Link active={k === tab} key={k} href={`#/billing?tab=${k}`}>{l}</Nav.Link>)}</Nav>
     {!can('invoicing.issue') && <div className="alert alert-warning">You can see invoicing here. Claiming, checking and issuing invoices needs the invoicing.issue permission (Accounting and General Managers).</div>}
     {tab === 'ready' ? <ReadyTab /> : tab === 'settings' ? <SettingsTab /> : tab === 'queue' ? <QueueTab />
       : tab === 'issued' ? <IssuedTab query={query} /> : <DraftsTab key={tab} tab={tab} />}

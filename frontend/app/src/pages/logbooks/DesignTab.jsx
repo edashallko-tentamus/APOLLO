@@ -9,7 +9,7 @@ import Section from '../../components/Section.jsx';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import { useToast } from '../../components/Toasts.jsx';
 import { dt, KINDS } from './calc.js';
-import { Button } from 'react-bootstrap';
+import { Button, Form } from 'react-bootstrap';
 
 const TYPES = ['Number', 'Text', 'Choice', 'Pass/Fail', 'Date/time', 'Equipment', 'Lot', 'Calculated'];
 const SETTING_KEYS = ['logbook_name', 'kind', 'subject', 'entry_frequency', 'review_frequency', 'review_route', 'signing', 'validity_hours', 'creates_lot', 'lot_name', 'lot_unit', 'status', 'description'];
@@ -82,7 +82,7 @@ export default function DesignTab({ d, l, eff, draftF, reload }) {
     if (r) { toast('Design approved: entries now use it.'); reload(); }
   }
 
-  const input = (k, type = 'text') => <input type={type} value={s[k]} disabled={ro} onChange={(e) => set(k)(e.target.value)} />;
+  const input = (k, type = 'text') => <Form.Control type={type} value={s[k]} disabled={ro} onChange={(e) => set(k)(e.target.value)} />;
   const pick = (k) => <SmartSelect value={String(s[k])} options={SELECTS[k]} onChange={set(k)} disabled={ro} />;
   const fld = (label, control) => <div className="field"><label>{label}</label>{control}</div>;
 
@@ -103,7 +103,7 @@ export default function DesignTab({ d, l, eff, draftF, reload }) {
         {fld('Unit of those lots', input('lot_unit'))}
         {fld('Status', pick('status'))}
         <div className="field" style={{ gridColumn: '1 / -1' }}><label>What it is for</label>
-          <textarea rows={2} value={s.description} disabled={ro} onChange={(e) => set('description')(e.target.value)} /></div>
+          <Form.Control as="textarea" rows={2} value={s.description} disabled={ro} onChange={(e) => set('description')(e.target.value)} /></div>
       </div>
     </Section>
     <Section title={draft ? `Design version ${draft.version_no} (Draft)` : effV ? `Design version ${effV.version_no} (Effective)` : 'Design'}

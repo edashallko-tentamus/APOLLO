@@ -1,6 +1,6 @@
 // Parts every equipment screen uses: formats, the tabs, the lab check, the colours of warning cells.
 import './equipment.css';
-import { Card } from 'react-bootstrap';
+import { Card, Nav } from 'react-bootstrap';
 
 export const d8 = (v) => (v ? String(v).slice(0, 10) : '');
 export const dt = (v) => (v ? new Date(v).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '');
@@ -15,7 +15,7 @@ export const signed = (dialogs, o, fn) => dialogs.sign({ ...o, submit: ({ reason
 const TABS = [['#/equipment', 'Equipment'], ['#/equipment/due', 'Due and overdue'], ['#/equipment/lists', 'Equipment types and departments']];
 // cur: the tab to mark; counts: { '#/equipment/due': 3 }
 export function EqTabs({ cur, counts = {} }) {
-  return <div className="eqtabs">{TABS.map(([h, l]) => <a key={h} href={h} className={h === cur ? 'on' : ''}>{l}{counts[h] ? <> <small>{counts[h]}</small></> : null}</a>)}</div>;
+  return <Nav variant="pills" className="eqtabs">{TABS.map(([h, l]) => <Nav.Link active={h === cur} key={h} href={h}>{l}{counts[h] ? <> <small>{counts[h]}</small></> : null}</Nav.Link>)}</Nav>;
 }
 
 export const NeedLab = () => <Card body className="err">Choose your lab (top right) first. If none is listed, ask an administrator to add you to a group at a lab.</Card>;

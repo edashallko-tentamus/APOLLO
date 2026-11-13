@@ -2,8 +2,6 @@
 
 export const API_BASE = '/api';
 export const SITE_HEADER = 'x-site-id';
-// The screens not yet moved to React still run at the old address; their menu links open there (same sign-in).
-export const LEGACY_BASE = '/';
 export const SITE_STORAGE_KEY = (userId) => `lims3.site.${userId}`;
 export const DEFAULT_PRODUCT_NAME = 'LIMS3';
 export const ENV_LABEL = 'Sandbox · demo data · not for GxP use';

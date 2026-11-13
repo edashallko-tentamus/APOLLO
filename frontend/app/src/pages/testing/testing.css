@@ -1,9 +1,7 @@
-.tbtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 14px; }
-.tbtabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
-.tbtabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; }
-.tbtabs a .st { display: inline-block; width: 16px; text-align: center; margin-right: 3px; }
-.tbtabs a.done .st { color: var(--green-700); } .tbtabs a.on.done .st { color: #fff; }
-.tbtabs a small { margin-left: 4px; color: var(--muted); } .tbtabs a.on small { color: #E8F3EC; }
+.tbtabs { margin: -4px 0 14px; }
+.tbtabs .nav-link .st { display: inline-block; width: 16px; text-align: center; margin-right: 3px; }
+.tbtabs .nav-link.done .st { color: var(--green-700); } .tbtabs .nav-link.active.done .st { color: #fff; }
+.tbtabs .nav-link small { margin-left: 4px; color: var(--muted); } .tbtabs .nav-link.active small { color: #E8F3EC; }
 .tbhead { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .tbhead .t { font-size: 16px; font-weight: 700; } .tbhead .m { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .tbacts { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -15,7 +13,7 @@
 .tbchip b { font-weight: 600; } .tbchip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 0 0 2px; }
 .tbform { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 0 16px; margin: 6px 0 10px; }
 .tbform .field > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 2px; }
-.tbform input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.tbform input { width: 100%; }
 .tbgroup { margin-bottom: 18px; }
 table.grid td.tbpass { color: var(--green-700); font-weight: 600; } table.grid td.tbfail { color: var(--err-ink); font-weight: 700; }
 table.grid td.tbwait { color: var(--muted); } table.grid tr.tbsup td { color: #7A848E; background: #F4F5F6; font-style: italic; }
@@ -29,7 +27,7 @@ table.grid tr.tbrerun td { background: #FBFAF2; }
 table.grid tr.rvout td { background: #FDF2F1; }
 table.grid tr.tbmade td { background: #EAF6EF; font-weight: 600; }
 .witbox { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
-.tbruns { margin: 6px 0 8px; align-items: center; } .tbruns a { font-size: 13px; padding: 4px 10px; } .tbruns .lbl { font-weight: 600; font-size: 13px; margin-right: 4px; }
+.tbruns { margin: 6px 0 8px; align-items: center; } .tbruns { --bs-nav-link-font-size: 13px; --bs-nav-link-padding-y: 4px; --bs-nav-link-padding-x: 10px; } .tbruns .lbl { font-weight: 600; font-size: 13px; margin-right: 4px; }
 .tpcard { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
 table.grid tr.rvoff td { color: #9AA3AC; }
 .witbox .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }

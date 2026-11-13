@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { confirmCoa, lotAction, qualifyLot, qualifyOptions, recordMovements, reorderLot, uploadCoa, coaFileUrl } from '../../api/inventory.js';
 import { d8, dt, GridDialog, loadLookups, qty, today, XModal } from './shared.jsx';
+import { Form } from 'react-bootstrap';
 
 // fn(reason, signature) runs while the signature dialog is open: a wrong password or a refused change keeps it open
 export const signed = (dialogs, o, fn) => dialogs.sign({ ...o, submit: ({ reason, signature }) => fn(reason, signature) });
@@ -115,9 +116,9 @@ function CoaUpload({ l, ai, dialogs, toast, onDone }) {
       okText={busy ? (ai.enabled ? 'Uploading and reading…' : 'Uploading…') : 'Upload'} busy={busy} error={error} onOk={upload} onClose={() => onDone(null)}>
       {ai.enabled ? <>
         <div className="aiflag">AI reading is on ({ai.model}): the document is sent to Anthropic's API, which proposes the values. You check every value before anything is saved.</div>
-        <label className="cb"><input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} /> Let AI propose the values</label>
+        <label className="cb"><Form.Check.Input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} /> Let AI propose the values</label>
       </> : <div className="aiflag">AI reading is off in this Sandbox (no API key set). You will type the values beside the document; nothing changes about the record keeping.</div>}
-      <div className="field"><input type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setFile(e.target.files[0] || null)} /></div>
+      <div className="field"><Form.Control type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setFile(e.target.files[0] || null)} /></div>
     </XModal>
   );
 }
@@ -148,7 +149,7 @@ function CoaReview({ c, l, siteId, dialogs, toast, onDone }) {
             const cur = curOf(k); const differs = String(vals[k] ?? '') !== String(cur ?? '');
             return (
               <div key={k} className={`cf${differs ? ' diff' : ''}`}><label htmlFor={'cf_' + k}>{label}</label>
-                <input id={'cf_' + k} type={t} step={t === 'number' ? 'any' : undefined} value={vals[k]} disabled={!!conf} onChange={(e) => setVals((s) => ({ ...s, [k]: e.target.value }))} />
+                <Form.Control id={'cf_' + k} type={t} step={t === 'number' ? 'any' : undefined} value={vals[k]} disabled={!!conf} onChange={(e) => setVals((s) => ({ ...s, [k]: e.target.value }))} />
                 {p.evidence?.[k] && <div className="ev">On the COA: “{p.evidence[k]}”</div>}
                 {differs && <div className="cur">On the lot now: {cur === '' ? 'empty' : cur}</div>}
               </div>

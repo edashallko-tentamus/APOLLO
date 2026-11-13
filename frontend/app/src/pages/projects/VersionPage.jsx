@@ -20,7 +20,7 @@ import { decideQuote, sendQuote } from '../quotes/quoteDialogs.js';
 import TestPicker from '../quotes/TestPicker.jsx';
 import '../quotes/quotes.css';
 import AnalyteDialog from './AnalyteDialog.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const NO_PACKAGES = { rows: [], options: [], allowed: false };
 const has = (v) => v !== null && v !== undefined;
@@ -279,7 +279,7 @@ function Version({ vid, d, pk, reload }) {
         : (v.accepted_by || '—') + (v.decided_via === 'Client link' && v.status === 'Accepted' ? ' (online)' : '')}</b></div>
     </Card>
     {v.sent_at && <div className="qsent">Sent {new Date(v.sent_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} to <b>{v.sent_to_name || ''}</b> &lt;{v.sent_to_email || ''}&gt;. The client accepts or declines through the link in the email
-      {v.client_token ? <>; you can also paste it in a chat or email yourself:<input readOnly value={`${window.location.origin}/quote-response.html?t=${v.client_token}`} onFocus={(e) => e.target.select()} /></> : '.'}</div>}
+      {v.client_token ? <>; you can also paste it in a chat or email yourself:<Form.Control readOnly value={`${window.location.origin}/quote-response.html?t=${v.client_token}`} onFocus={(e) => e.target.select()} /></> : '.'}</div>}
     {!ed && <div className="alert alert-warning">This version is {v.status} and locked. {v.status === 'Accepted' ? 'Orders use these terms.' : ''} To change prices or tests, start a new version.</div>}
 
     <Section title="Tests on this quote"
@@ -294,7 +294,7 @@ function Version({ vid, d, pk, reload }) {
       <DataGrid grid={pg} emptyText="No packages on this quote." />
       {ed && pk.allowed && <div className="pkadd">
         <SmartSelect className="pkpick" value={pkPick} options={[{ value: '', label: 'Add a package…' }, ...pkOptions]} onChange={setPkPick} />
-        <input type="number" min="1" value={pkQty} style={{ width: 70 }} title="Samples" onChange={(e) => setPkQty(e.target.value)} />
+        <Form.Control type="number" min="1" value={pkQty} style={{ width: 70 }} title="Samples" onChange={(e) => setPkQty(e.target.value)} />
         <Button type="button" variant="outline-secondary" onClick={addPackage} disabled={busy}>+ Add package</Button>
       </div>}
     </Section>}

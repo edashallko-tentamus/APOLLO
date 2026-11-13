@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { createLine, createOrder, equipmentLists, listScopes, listSuppliers, receiveLine, storageLocations, updateLine } from '../../api/purchasing.js';
 import SmartSelect from '../../components/SmartSelect.jsx';
 import { d8, DISCREPANCIES, DOC_KINDS, fileToBase64, money, num, signed } from './shared.jsx';
+import { Form } from 'react-bootstrap';
 
 const numOrNull = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
 
@@ -145,9 +146,9 @@ export function ScopeBoxes({ scopes, ticked = [], allowEvery = false, holder }) 
   return (
     <div className="field"><label>Approved for <span className="req">*</span></label>
       <div className="picklist">
-        {allowEvery && <label className="cb"><input type="checkbox" checked={every} onChange={(e) => setEvery(e.target.checked)} /> <b>Every scope</b> <small>(anything bought from this vendor)</small></label>}
+        {allowEvery && <label className="cb"><Form.Check.Input type="checkbox" checked={every} onChange={(e) => setEvery(e.target.checked)} /> <b>Every scope</b> <small>(anything bought from this vendor)</small></label>}
         {scopes.map((sc) => (
-          <label key={sc.id} className="cb"><input type="checkbox" checked={sel.has(sc.id)} onChange={() => flip(sc.id)} /> {sc.scope_name} {sc.description && <small>{sc.description}</small>}</label>
+          <label key={sc.id} className="cb"><Form.Check.Input type="checkbox" checked={sel.has(sc.id)} onChange={() => flip(sc.id)} /> {sc.scope_name} {sc.description && <small>{sc.description}</small>}</label>
         ))}
       </div>
     </div>
@@ -163,10 +164,10 @@ export function DocRows({ n, holder }) {
     <div className="field"><label>Documents (questionnaire, certificate, audit report…)</label>
       {rows.map((r, i) => (
         <div key={i} className="docrow">
-          <input type="file" accept="application/pdf,image/png,image/jpeg,text/plain,.docx,.xlsx" style={{ maxWidth: 230 }} onChange={(e) => set(i, 'file', e.target.files[0] || null)} />
+          <Form.Control type="file" accept="application/pdf,image/png,image/jpeg,text/plain,.docx,.xlsx" style={{ maxWidth: 230 }} onChange={(e) => set(i, 'file', e.target.files[0] || null)} />
           <div style={{ width: 160 }}><SmartSelect value={r.doc_kind} options={KIND_OPTS} onChange={(v) => set(i, 'doc_kind', v)} /></div>
-          <input placeholder="Title (e.g. ISO 17025 certificate)" style={{ flex: 1, minWidth: 160 }} value={r.title} onChange={(e) => set(i, 'title', e.target.value)} />
-          <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12.5, color: 'var(--muted)' }}>Expires <input type="date" style={{ width: 150 }} value={r.certificate_expires} onChange={(e) => set(i, 'certificate_expires', e.target.value)} /></label>
+          <Form.Control placeholder="Title (e.g. ISO 17025 certificate)" style={{ flex: 1, minWidth: 160 }} value={r.title} onChange={(e) => set(i, 'title', e.target.value)} />
+          <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12.5, color: 'var(--muted)' }}>Expires <Form.Control type="date" style={{ width: 150 }} value={r.certificate_expires} onChange={(e) => set(i, 'certificate_expires', e.target.value)} /></label>
         </div>
       ))}
     </div>

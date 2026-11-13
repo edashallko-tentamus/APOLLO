@@ -10,6 +10,7 @@ import SmartSelect from '../../components/SmartSelect.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { money } from '../../lib/format.js';
 import './picker.css';
+import { Form } from 'react-bootstrap';
 
 const QUOTED = '__quoted';
 const ALL = '__all';
@@ -68,7 +69,7 @@ function TestPicker({ orderId, sampleIds, sampleLabel, tiers = [], onDone }) {
     <Modal title={`Add tests to ${sampleLabel}`} okText="Add" xwide busy={busy || !picked.length} error={error || loadErr?.message} onOk={add} onClose={() => onDone(null)}
       intro="Choose a service line, then narrow by type and department, or search. Tick the tests to add. The client's quoted tests are at their quoted price; any other test of this lab is at its list price.">
       <div className="tpk">
-        <input className="tpkq" placeholder="Search every test by name or code" aria-label="Search tests" value={q} onChange={(e) => setQ(e.target.value)}
+        <Form.Control className="tpkq" placeholder="Search every test by name or code" aria-label="Search tests" value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} />
         {!d ? <div className="loading">{loadErr ? '' : 'Loading…'}</div> : <>
           <div className="tpkcols">
@@ -91,7 +92,7 @@ function TestPicker({ orderId, sampleIds, sampleLabel, tiers = [], onDone }) {
                 const off = !!t.problem;
                 return (
                   <tr key={t.id} className={off ? 'off' : undefined}>
-                    <td style={{ width: 26 }}><input type="checkbox" id={'tpk_' + t.id} checked={chosen.has(t.id)} disabled={off} onChange={(e) => toggle(t.id, e.target.checked)} /></td>
+                    <td style={{ width: 26 }}><Form.Check.Input type="checkbox" id={'tpk_' + t.id} checked={chosen.has(t.id)} disabled={off} onChange={(e) => toggle(t.id, e.target.checked)} /></td>
                     <td><label htmlFor={'tpk_' + t.id}>{t.test_name}</label>
                       <div className="m">{t.test_code}{t.department_name ? ' · ' + t.department_name : ''}{t.standard_tat ? ` · ${t.standard_tat} ${t.tat_unit === 'Business Days' ? 'business' : 'calendar'} days` : ''}{off ? ' · ' + t.problem : ''}</div></td>
                     <td className="n">{quotedP(t) ? <><span className="tpkq2">{money(t.quote_price)}</span><div className="m">{t.project_code}</div></> : <>{money(t.list_price)}<div className="m">list price</div></>}</td>

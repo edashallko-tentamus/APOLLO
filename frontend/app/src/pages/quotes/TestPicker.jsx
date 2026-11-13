@@ -9,7 +9,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import './quotes.css';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Nav, Form } from 'react-bootstrap';
 
 const pick = { lab: null, find: '', qty: 1 }; // kept between quote pages, as in the current app
 
@@ -65,13 +65,13 @@ export default function TestPicker({ versionId, have, onAdded, prefill = false }
   const chooseLab = (id) => { pick.lab = id; setLab(id); };
   return (
     <div className="qpick">
-      <div className="tabs">
-        {labs.map(([id, code]) => <button type="button" key={id} className={`tab${curLab === id ? ' on' : ''}`} onClick={() => chooseLab(id)}>{code} <small>{cat.filter((t) => t.site_id === id).length}</small></button>)}
-        <button type="button" className={`tab${curLab === 'all' ? ' on' : ''}`} onClick={() => chooseLab('all')}>All labs</button>
-      </div>
+      <Nav variant="pills" className="tabs">
+        {labs.map(([id, code]) => <Nav.Link as="button" active={curLab === id} type="button" key={id} onClick={() => chooseLab(id)}>{code} <small>{cat.filter((t) => t.site_id === id).length}</small></Nav.Link>)}
+        <Nav.Link as="button" active={curLab === 'all'} type="button" onClick={() => chooseLab('all')}>All labs</Nav.Link>
+      </Nav>
       <div className="lrow">
-        <input type="search" placeholder="Find a test (name or code)" value={find} onChange={(e) => { pick.find = e.target.value; setFind(e.target.value); }} />
-        <label>Quantity <input type="number" min="1" value={qty} onChange={(e) => { const n = Math.max(1, Number(e.target.value) || 1); pick.qty = n; setQty(n); }} /></label>
+        <Form.Control type="search" placeholder="Find a test (name or code)" value={find} onChange={(e) => { pick.find = e.target.value; setFind(e.target.value); }} />
+        <label>Quantity <Form.Control type="number" min="1" value={qty} onChange={(e) => { const n = Math.max(1, Number(e.target.value) || 1); pick.qty = n; setQty(n); }} /></label>
         <Button type="button" variant="primary" onClick={addSelected} disabled={busy}>Add selected</Button>
       </div>
       <div className="help" style={{ marginBottom: 6 }}>Each lab&apos;s own tests. Another lab&apos;s test is <b>subcontracted</b>: its price less the in-network discount, plus your lab&apos;s markup (the 20-30 rule, lab settings). Click &quot;+ Add&quot;, or select several rows (Shift or Ctrl+click) and &quot;Add selected&quot;.{prefill ? ' New lines start at the list price: type over the final price to give a discount.' : ''}</div>

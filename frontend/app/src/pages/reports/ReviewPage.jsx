@@ -10,7 +10,7 @@ import { useToast } from '../../components/Toasts.jsx';
 import { useApi } from '../../hooks/useApi.js';
 import { useSession } from '../../session/SessionProvider.jsx';
 import { dt, review } from './shared.jsx';
-import { Button, Card } from 'react-bootstrap';
+import { Button, Card, Form } from 'react-bootstrap';
 
 const noteLast = { kind: '', on: '' }; // the note's Kind and On keep the last choice (Alex: several notes on one analyte)
 const KIND_OPTS = [{ value: 'COA', label: 'On the COA (the client sees it)' }, { value: 'Internal', label: 'Internal (never printed)' }];
@@ -143,7 +143,7 @@ function ReviewBody({ session, it, d, heading, go, bump, reload, toast, dialogs 
         <Card body id="checks"><h2>Release check</h2>
           {d.checks.map((k) => <div key={k.code} className={`chk ${k.level}`} data-code={k.code}><span className="lv">{k.level}</span><b>{k.title}</b>{k.detail}
             {(k.links || []).map((l, j) => <a key={j} className="lk" href={l.href}>{l.text}</a>)}
-            {k.level === 'Warning' && <textarea rows={2} data-ack={k.code} placeholder="Why it can be released despite this (required)" defaultValue={acks[k.code] || ''}
+            {k.level === 'Warning' && <Form.Control as="textarea" rows={2} data-ack={k.code} placeholder="Why it can be released despite this (required)" defaultValue={acks[k.code] || ''}
               onChange={(e) => { acks[k.code] = e.target.value; }} />}
           </div>)}
         </Card>
@@ -151,7 +151,7 @@ function ReviewBody({ session, it, d, heading, go, bump, reload, toast, dialogs 
           <div className="field"><label htmlFor="nk">Kind</label><SmartSelect id="nk" value={kind} options={KIND_OPTS} onChange={(v) => { noteLast.kind = v; setKind(v); }} /></div>
           <div className="field"><label htmlFor="nt">On</label><SmartSelect id="nt" value={on} options={onOptions} onChange={(v) => { noteLast.on = v; setOn(v); }} /></div>
           <div className="field"><label htmlFor="nc">Canned comment</label><SmartSelect id="nc" value={canned} options={cannedOpts} onChange={setCanned} /></div>
-          <div className="field"><label htmlFor="nx">Or type it</label><textarea id="nx" rows={2} value={text} onChange={(e) => setText(e.target.value)} /></div>
+          <div className="field"><label htmlFor="nx">Or type it</label><Form.Control as="textarea" id="nx" rows={2} value={text} onChange={(e) => setText(e.target.value)} /></div>
           <Button type="button" variant="outline-secondary" disabled={busy} onClick={add}>Add the note</Button>
           {x.notes.length > 0 && <><h3 style={{ margin: '12px 0 4px', fontSize: 13 }}>On this sample</h3>
             {x.notes.map((n) => <div key={n.id} className="note"><Button type="button" variant="light" title="Remove the note" onClick={() => remove(n)}>×</Button>

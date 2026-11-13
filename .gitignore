@@ -10,5 +10,5 @@ docs/ontology_vault/.obsidian/
 # Local database password: backend/.env (see backend/.env.example); a root .env from before stays ignored
 .env
 backend/.env
-/.claude
+.claude/launch.json
 /.idea

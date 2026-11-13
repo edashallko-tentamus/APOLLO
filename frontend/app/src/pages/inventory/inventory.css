@@ -1,0 +1,50 @@
+/* Inventory screens (copied from public/js/pages/inventory.js; the upload preview and printed lists are in components/bulk) */
+.invtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 14px; }
+.invtabs a { text-decoration: none; border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 7px; font-size: 13.5px; }
+.invtabs a.on { background: var(--green-700); border-color: var(--green-700); color: #fff; }
+.warnchips span { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 7px; border-radius: 9px; margin-right: 4px; }
+.w-bad { background: var(--err); color: var(--err-ink); } .w-warn { background: var(--warn); color: var(--warn-ink); } .w-info { background: #E8EEFB; color: #2F5BA8; } .w-ok { background: var(--green-50); color: var(--green-700); }
+.actbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.invbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.invbar .sp { flex: 1; }
+table.grid td.cbad { background: #FDECEA; color: var(--err-ink); font-weight: 600; }
+table.grid td.cwarn { background: #FFF4DE; color: var(--warn-ink); font-weight: 600; }
+.eyebrow { color: var(--muted); font-size: 12.5px; font-weight: 600; letter-spacing: .3px; margin-bottom: -2px; }
+.itemform .aifill { background: #FFF8E6 !important; border-color: #E2A33B !important; }
+.coarow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }
+.mqbox { border: 1px solid #F0D9A0; background: #FFF8E6; border-radius: 8px; padding: 8px 12px; margin: 0 0 14px; font-size: 13.5px; }
+.mqbox.ok { border-color: #BFE6D6; background: var(--green-50); } .mqbox.bad { border-color: #F3C2BC; background: #FDECEA; }
+.chips2 .badge { margin-right: 4px; }
+.statcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.statcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fff; }
+.statcard span { display: block; color: var(--muted); font-size: 12.5px; } .statcard b { font-size: 16px; }
+.statcard.calert { background: #FFF4DE; border-color: #F3D19C; } .statcard.calert b, .statcard.calert span { color: var(--warn-ink); }
+.statcard.deficient { background: #FDECEA; border-color: #F5B5AE; } .statcard.deficient b, .statcard.deficient span { color: var(--err-ink); }
+.statcard.conforms b { color: var(--green-700); }
+.rulelist .rule { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; }
+.res-Conforms { color: var(--green-700); font-weight: 700; } .res-Alert { color: var(--warn-ink); font-weight: 700; } .res-Deficient { color: var(--err-ink); font-weight: 700; }
+.lotfoot { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 6px; }
+.itemform .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.itemform .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 16px; }
+.itemform .field { margin-bottom: 10px; }
+.itemform .field > label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.itemform input:not([type=checkbox]):not([type=radio]), .itemform select, .itemform textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.itemform input:disabled { background: #F2F4F6; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0; }
+.checks label { display: inline-flex; gap: 6px; align-items: center; font-weight: 400 !important; font-size: 13.5px; white-space: nowrap; }
+.modeswitch { display: flex; gap: 8px; margin-bottom: 12px; }
+.modeswitch label { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: flex; gap: 8px; align-items: center; cursor: pointer; background: #fff; }
+.modeswitch label:has(input:checked) { border-color: var(--green-700); background: var(--green-50); }
+.calcnote { color: var(--muted); font-size: 12px; }
+.coa-review { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+.coa-review iframe, .coa-review img { width: 100%; height: 62vh; border: 1px solid var(--line); border-radius: 8px; background: #F7F8FA; object-fit: contain; }
+.coa-fields .cf { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; align-items: start; margin-bottom: 10px; }
+.coa-fields label { font-weight: 600; font-size: 13px; padding-top: 6px; }
+.coa-fields input { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.coa-fields .ev { grid-column: 2; font-size: 12px; color: var(--muted); }
+.coa-fields .cur { grid-column: 2; font-size: 12px; color: var(--muted); }
+.coa-fields .diff input { border-color: #E2A33B; background: #FFF8EC; }
+.aiflag { background: #E8EEFB; color: #2F5BA8; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px; }
+@media (max-width: 900px) { .coa-review, .itemform .grid2, .itemform .grid3, .statcards { grid-template-columns: 1fr; } }
+.itemform .aifill input { background: #FFF8E6 !important; border-color: #E2A33B !important; }
+.coa-fields .cf.diff input { border-color: #E2A33B; background: #FFF8EC; }

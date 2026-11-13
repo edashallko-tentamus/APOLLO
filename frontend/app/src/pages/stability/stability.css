@@ -1,0 +1,19 @@
+.stb-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 18px; }
+.stb-facts .field { margin: 0; } .stb-facts input, .stb-facts select { width: 100%; }
+.stb-conds { display: flex; flex-wrap: wrap; gap: 8px; }
+.stb-conds label { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; background: #fff; font-size: 13px; }
+.stb-conds label.on { background: var(--sec-soft, #E5F4EC); border-color: var(--sec, #1F8A5B); color: var(--sec, #1F8A5B); font-weight: 600; }
+.stb-conds small { color: var(--muted); font-weight: 400; }
+.stb-probs { margin: 0; padding-left: 18px; } .stb-probs li.Error { color: var(--err-ink); } .stb-probs li.Warning { color: var(--warn-ink); }
+.stb-sum { display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; } .stb-sum .big { font-size: 22px; font-weight: 700; color: var(--sec, #1F8A5B); }
+.stb-years { border-collapse: collapse; } .stb-years td, .stb-years th { padding: 3px 12px 3px 0; text-align: right; font-size: 13px; } .stb-years th { color: var(--muted); font-weight: 600; }
+.stb-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.stb-rep h3 { margin: 14px 0 4px; } .stb-rep table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
+.stb-rep th, .stb-rep td { border-bottom: 1px solid #EEF1F3; padding: 4px 8px; font-size: 13px; text-align: center; } .stb-rep th { background: #F0F3F5; }
+.stb-rep td.l, .stb-rep th.l { text-align: left; } .stb-rep .pend { color: var(--muted); font-style: italic; } .stb-rep .oos { color: var(--err-ink); font-weight: 700; }
+.short { color: var(--err-ink); font-weight: 700; }
+.stb-amd { border-left: 4px solid var(--warn-ink, #8a5a00); }
+.stb-done { border-left: 4px solid var(--err-ink); }
+.stb-rep sup.ex { color: var(--err-ink); font-weight: 700; }
+.stb-probs li.Block { color: var(--err-ink); } .stb-probs li.Info { color: var(--muted); }
+.stb-disp td { vertical-align: middle; }

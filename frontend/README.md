@@ -26,7 +26,12 @@ Settings are read from `backend/.env`, so both programs agree: `PORT` (the scree
 | `public/js/combo.js` | The smart dropdown applied to every pick list |
 | `public/js/pages/*.js` | One file per area (orders, testing, inventory, reports, ...) |
 | `public/*.html`, `public/js/public/` | The pages clients open without signing in (verify a COA, answer a quote or an OOS) |
-| `public/css/app.css` | The styles |
+| `public/css/app.css` | The styles (also used by the React screens for now) |
+| `app/` | The React screens being moved over (Vite build, own `package.json`); served at `/app/` after `npm run build:app` |
+
+### React screens (`app/`)
+
+Build them once with `npm run build:app` (from the project folder), then `npm start` serves them at http://localhost:3000/app/. Screens not moved yet open in the current app from the menu, with the same sign-in. For quick changes, `npm run dev:app` serves them on http://localhost:5173 with `/api` forwarded to the backend.
 
 ## Rules for changing it (standing requirements)
 

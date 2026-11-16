@@ -1,0 +1,101 @@
+# APOLLO: build, test and deploy to the test server.
+# Copy to .github/workflows/apollo-test.yml in the APOLLO repository.
+# Pull requests into develop: build and rule tests only (GitHub's own runner).
+# Push to develop (or Run workflow on develop): the same, then deploy on the self-hosted runner on the app server.
+name: APOLLO test server
+
+on:
+  push:
+    branches: [test]
+  pull_request:
+    branches: [test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apollo-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/app/package-lock.json
+
+      - name: Make the CI databases (throwaway, inside this job only)
+        env:
+          PGPASSWORD: ci
+        run: psql -h localhost -U postgres -v pw=ci -f backend/db/create_database.sql
+
+      - name: Rule tests (every migration applied to an empty database)
+        env:
+          DATABASE_URL: postgres://lims:ci@localhost:5432/lims3?sslmode=disable
+          LIMS_TEST_DATABASE_URL: postgres://lims:ci@localhost:5432/lims3_test?sslmode=disable
+        run: npm test
+
+      - name: Java unit tests and the backend jar
+        run: mvn -B -f backend/pom.xml package
+
+      - name: Build the React screens
+        run: npm run build:app
+
+      - name: Put the release together
+        run: |
+          set -euo pipefail
+          R="$RUNNER_TEMP/release"
+          mkdir -p "$R/backend" "$R/frontend/app"
+          cp backend/target/lims-backend.jar "$R/backend/"
+          cp -r backend/db "$R/backend/db"
+          cp frontend/server.js "$R/frontend/"
+          cp -r frontend/app/dist "$R/frontend/app/dist"
+          echo "$GITHUB_SHA" > "$R/VERSION"
+          tar -czf "apollo-$GITHUB_SHA.tar.gz" -C "$R" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apollo-release
+          path: apollo-${{ github.sha }}.tar.gz
+          retention-days: 14
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/test'
+    runs-on: [self-hosted, linux, apollo-test]
+    environment: test
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apollo-release
+          path: ${{ runner.temp }}/apollo-release
+
+      - name: Install the release (the backend migrates the test database when it starts)
+        run: sudo /usr/local/sbin/deploy-apollo "$RUNNER_TEMP/apollo-release/apollo-$GITHUB_SHA.tar.gz"
+
+      - name: Check through HTTPS (Nginx, front end, backend, database)
+        env:
+          APOLLO_URL: ${{ vars.APOLLO_URL }}
+        run: |
+          curl --fail --silent --show-error "$APOLLO_URL/" -o /dev/null
+          curl --fail --silent --show-error "$APOLLO_URL/api/public/settings"

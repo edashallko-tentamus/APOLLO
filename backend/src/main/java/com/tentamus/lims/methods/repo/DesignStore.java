@@ -43,8 +43,12 @@ public class DesignStore {
     }
 
     public TestVersion.Template template(Db d, Object id) {
-        Map<String, Object> r = id == null ? null : d.one("SELECT id, template_name, site_id, status::text AS status FROM report_template WHERE id = ?::uuid", id);
-        return r == null ? null : new TestVersion.Template((String) r.get("id"), (String) r.get("template_name"), (String) r.get("site_id"), (String) r.get("status"));
+        Map<String, Object> r = id == null ? null : d.one("SELECT id, template_name, site_id, status::text AS status, document_type FROM report_template WHERE id = ?::uuid", id);
+        if (r == null) return null;
+        if (!"COA".equals(r.get("document_type"))) throw com.tentamus.lims.core.web.RuleException.database("Only a COA template can be chosen for a test");
+        java.util.Set<String> shared = new java.util.HashSet<>();
+        for (Map<String, Object> l : d.rows("SELECT site_id FROM report_template_lab WHERE template_id = ?::uuid AND available", id)) shared.add((String) l.get("site_id"));
+        return new TestVersion.Template((String) r.get("id"), (String) r.get("template_name"), (String) r.get("site_id"), (String) r.get("status"), shared);
     }
 
     public boolean analyteActive(Db d, Object id) { return d.one("SELECT 1 AS x FROM analyte WHERE id = ?::uuid AND status = 'Active'", id) != null; }

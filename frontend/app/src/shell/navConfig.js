@@ -18,7 +18,7 @@ export const ADMIN_NAV = [
   { head: 'QA', items: [['#/logbooks/review', 'Logbook review', ['logbook.review']], ['#/admin/reasons', 'Canned reasons', ['master.reasons']], ['#/oos/config', 'OOS checklists', ['oos.configure']], ['#/audit', 'Audit trail']] },
   { head: 'Personnel', items: [['#/admin/users', 'People and groups', ['admin.users']], ['#/admin/dashboard-widgets', 'Dashboard widgets', ['admin.groups']], ['#/admin/groups', 'Groups and permissions', ['admin.groups', 'admin.users', 'audit.view']],
     ['#/admin/permissions', 'Permission matrix', ['admin.groups', 'admin.users', 'audit.view']]] },
-  { head: 'Lab setup', items: [['#/admin/sites', 'Sites and holidays', ['admin.lab']], ['#/admin/report-templates', 'Report templates', ['reports.templates', 'admin.lab']], ['#/admin/waste', 'Waste classifications', ['inventory.lists', 'admin.lab']], ['#/stability/setup', 'Stability chambers', ['stability.configure', 'admin.lab']], ['#/sensors', 'Sensors', ['sensors.configure', 'logbook.review', 'admin.lab']]] },
+  { head: 'Lab setup', items: [['#/admin/sites', 'Sites and holidays', ['admin.lab']], ['#/admin/report-templates', 'Report templates', ['reports.templates', 'reports.design', 'admin.lab']], ['#/admin/waste', 'Waste classifications', ['inventory.lists', 'admin.lab']], ['#/stability/setup', 'Stability chambers', ['stability.configure', 'admin.lab']], ['#/sensors', 'Sensors', ['sensors.configure', 'logbook.review', 'admin.lab']]] },
 ];
 
 export const SECTION_KEY = { Intake: 'intake', Testing: 'testing', 'Lab supplies': 'supplies', Pricing: 'pricing', Billing: 'pricing' };

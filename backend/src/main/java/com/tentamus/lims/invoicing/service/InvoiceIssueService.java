@@ -2,6 +2,7 @@ package com.tentamus.lims.invoicing.service;
 
 import static com.tentamus.lims.core.web.Answers.map;
 
+import com.tentamus.lims.labsetup.repo.TemplateVersions;
 import com.tentamus.lims.core.db.Db;
 import com.tentamus.lims.core.documents.Html;
 import com.tentamus.lims.core.documents.Pdfs;
@@ -44,6 +45,7 @@ public class InvoiceIssueService {
         InvoiceDocument.Made p = document.pdf(d, id, false, null);
         Object number = p.data().inv().get("invoice_number");
         String doc = Pdfs.store(d, Html.text(number) + ".pdf", p.pdf());
+        TemplateVersions.record(d, doc, p.templateVersionId());
         d.raw("SELECT record_invoice_document(?::uuid, ?::uuid, ?)", id, doc, p.pdf().sha256());
         Object n = d.one("SELECT send_invoice(?::uuid) AS n", id).get("n");
         return map("id", id, "invoice_number", number, "emails", Html.jsNumber(Js.toNumber(n)));
@@ -86,6 +88,7 @@ public class InvoiceIssueService {
             Map<String, Object> row = d.one("SELECT * FROM invoice_correction WHERE id = ?::uuid", k);
             InvoiceDocument.Made p = document.pdf(d, i.get("id"), false, new InvoiceDocument.Corrected(row.get("old_value"), row.get("new_value"), row.get("created_at")));
             String doc = Pdfs.store(d, Html.text(i.get("invoice_number")) + " corrected " + Html.text(row.get("correction_no")) + ".pdf", p.pdf());
+            TemplateVersions.record(d, doc, p.templateVersionId());
             Object n = d.one("SELECT record_invoice_correction_document(?::uuid, ?::uuid, ?) AS n", k, doc, p.pdf().sha256()).get("n");
             return map("correction_id", k, "emails", Html.jsNumber(Js.toNumber(n)));
         });

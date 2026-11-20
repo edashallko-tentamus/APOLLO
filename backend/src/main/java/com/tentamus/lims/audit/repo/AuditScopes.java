@@ -177,7 +177,7 @@ public final class AuditScopes {
         Map.entry("templates", List.of("email_template")), Map.entry("compliance", List.of("compliance_category")),
         Map.entry("oos_list", List.of("oos_investigation", "oos_client_response")), Map.entry("oos_config", List.of("oos_checklist_item", "oos_procedure_setting")),
         Map.entry("quotes", List.of("project", "project_version", "quoted_test_configuration", "email_outbox")),
-        Map.entry("report_templates", List.of("report_template")), Map.entry("lab_media", List.of("site_media", "system_setting")),
+        Map.entry("report_templates", List.of("report_template", "report_template_version", "report_template_lab")), Map.entry("lab_media", List.of("site_media", "system_setting")),
         Map.entry("stability_setup", List.of("stability_condition", "stability_chamber", "stability_rack")),
         Map.entry("stability_studies", List.of("stability_study", "stability_storage", "stability_pull", "stability_amendment", "stability_excursion_assessment", "stability_report")),
         Map.entry("stability_quotes", List.of("project", "stability_plan", "stability_timepoint", "stability_cell")),

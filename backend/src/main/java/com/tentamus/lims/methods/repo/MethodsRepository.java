@@ -105,10 +105,12 @@ public class MethodsRepository {
         lists.put("qcTypes", db.rows("SELECT * FROM qc_type ORDER BY sort_order"));
         lists.put("limitTypes", db.rows("SELECT * FROM qc_limit_type ORDER BY sort_order"));
         lists.put("categories", db.rows("SELECT id, category_name FROM product_category WHERE status = 'Active' ORDER BY sort_order, category_name"));
-        // report templates this test may use (its lab's and every lab's; migration 030) and the lab's default
+        // COA templates this test may use (its lab's and the shared ones ticked for the lab; migration 074) and the lab's default
         lists.put("report_templates", db.rows("""
-            SELECT id, template_code, template_name, site_id, status::text AS status FROM report_template WHERE (site_id IS NULL OR site_id IS NOT DISTINCT FROM ?::uuid)
-             ORDER BY site_id NULLS FIRST, template_code""", site));
+            SELECT rt.id, rt.template_code, rt.template_name, rt.site_id, rt.status::text AS status FROM report_template rt
+             WHERE rt.document_type = 'COA' AND (rt.site_id IS NOT DISTINCT FROM ?::uuid
+                OR (rt.site_id IS NULL AND EXISTS (SELECT 1 FROM report_template_lab l WHERE l.template_id = rt.id AND l.site_id = ?::uuid AND l.available)))
+             ORDER BY rt.site_id NULLS FIRST, rt.template_code""", site, site));
         lists.put("default_report_template", db.one("SELECT default_report_template(?::uuid) AS id", site).get("id"));
         out.put("lists", lists);
         return out;

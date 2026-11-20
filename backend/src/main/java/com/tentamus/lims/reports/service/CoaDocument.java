@@ -6,6 +6,8 @@ import com.tentamus.lims.core.documents.Html;
 import com.tentamus.lims.core.documents.QrCode;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.web.RuleException;
+import com.tentamus.lims.labsetup.domain.ReportDesign;
+import com.tentamus.lims.labsetup.repo.TemplateVersions;
 import com.tentamus.lims.reports.domain.CoaContent;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -234,8 +236,13 @@ public final class CoaDocument {
         for (Map<String, Object> t : outTests) if (truthy(t.get("template_id"))) tidSet.add(t.get("template_id"));
         for (Map<String, Object> p : pending) if (truthy(p.get("template_id"))) tidSet.add(p.get("template_id"));
         List<Object> tids = new ArrayList<>(tidSet);
-        List<Map<String, Object>> tpls = tids.isEmpty() ? List.of()
-            : db.rows("SELECT id, template_code, template_name, layout, options FROM report_template WHERE id = ANY(?::uuid[])", tids);
+        // each template's design as this lab uses it (its own: the Effective version; shared: the version the lab accepted)
+        List<Map<String, Object>> tpls = tids.isEmpty() ? List.of() : db.rows("""
+            SELECT rt.id, rt.template_code, rt.template_name, rt.layout, rt.options, v.id AS version_id, v.version_no, v.design
+              FROM report_template rt LEFT JOIN report_template_lab l ON l.template_id = rt.id AND l.site_id = ?::uuid
+              LEFT JOIN report_template_version v ON v.id = """ + TemplateVersions.VERSION_AT_LAB + """
+
+             WHERE rt.id = ANY(?::uuid[])""", s.get("site_id"), tids);
         Object dflt = db.one("SELECT default_report_template(?::uuid) AS id", s.get("site_id")).get("id");
         List<Object> order = new ArrayList<>(tids);
         order.sort((a, b) -> Objects.equals(a, dflt) ? -1 : Objects.equals(b, dflt) ? 1 : 0);
@@ -245,8 +252,10 @@ public final class CoaDocument {
             List<Object> st = new ArrayList<>(), sp = new ArrayList<>();
             for (Map<String, Object> t : outTests) if (Objects.equals(t.get("template_id"), id)) st.add(t.get("requested_test_id"));
             for (Map<String, Object> p : pending) if (Objects.equals(p.get("template_id"), id)) sp.add(p.get("requested_test_id"));
+            Object raw = x.get("design") != null ? x.get("design") : map("layout", x.get("layout"), "options", x.get("options"));
             sections.add(map("template", map("id", id, "code", x.get("template_code"), "name", x.get("template_name"), "layout", x.get("layout"),
-                "options", x.get("options") != null ? x.get("options") : new LinkedHashMap<>()), "tests", st, "pending", sp));
+                "options", x.get("options") != null ? x.get("options") : new LinkedHashMap<>(), "version_id", x.get("version_id"), "version_no", x.get("version_no"),
+                "design", ReportDesign.normalize("COA", raw)), "tests", st, "pending", sp));
         }
         out.put("sections", sections);
         // the sample's report photos (0.29.0, migration 051): only when a part's layout prints them; the images are not stored
@@ -309,22 +318,17 @@ public final class CoaDocument {
         return "";
     }
 
-    /** How many report photos the parts' layouts print (0, 1 or 2). */
-    @SuppressWarnings("unchecked")
+    /** How many report photos the parts' designs print (0, 1 or 2). */
     public static int photosNeeded(List<Map<String, Object>> sections) {
         int n = 0;
-        for (Map<String, Object> x : sections) n = Math.max(n, photoCount(layoutOf(x)));
+        for (Map<String, Object> x : sections) n = Math.max(n, ReportDesign.photoCount(designOf(ReportDesign.asMap(x.get("template")))));
         return n;
     }
 
-    static int photoCount(Object layout) { return "COA with 2 photos".equals(layout) ? 2 : "COA with 1 photo".equals(layout) ? 1 : 0; }
-
-    @SuppressWarnings("unchecked")
-    static Object layoutOf(Map<String, Object> section) {
-        Object t = section.get("template");
-        if (t instanceof Map<?, ?> m) return m.get("layout");
-        if (t instanceof JsonNode j && j.hasNonNull("layout")) return j.get("layout").asText();
-        return null;
+    /** A part's design: stored with the content since 074; older content has the template's layout and options. */
+    static Map<String, Object> designOf(Map<String, Object> template) {
+        Object raw = template.get("design") != null ? template.get("design") : map("layout", template.get("layout"), "options", template.get("options"));
+        return ReportDesign.normalize("COA", raw);
     }
 
     static Map<String, Object> map(Object... kv) {
@@ -334,47 +338,72 @@ public final class CoaDocument {
     }
 
     // ------------------------------------------------------------------ the page that becomes the PDF
-    /** A report template's options with the defaults (method, version, tested dates and LOQ shown). */
-    private static Map<String, Object> options(Map<String, Object> template) {
-        Map<String, Object> o = map("show_method", true, "show_test_version", true, "show_tested_dates", true, "show_loq", true);
-        Object raw = template.get("options");
-        if (raw instanceof Map<?, ?> m) for (Map.Entry<?, ?> e : m.entrySet()) o.put(String.valueOf(e.getKey()), e.getValue());
-        if (raw instanceof JsonNode j && j.isObject()) j.fields().forEachRemaining(e -> o.put(e.getKey(), e.getValue()));
-        return o;
+    /** One part: its template, its design (074) and the tests block's options (method, version, tested dates, LOQ). */
+    private record Part(Map<String, Object> opt, Map<String, Object> template, Map<String, Object> design, List<Map<String, Object>> tests, List<Map<String, Object>> pending) {}
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> blocks(Map<String, Object> design) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (design.get("blocks") instanceof List<?> l) for (Object o : l) out.add(ReportDesign.asMap(o));
+        return out;
     }
 
-    private record Part(Map<String, Object> opt, Map<String, Object> template, List<Map<String, Object>> tests, List<Map<String, Object>> pending) {}
+    private static Map<String, Object> block(Map<String, Object> design, String type) {
+        for (Map<String, Object> b : blocks(design)) if (type.equals(b.get("type"))) return b;
+        return map();
+    }
+
+    /** A field the design may hide: shown unless set to false. */
+    private static boolean shows(Map<String, Object> b, String field) {
+        return !Boolean.FALSE.equals(ReportDesign.asMap(b.get("fields")).get(field));
+    }
+
+    /** The theme as inline CSS: the accent (headings, rules, table heads), the font and the text size. */
+    private static String theme(Map<String, Object> design) {
+        Map<String, Object> t = ReportDesign.asMap(design.get("theme"));
+        String font = ReportDesign.FONTS.getOrDefault(String.valueOf(t.get("font")), ReportDesign.FONTS.get("Sans serif"));
+        String acc = ReportDesign.ACCENTS.contains(String.valueOf(t.get("accent"))) ? String.valueOf(t.get("accent")) : ReportDesign.ACCENTS.get(0);
+        int size = t.get("size") instanceof Number n && ReportDesign.SIZES.contains(n.intValue()) ? n.intValue() : 10;
+        return "--acc:" + acc + ";font-family:" + font.replace("\"", "'") + ";font-size:" + size + "pt";
+    }
 
     @SuppressWarnings("unchecked")
     public static String html(CoaContent c) {
         String tz = (String) c.get("time_zone");
         List<Part> parts = new ArrayList<>();
         for (Map<String, Object> sec : c.sections()) {
-            Map<String, Object> template = sec.get("template") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+            Map<String, Object> template = ReportDesign.asMap(sec.get("template"));
+            Map<String, Object> design = designOf(template);
             List<?> st = sec.get("tests") instanceof List<?> l ? l : List.of(), sp = sec.get("pending") instanceof List<?> l ? l : List.of();
-            parts.add(new Part(options(template), template, c.list("tests").stream().filter(t -> st.contains(t.get("requested_test_id"))).toList(),
+            parts.add(new Part(block(design, "tests"), template, design, c.list("tests").stream().filter(t -> st.contains(t.get("requested_test_id"))).toList(),
                 c.list("pending").stream().filter(x -> sp.contains(x.get("requested_test_id"))).toList()));
         }
+        Map<String, Object> first = parts.isEmpty() ? ReportDesign.defaults("COA") : parts.get(0).design();
         Map<String, Object> lab = c.part("lab"), client = c.part("client"), order = c.part("order"), sample = c.part("sample"), auth = c.part("authorized");
         String reportId = c.reportId();
         // the QR code of the verification link, beside it (0.29.0)
         String qr;
         try { qr = QrCode.svg(Html.text(c.get("verify_url")), 2, "QR code: verify this certificate"); } catch (RuntimeException e) { qr = ""; }
         StringBuilder b = new StringBuilder();
-        b.append("<!doctype html><html><head><meta charset=\"utf-8\"><title>").append(esc(reportId)).append(" (version ").append(Html.text(c.get("version_no"))).append(")</title><style>\n").append(STYLE).append("  </style></head><body>\n  ");
+        b.append("<!doctype html><html><head><meta charset=\"utf-8\"><title>").append(esc(reportId)).append(" (version ").append(Html.text(c.get("version_no"))).append(")</title><style>\n").append(STYLE)
+            .append("  </style></head><body style=\"").append(theme(first)).append("\">\n  ");
         for (int pi = 0; pi < parts.size(); pi++) {
             Part part = parts.get(pi);
+            Map<String, Object> design = part.design(), header = ReportDesign.asMap(design.get("header"));
             final int p = pi;
             java.util.function.Function<String, String> dc = k -> p == 0 ? " data-check=\"" + k + "\"" : "";
-            b.append("<div class=\"part").append(pi > 0 ? " next" : "").append("\">\n  <div class=\"top\"><div class=\"labblock\">");
-            if (c.logo() != null) b.append("<img class=\"logo\" src=\"").append(c.logo()).append("\" alt=\"").append(esc(lab.get("name"))).append("\">");
-            b.append("<div><div class=\"lab\">").append(esc(lab.get("name"))).append("</div><div class=\"labaddr\">").append(esc(lab.get("address"))).append("</div>\n      ");
-            if (truthy(lab.get("accreditation"))) {
+            b.append("<div class=\"part").append(pi > 0 ? " next" : "").append("\" style=\"").append(theme(design)).append("\">\n  <div class=\"top\"><div class=\"labblock\">");
+            if (c.logo() != null && !Boolean.FALSE.equals(header.get("show_logo"))) b.append("<img class=\"logo\" src=\"").append(c.logo()).append("\" alt=\"").append(esc(lab.get("name"))).append("\">");
+            b.append("<div><div class=\"lab\">").append(esc(lab.get("name"))).append("</div>");
+            if (!Boolean.FALSE.equals(header.get("show_address"))) b.append("<div class=\"labaddr\">").append(esc(lab.get("address"))).append("</div>");
+            b.append("\n      ");
+            if (truthy(lab.get("accreditation")) && !Boolean.FALSE.equals(header.get("show_accreditation"))) {
                 b.append("<div class=\"accr\">");
                 if (c.mark() != null) b.append("<img class=\"mark\" src=\"").append(c.mark()).append("\" alt=\"Accreditation mark\">");
                 b.append(esc(lab.get("accreditation"))).append("</div>");
             }
-            b.append("</div></div>\n    <div class=\"title\"><div class=\"t\">").append(esc(truthy(part.opt().get("title")) ? Html.text(part.opt().get("title")) : "CERTIFICATE OF ANALYSIS"))
+            String title = truthy(design.get("title")) ? Html.text(design.get("title")) : ReportDesign.COA_TITLE;
+            b.append("</div></div>\n    <div class=\"title\"><div class=\"t\">").append(esc(title))
                 .append("</div><div class=\"v\">Report <span").append(dc.apply("h:report_id")).append(">").append(esc(reportId)).append("</span> · Version <span")
                 .append(dc.apply("h:version_no")).append(">").append(Html.text(c.get("version_no"))).append("</span>");
             Map<String, Object> sup = c.part("supersedes");
@@ -382,21 +411,32 @@ public final class CoaDocument {
             b.append("</div>\n    <div class=\"v\">Issued ").append(esc(Html.fmtDate(auth.get("at"), tz))).append("</div>");
             if (parts.size() > 1) b.append("<div class=\"v\">Part ").append(pi + 1).append(" of ").append(parts.size())
                 .append(truthy(part.template().get("name")) ? ": " + esc(part.template().get("name")) : "").append("</div>");
-            b.append("</div></div>\n  <div class=\"grid\">\n    <div><h4>Client</h4><table class=\"kv\">")
-                .append(kv(pi, new Object[][] {{"Client", client.get("name")}, {"Address", client.get("address")}, {"Contact", client.get("contact")},
-                    {"Order", order.get("order_code"), "h:order_code"}, {"PO", order.get("po_number")}, {"License", or(order.get("license"), "")}}))
-                .append("</table></div>\n    <div><h4>Sample</h4><table class=\"kv\">")
-                .append(kv(pi, new Object[][] {{"Sample ID", sample.get("sample_code"), "h:sample_code"}, {"Client sample ID", sample.get("client_sample_id"), "h:client_sample_id"},
-                    {"Description", sample.get("description")}, {"Matrix", sample.get("matrix")}, {"Product", sample.get("product")}, {"Lot", sample.get("lot"), "h:lot"},
-                    {"Batch", sample.get("batch")}, {"METRC ID", or(sample.get("metrc_id"), "")}, {"Category", sample.get("compliance_category")},
-                    {"Serving size", or(sample.get("serving"), "")}, {"Received", Html.fmtDate(sample.get("received"), tz)}, {"Condition", sample.get("condition")}}))
-                .append("</table></div>\n  </div>\n  ").append(photoBlock(c, part)).append("\n  ");
-            for (Map<String, Object> t : part.tests()) b.append(testBlock(c, t, part, tz));
-            b.append("\n  ");
-            if (!part.pending().isEmpty()) {
-                b.append("<section class=\"pending\"><h3>Tests in progress</h3><table class=\"res\"><tbody>");
-                for (Map<String, Object> x : part.pending()) b.append("<tr><td>").append(esc(x.get("test_name"))).append("</td><td class=\"r\">In progress</td></tr>");
-                b.append("</tbody></table></section>");
+            b.append("</div></div>\n  ");
+            List<Map<String, Object>> bl = blocks(design);
+            for (int k = 0; k < bl.size(); k++) {
+                Map<String, Object> blk = bl.get(k);
+                String type = String.valueOf(blk.get("type"));
+                switch (type) {
+                    case "client", "sample" -> {
+                        // client and sample side by side when they follow each other, as the standard layout has them
+                        String other = "client".equals(type) ? "sample" : "client";
+                        boolean pair = k + 1 < bl.size() && other.equals(bl.get(k + 1).get("type"));
+                        b.append("<div class=\"grid").append(pair ? "" : " one").append("\">\n    ").append(detailBlock(type, blk, pi, client, order, sample, tz));
+                        if (pair) b.append("\n    ").append(detailBlock(other, bl.get(++k), pi, client, order, sample, tz));
+                        b.append("\n  </div>\n  ");
+                    }
+                    case "photos" -> b.append(photoBlock(c, ((Number) blk.getOrDefault("count", 0)).intValue())).append("\n  ");
+                    case "tests" -> { for (Map<String, Object> t : part.tests()) b.append(testBlock(c, t, part, tz)); b.append("\n  "); }
+                    case "pending" -> {
+                        if (!part.pending().isEmpty()) {
+                            b.append("<section class=\"pending\"><h3>Tests in progress</h3><table class=\"res\"><tbody>");
+                            for (Map<String, Object> x : part.pending()) b.append("<tr><td>").append(esc(x.get("test_name"))).append("</td><td class=\"r\">In progress</td></tr>");
+                            b.append("</tbody></table></section>\n  ");
+                        }
+                    }
+                    case "text" -> b.append("<div class=\"free\">").append(esc(blk.get("text"))).append("</div>\n  ");
+                    default -> { }
+                }
             }
             b.append("\n  </div>");
         }
@@ -409,7 +449,7 @@ public final class CoaDocument {
             b.append("</table></div>");
         }
         b.append("\n  <div class=\"rule\">").append(truthy(c.get("decision_rule")) ? esc(c.get("decision_rule")) + " " : "")
-            .append("The results relate only to the sample tested, as received. This certificate may not be reproduced except in full without the laboratory's written approval.</div>\n")
+            .append(esc(truthy(first.get("disclaimer")) ? first.get("disclaimer") : ReportDesign.DISCLAIMER)).append("</div>\n")
             .append("  <div class=\"sign sigblock\"><div>Authorized by\n      ")
             .append(truthy(auth.get("signature")) ? "<img class=\"sigimg\" src=\"" + auth.get("signature") + "\" alt=\"Signature of " + esc(auth.get("by")) + "\">" : "<div style=\"height:46px\"></div>")
             .append("\n      <div class=\"sigline\"><span class=\"nm\" data-check=\"h:authorized_by\">").append(esc(auth.get("by"))).append("</span>")
@@ -418,6 +458,20 @@ public final class CoaDocument {
             .append("<br>Verification code <span class=\"code\" data-check=\"h:verify_code\">").append(esc(c.get("verify_code"))).append("</span><br>or scan the QR code</div>")
             .append(qr).append("</div></div>\n  \n  </body></html>");
         return b.toString();
+    }
+
+    /** The client or sample details; the checked fields always print, the others as the design says. */
+    private static String detailBlock(String type, Map<String, Object> blk, int pi, Map<String, Object> client, Map<String, Object> order, Map<String, Object> sample, String tz) {
+        if ("client".equals(type)) return "<div><h4>Client</h4><table class=\"kv\">" + kv(pi, new Object[][] {{"Client", client.get("name")},
+            {"Address", shows(blk, "address") ? client.get("address") : null}, {"Contact", shows(blk, "contact") ? client.get("contact") : null},
+            {"Order", order.get("order_code"), "h:order_code"}, {"PO", shows(blk, "po") ? order.get("po_number") : null},
+            {"License", shows(blk, "license") ? or(order.get("license"), "") : null}}) + "</table></div>";
+        return "<div><h4>Sample</h4><table class=\"kv\">" + kv(pi, new Object[][] {{"Sample ID", sample.get("sample_code"), "h:sample_code"},
+            {"Client sample ID", sample.get("client_sample_id"), "h:client_sample_id"}, {"Description", shows(blk, "description") ? sample.get("description") : null},
+            {"Matrix", shows(blk, "matrix") ? sample.get("matrix") : null}, {"Product", shows(blk, "product") ? sample.get("product") : null}, {"Lot", sample.get("lot"), "h:lot"},
+            {"Batch", shows(blk, "batch") ? sample.get("batch") : null}, {"METRC ID", shows(blk, "metrc_id") ? or(sample.get("metrc_id"), "") : null},
+            {"Category", shows(blk, "category") ? sample.get("compliance_category") : null}, {"Serving size", shows(blk, "serving") ? or(sample.get("serving"), "") : null},
+            {"Received", shows(blk, "received") ? Html.fmtDate(sample.get("received"), tz) : null}, {"Condition", shows(blk, "condition") ? sample.get("condition") : null}}) + "</table></div>";
     }
 
     private static String kv(int pi, Object[][] pairs) {
@@ -474,8 +528,7 @@ public final class CoaDocument {
     }
 
     // photo layouts (0.29.0): one photo, or two side by side, 4:3, under the client and sample details
-    private static String photoBlock(CoaContent c, Part part) {
-        int n = photoCount(part.template().get("layout"));
+    private static String photoBlock(CoaContent c, int n) {
         if (n == 0) return "";
         StringBuilder b = new StringBuilder("<div class=\"photos photos").append(n).append("\">");
         for (int k = 1; k <= n; k++) {
@@ -495,15 +548,15 @@ public final class CoaDocument {
 
     private static final String STYLE = """
             @page { size: Letter; margin: 0.6in 0.6in 0.75in; }
-            body { font: 10pt/1.35 "Helvetica Neue", Arial, sans-serif; color: #1d2329; margin: 0; }
-            .top { display: flex; justify-content: space-between; border-bottom: 2.5px solid #1f3a2c; padding-bottom: 10px; }
-            .lab { font-size: 15pt; font-weight: 700; color: #1f3a2c; } .labaddr { color: #5c6773; font-size: 9pt; white-space: pre-line; }
+            body { line-height: 1.35; color: #1d2329; margin: 0; }
+            .top { display: flex; justify-content: space-between; border-bottom: 2.5px solid var(--acc, #1f3a2c); padding-bottom: 10px; }
+            .lab { font-size: 15pt; font-weight: 700; color: var(--acc, #1f3a2c); } .labaddr { color: #5c6773; font-size: 9pt; white-space: pre-line; }
             .title { text-align: right; } .title .t { font-size: 14pt; font-weight: 700; letter-spacing: .3px; } .title .v { font-size: 9pt; color: #5c6773; margin-top: 3px; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0 6px; }
             .grid h4 { margin: 0 0 4px; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .5px; color: #5c6773; }
             table.kv { border-collapse: collapse; width: 100%; } table.kv th { text-align: left; font-weight: 600; color: #5c6773; width: 38%; padding: 1.5px 6px 1.5px 0; vertical-align: top; font-size: 9pt; }
             table.kv td { padding: 1.5px 0; font-size: 9pt; }
-            h3 { font-size: 11pt; margin: 14px 0 2px; color: #1f3a2c; } .meta { font-size: 8.5pt; color: #5c6773; margin-bottom: 5px; }
+            h3 { font-size: 11pt; margin: 14px 0 2px; color: var(--acc, #1f3a2c); } .meta { font-size: 8.5pt; color: #5c6773; margin-bottom: 5px; }
             table.res { width: 100%; border-collapse: collapse; } table.res th { background: #eef2f0; text-align: left; font-size: 8.5pt; padding: 5px 6px; border-bottom: 1px solid #c9d3cf; }
             table.res td { padding: 5px 6px; border-bottom: 1px solid #e3e8e6; vertical-align: top; } .r { text-align: right; } .b { font-weight: 700; }
             .sub { font-size: 8pt; color: #5c6773; } .note { font-size: 8.5pt; font-style: italic; color: #333; margin-top: 3px; }
@@ -512,17 +565,18 @@ public final class CoaDocument {
             .sign { margin-top: 18px; border-top: 1px solid #c9d3cf; padding-top: 8px; display: flex; justify-content: space-between; font-size: 9pt; }
             .verify { font-size: 8.5pt; color: #5c6773; text-align: right; } .code { font: 600 10pt ui-monospace, Menlo, Consolas, monospace; color: #1d2329; letter-spacing: .5px; }
             section.test { break-inside: avoid; }
-            sup.mk { font-size: 7pt; color: #1f3a2c; font-weight: 700; }
+            sup.mk { font-size: 7pt; color: var(--acc, #1f3a2c); font-weight: 700; }
             .notes table { border-collapse: collapse; width: 100%; margin-top: 3px; } .notes td { padding: 2px 6px 2px 0; vertical-align: top; font-size: 9pt; } .notes td.n { width: 26px; font-weight: 700; } .notes .on { color: #5c6773; }
             .sigblock { break-inside: avoid; } .sigimg { height: 46px; max-width: 220px; object-fit: contain; display: block; margin-bottom: 2px; }
             .labblock { display: flex; gap: 12px; align-items: flex-start; } img.logo { max-height: 54px; max-width: 160px; object-fit: contain; }
-            .accr { font-size: 8.5pt; color: #1f3a2c; margin-top: 4px; display: flex; gap: 6px; align-items: center; } img.mark { height: 28px; object-fit: contain; }
+            .accr { font-size: 8.5pt; color: var(--acc, #1f3a2c); margin-top: 4px; display: flex; gap: 6px; align-items: center; } img.mark { height: 28px; object-fit: contain; }
             .part.next { break-before: page; }
             .sigline { border-top: 1px solid #1d2329; width: 240px; padding-top: 3px; } .sigline .nm { font-weight: 700; }
             .photos { display: flex; gap: 0.25in; margin: 4px 0 8px; break-inside: avoid; } figure.ph { margin: 0; } figure.ph1 { width: 3.4in; } figure.ph2 { width: 3.05in; }
             figure.ph img, .noph { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; border: 1px solid #c9d3cf; border-radius: 2px; }
             .noph { display: flex; align-items: center; justify-content: center; color: #9a2b2b; background: #f6f1f1; }
             figure.ph figcaption { font-size: 8pt; color: #5c6773; margin-top: 2px; }
+            .grid.one { grid-template-columns: 1fr; } .free { margin: 10px 0; font-size: 9pt; white-space: pre-line; }
             .verifybox { display: flex; gap: 8px; align-items: flex-start; } .verifybox svg { flex: none; }
         """;
 }

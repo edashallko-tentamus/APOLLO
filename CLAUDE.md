@@ -2,12 +2,14 @@
 
 You are helping Alex Kiddle (LIMS Director, Tentamus North America) build LIMS3, an in-house Laboratory Information Management System. **Alex is not a programmer.** Explain in plain language, show him results in the browser, and never ask him to edit code or run commands he would not understand. Do the technical work yourself.
 
+**Who decides (2026-11-19):** the project is no longer run by Alex alone. Design decisions, permission choices, build go-aheads and approvals can come from any project lead (Alex Kiddle or Edashall Konah); do not wait for Alex's sign-off. Older sections that say "on Alex's go", "design with Alex first" or "raise with Alex" are history; read them as "with a project lead". Never set or enter anyone's password still stands.
+
 Writing style for Alex: lead with the answer, keep it short, push back directly when an idea has a flaw, flag anything you are less than 90% sure of, and never use the em dash character.
 
 ## What this is
 
 - A **Sandbox** (non-GxP) build of LIMS3. Demo data is fictional. It is a working prototype that will later be promoted, under change control, through Test/Validation to Production (first lab: CFL). Validation is GAMP 5 Category 5 (bespoke), documented per module (URS, FS, RTM, risk assessment, IQ/OQ/PQ).
-- The design source of truth is the ontology vault in `docs/ontology_vault/` (Obsidian format). Read the relevant Business Objects, Rules and Decisions there before designing anything. When Alex makes a new design decision, add a decision note in `docs/ontology_vault/08 Decisions/` in the same format as the existing ones, and update the affected objects and rules.
+- The design source of truth is the ontology vault in `docs/ontology_vault/` (Obsidian format). Read the relevant Business Objects, Rules and Decisions there before designing anything. When a project lead makes a new design decision, add a decision note in `docs/ontology_vault/08 Decisions/` in the same format as the existing ones, and update the affected objects and rules.
 
 ## Project layout: backend and front end (read this first)
 
@@ -72,7 +74,7 @@ Every grid or table where data is listed or entered must support **fill down (Ct
 
 Also standing (2026-10-12): every pick list is a **smart dropdown** (type to filter to the closest match; Down arrow opens the list; arrows and Enter pick), every **ID is a link** to its record, and every page has the small **audit-trail icon** next to its title.
 
-Also standing (Alex, 2026-10-12): **permissions grow with the system.** Every new module, feature or change must add its permissions to the controlled permission list (module > area > action), enforce them in the database (permission trigger on each new table) and on the server, show or hide the screens with `can()`, give them to the right standard groups in the seed, appear in the Permission matrix, and get rule and browser tests. Raise with Alex which groups get each new permission while designing the slice; never ship a feature that anyone can do just because no permission was defined for it.
+Also standing (Alex, 2026-10-12): **permissions grow with the system.** Every new module, feature or change must add its permissions to the controlled permission list (module > area > action), enforce them in the database (permission trigger on each new table) and on the server, show or hide the screens with `can()`, give them to the right standard groups in the seed, appear in the Permission matrix, and get rule and browser tests. Raise with a project lead which groups get each new permission while designing the slice; never ship a feature that anyone can do just because no permission was defined for it.
 
 ## Decisions already made (details in the vault decision notes, dated 2026-10-12)
 
@@ -1011,19 +1013,30 @@ Alex asked Claude in the cloud to record the module demos with Claude Code as ea
 
 A frozen copy of the whole system (program and a snapshot of Alex's data at 0.18.0, taken 2026-10-15) runs separately on port 3100 for a couple of people to try. It is in `..\lims3-demo`, next to this project folder and outside it, and has its own `data/`. Launch config: `lims3-demo`. Nothing delivered to this project reaches it. Never update, migrate or reset it unless Alex asks; refreshing it is a decision for him.
 
+## Report template designer (Edashall Konah, 2026-11-19; migration 074)
+
+- **What:** COA and Invoice templates are **designs** (fixed blocks and settings in `report_template_version.design`, jsonb) drawn by the server's own renderers (`CoaDocument`, `InvoiceDocument`) and printed by the existing Chromium. **YARG was dropped** after a spike: its no-LibreOffice engine broke Word-saved templates, LibreOffice could not be installed, and checking a PDF's text passed while the page showed a wrong symbol. A design holds no HTML, script or link, so every template keeps the COA's `data-check` read-back. Rules: `labsetup/domain/ReportDesign` (what a design may hold: header first, signature and verification last; client, sample, tests, in-progress once each; photos at most once; up to 5 text blocks; fonts, sizes and accent colours from fixed lists; the checked fields never hideable) and `ReportTemplate.checkApproval` / `checkWithdraw`. Service and routes: `labsetup/service/ReportTemplateService`, `labsetup/web/ReportTemplateController` (`/api/report-templates...`; preview with fictional data from `Specimen`, `?s=` lab). Lookups: `labsetup/repo/TemplateVersions` (the version a lab uses; `document_template_version` records which version drew an invoice PDF; a COA keeps the version id and design in its content's sections). Screens: `pages/labsetup/ReportTemplatesPage.jsx`, `ReportTemplatePage.jsx`, `TemplateDesigner.jsx`. Tests: `ReportDesignTest` (JUnit). Old templates became version 1 Effective with their layout and options; shared ones stay available at every existing lab. `default_report_template()` and `test_report_template()` were replaced in 074 (lab's own or ticked shared only).
+- **Lab separation:** a lab template belongs to one lab; no lab sees, uses or copies another lab's template.
+- **Shared templates:** a section for system administrators only, holding every shared template. Per shared template, one tick box per lab (`report_template_lab`) makes it available to that lab; only system administrators change it (audited, reason). Lab staff cannot edit a shared template; **Copy to my lab** makes a lab template (version 1 Draft, records the shared version it came from, no link afterwards).
+- **Report Designer:** new permission `reports.design` and standard group Report Designer at every lab; it edits every template of its own lab (not which labs a shared one reaches). The groups that held `reports.templates` (QA, Administrator) also get `reports.design`.
+- **Versions:** Draft, Effective, Superseded per template; the .docx stored with its SHA-256; approval signed and never by the version's author. `coa_version` and `invoice` record the template version used.
+- **Who approves:** shared templates: system administrators; lab templates: QA and General Manager.
+- **A new shared version** does not reach a lab until someone at that lab accepts it (each lab stays on its version until then).
+- **Unticking a lab** is refused while that lab's test versions or default use the template (the refusal lists them). Issued COAs never change.
+
 ## Working with two Claudes (Alex, 2026-10-13)
 
 Claude in the cloud (claude.ai) and Claude Code on Alex's laptop both edit this project. **Before starting any new slice, Claude in the cloud checks the laptop project for changes made by Claude Code (compare file times and contents with its own copy) and merges them first.** Alex will not report them. Never overwrite a laptop file without checking it has not changed since it was last delivered.
 
 **Design and Build Log (Alex, 2026-10-13):** `docs/LIMS3 Design and Build Log.md` is the living record of versions and changes. Whichever Claude builds or changes something adds an entry there (newest first: version, date, who built it, what changed and why, migrations and files, how it was checked) and updates its version table and status line; bump `package.json` to the same version. Never rewrite the other Claude's entries; add a correction line instead. Use plain status words: nothing is "validated" or "ready for use" until it has passed the Module Development Framework checkpoints.
 
-## Roadmap (build one slice at a time; design with Alex first, then build, then let him click through)
+## Roadmap (build one slice at a time; design with a project lead first, then build, then let them click through)
 
 1. Done: clients, contacts, analytes, test catalogue pricing, rush schedules, projects and quotes, audit trail.
 2. Done: sites and holidays, lab orders, samples (grid with paste and fill down), quoted-only ordering, analyte trimming at order, rush per test or for the whole order, intake dashboard (approve / not accepted with automatic email), due dates (Day 0, cutoff, business or calendar days, site time zone and holidays), Outbox.
 2.1 Done: Alex's lab order feedback (see Slice 2.1 decisions).
 3. Done: Inventory (see Slice 3 decisions). 3.1 Done: Alex's inventory feedback (see Slice 3.1 decisions). 3.2 Done: login, electronic signatures, canned reasons, molar mass (see Slice 3.2 decisions); extend signatures to each new module as it is built.
-4. Phase 1 before the Workflow Designer (Alex's decision, vault: `Decision - Phase 1 Is Finished Before the Workflow Designer`): Permissions done (see Phase 1, Permissions decisions). Equipment done (see Phase 1, Equipment decisions). Purchasing done (see Phase 1, Purchasing decisions). Phase 1 is complete. Electronic logbooks are tabled until after the Workflow Designer. Design each with Alex first; give every new table a permission trigger and add its permissions to the list.
+4. Phase 1 before the Workflow Designer (Alex's decision, vault: `Decision - Phase 1 Is Finished Before the Workflow Designer`): Permissions done (see Phase 1, Permissions decisions). Equipment done (see Phase 1, Equipment decisions). Purchasing done (see Phase 1, Purchasing decisions). Phase 1 is complete. Electronic logbooks are tabled until after the Workflow Designer. Design each with a project lead first; give every new table a permission trigger and add its permissions to the list.
 5. Workflow Designer: WD-1 done (see Workflow Designer, WD-1 decisions); WD-1.1, WD-1.2 (QC criteria per analyte) and WD-1.3 (sign-off on creation and changes) done. WD-2 chemistry execution, WD-2.1 (bench stock), WD-3 QC Review, WD-4 micro bench, WD-3.1 (step approvals) and WD-5 (analytical runs, pick or average, preliminary results, order statuses) done (see those sections; Alex reviews them as one workflow). Then reports and partial reporting (done, R-1), OOS investigation and retests (done, R-2), then stability (S-1 done, 0.17.0; S-2 done, 0.23.0); electronic logbooks (L-1 and L-2 done, 0.18.0); invoicing (I-1 done, 0.19.0), dashboards (D-1 done, 0.20.0; D-1.1 0.20.1), the matrix-driven bench, presumptive alerts and readings that are not results (0.21.0), QA testing of inventory before use (0.22.0), S-2 stability (0.23.0: amendments, cancellation, excursion assessments, issued reports); trending (0.24.0), the sensor feed (0.25.0), test packages and dated price changes (0.26.0); vendor approvals, local and corporate (0.28.0); chain of custody, receipt photos and photo reports (0.29.0), waste classifications (0.30.0), training and competency (0.31.0).
 
 ## Known issues (found during testing; Alex asked to fix these later)
@@ -1032,7 +1045,7 @@ Claude in the cloud (claude.ai) and Claude Code on Alex's laptop both edit this 
 2. **The test catalogue editor reports unsaved changes when nothing changed.** Cause: in `public/js/pages/catalog.js`, the form snapshot `orig` is taken before the form is read back from the inputs, so number/text formatting differs (e.g. 50 vs "50"). Status: fixed (the snapshot is taken after the first `refresh()` call); verified 2026-10-12. Regression test: `tests/e2e_no_native_dialogs.js` opens every catalogue test and checks none reports false unsaved changes.
 3. Wide grids scroll sideways on smaller screens (e.g. the Day 0 and Due columns on the order page). Consider tighter column widths.
 
-## Open items to raise with Alex (do not decide silently)
+## Open items to raise with a project lead (do not decide silently)
 
 - Whether 21 CFR 111 dietary supplement clients need a stricter OOS category (QA decision, Jake Teller).
 - OOS checklist wording and timelines belong to QA's OOS SOP; keep them configurable.

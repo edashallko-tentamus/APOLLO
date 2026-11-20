@@ -1,6 +1,7 @@
 package com.tentamus.lims.labsetup.domain;
 
 import com.tentamus.lims.core.web.RuleException;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -36,6 +37,21 @@ public final class ReportTemplate {
         String status = after.get("status") == null ? "Active" : after.get("status").toString();
         if (!"Active".equals(status) && truthy(after.get("is_default")))
             throw RuleException.database("The default template cannot be retired: make another one the default first");
+    }
+
+    /** Approving a version (074): only a Draft, never by someone who worked on it (made or changed it). */
+    public static void checkApproval(String status, String approverId, Set<String> authors) {
+        if (!"Draft".equals(status)) throw RuleException.database("Only a draft version can be approved");
+        if (authors.contains(approverId)) throw RuleException.database("You worked on this version: someone else approves it");
+    }
+
+    /** Taking a shared template away from a lab (074): refused while the lab uses it; what uses it is listed. */
+    public static void checkWithdraw(boolean labDefault, List<String> testsUsing) {
+        if (!labDefault && testsUsing.isEmpty()) return;
+        List<String> what = new java.util.ArrayList<>();
+        if (labDefault) what.add("it is the lab's default");
+        if (!testsUsing.isEmpty()) what.add("these tests print with it: " + String.join(", ", testsUsing));
+        throw RuleException.database("The lab still uses this template (" + String.join("; ", what) + "). Change those first");
     }
 
     private static boolean truthy(Object v) { return Boolean.TRUE.equals(v) || "true".equals(String.valueOf(v)) || "t".equals(String.valueOf(v)); }

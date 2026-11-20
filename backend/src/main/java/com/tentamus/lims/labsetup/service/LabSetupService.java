@@ -2,12 +2,9 @@ package com.tentamus.lims.labsetup.service;
 
 import static com.tentamus.lims.core.web.Answers.*;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tentamus.lims.core.access.AccessPolicy;
-import com.tentamus.lims.core.access.UserAccess;
 import com.tentamus.lims.core.db.Db;
-import com.tentamus.lims.core.db.RecordWriter;
 import com.tentamus.lims.core.db.UnitOfWork;
 import com.tentamus.lims.core.excel.Js;
 import com.tentamus.lims.core.files.DocumentStore;
@@ -15,7 +12,6 @@ import com.tentamus.lims.core.web.RequestContext;
 import com.tentamus.lims.core.web.RuleException;
 import com.tentamus.lims.labsetup.domain.LabImage;
 import com.tentamus.lims.labsetup.domain.ReportTemplate;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,12 +19,11 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * Lab setup: the product name, each lab's images (logo, small logo, accreditation mark) and the report templates. The
+ * Lab setup: the product name, each lab's images (logo, small logo, accreditation mark) (report templates: ReportTemplateService). The
  * rules are the domain's (labsetup/domain, migration 071); who may change what is checked here (migration 072). The public product name is read by the sign-in page (publicSettings).
  */
 @Service
 public class LabSetupService {
-    private static final RecordWriter TEMPLATES = new RecordWriter("report_template", List.of("template_name", "description", "layout", "site_id", "is_default", "options", "status"));
     private final Db db;
     private final UnitOfWork uow;
     private final AccessPolicy access;
@@ -113,71 +108,5 @@ public class LabSetupService {
         String kind = query.get("kind") == null || query.get("kind").isEmpty() ? "Small logo" : query.get("kind");
         Map<String, Object> m = db.one("SELECT id FROM site_media WHERE site_id = ?::uuid AND kind = ? AND status = 'Active'", siteId, kind);
         return map("id", m == null ? null : m.get("id"));
-    }
-
-    // ---------------------------------------------------------------- report templates
-    public Map<String, Object> templates(RequestContext ctx) {
-        List<Map<String, Object>> labs = db.rows("SELECT id, site_code FROM lab_site WHERE status = 'Active' ORDER BY site_code");
-        UserAccess a = access.load(ctx.userId());
-        Map<String, Object> can = new LinkedHashMap<>();
-        for (Map<String, Object> l : labs) can.put((String) l.get("id"), a.can("reports.templates", (String) l.get("id")));
-        Map<String, Object> me = db.one("SELECT is_admin FROM app_user WHERE id = ?::uuid", ctx.userId());
-        return map("rows", db.rows("""
-                SELECT rt.*, rt.status::text AS status, s.site_code, (SELECT count(*) FROM test_version tv WHERE tv.report_template_id = rt.id)::int AS used_by
-                  FROM report_template rt LEFT JOIN lab_site s ON s.id = rt.site_id ORDER BY rt.site_id NULLS FIRST, rt.template_code"""),
-            "labs", labs, "can", can, "sysadmin", me != null && Js.truthy(me.get("is_admin")), "layouts", List.of("Standard COA", "COA with 1 photo", "COA with 2 photos"));
-    }
-
-    /** Only what was sent is changed; one default per lab (the old default cleared first). */
-    public List<Map<String, Object>> saveTemplates(RequestContext ctx, Map<String, Object> body) {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (Map<String, Object> x : rows(body, "rows")) {
-            Map<String, Object> o = new LinkedHashMap<>(x);
-            if (o.get("options") instanceof Map<?, ?> || o.get("options") instanceof List<?>) {
-                try { o.put("options", json.writeValueAsString(o.get("options"))); } catch (JsonProcessingException e) { throw new IllegalArgumentException(e); }
-            }
-            list.add(o);
-        }
-        return uow.run(ctx.orReason("Report templates changed"), d -> {
-            for (Map<String, Object> x : list) {
-                if (!Js.truthy(x.get("id")) || !TEMPLATES.pick(x).isEmpty()) {
-                    Map<String, Object> stored = Js.truthy(x.get("id")) ? d.one("SELECT site_id FROM report_template WHERE id = ?::uuid", x.get("id")) : null;
-                    if (stored != null || !Js.truthy(x.get("id"))) mayKeepTemplates(ctx, stored != null ? stored.get("site_id") : Js.orNull(x.get("site_id")));
-                }
-            }
-            for (Map<String, Object> x : list) {
-                if (!(Boolean.TRUE.equals(x.get("is_default")) || "true".equals(x.get("is_default")))) continue;
-                Object site = Js.truthy(x.get("id")) ? d.one("SELECT site_id FROM report_template WHERE id = ?::uuid", x.get("id")).get("site_id") : Js.orNull(x.get("site_id"));
-                d.update("UPDATE report_template SET is_default = false WHERE is_default AND site_id IS NOT DISTINCT FROM ?::uuid AND (?::uuid IS NULL OR id <> ?::uuid)",
-                    site, Js.orNull(x.get("id")), Js.orNull(x.get("id")));
-            }
-            List<Map<String, Object>> rows = new ArrayList<>();
-            for (Map<String, Object> x : list) {
-                Map<String, Object> r = new LinkedHashMap<>(x);
-                if (Js.truthy(r.get("id"))) r.remove("site_id");
-                Map<String, Object> before = Js.truthy(r.get("id")) ? d.one("SELECT * FROM report_template WHERE id = ?::uuid", r.get("id")) : null;
-                Map<String, Object> after = new LinkedHashMap<>(before == null ? Map.of() : before);
-                after.putAll(TEMPLATES.pick(r));
-                after.put("options", parsed(after.get("options")));
-                ReportTemplate.check(before, after);
-                rows.add(r);
-            }
-            return TEMPLATES.upsert(d, rows, Map.of());
-        });
-    }
-
-    /** Templates for every lab are a system administrator's, a lab's need reports.templates there (report_template_rules until 072). */
-    private void mayKeepTemplates(RequestContext ctx, Object site) {
-        if (site == null) access.requireSystemAdmin(ctx, "Templates for every lab are kept by a system administrator; make one for your lab instead");
-        else access.requireAt(ctx, "reports.templates", site.toString());
-    }
-
-    /** Template options as plain values (a Map for a JSON object), for the template check; text that is not JSON is left to the database. */
-    private Object parsed(Object options) {
-        try {
-            if (options instanceof String t) return json.readValue(t, Object.class);
-            if (options instanceof com.fasterxml.jackson.databind.JsonNode n) return json.convertValue(n, Object.class);
-        } catch (JsonProcessingException e) { return null; }
-        return options;
     }
 }

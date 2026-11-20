@@ -19,7 +19,10 @@ public record TestVersion(String id, String testId, int versionNo, String status
     public static final String DRAFT = "Draft", EFFECTIVE = "Effective", SUPERSEDED = "Superseded";
 
     /** A report template as a version's choice needs it. */
-    public record Template(String id, String name, String siteId, String status) {}
+    public record Template(String id, String name, String siteId, String status, java.util.Set<String> sharedWith) {
+        /** sharedWith: the labs a shared template is ticked for (migration 074); null when not looked up. */
+        public Template(String id, String name, String siteId, String status) { this(id, name, siteId, status, null); }
+    }
 
     public static TestVersion of(Map<String, Object> row) {
         if (row == null) return null;
@@ -58,6 +61,8 @@ public record TestVersion(String id, String testId, int versionNo, String status
                 throw RuleException.database("Report template " + template.name() + " is retired");
             if (template.siteId() != null && !template.siteId().equals(testSite))
                 throw RuleException.database("Report template " + template.name() + " belongs to another lab");
+            if (template.siteId() == null && template.sharedWith() != null && !template.sharedWith().contains(testSite))
+                throw RuleException.database("Report template " + template.name() + " is not available at this lab");
         }
         return new LinkedHashMap<>(changes);
     }

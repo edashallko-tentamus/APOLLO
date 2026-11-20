@@ -5,3 +5,16 @@
 .mslot .pic { flex: 1; display: grid; place-items: center; background: repeating-linear-gradient(45deg, #f6f8f9, #f6f8f9 8px, #eef2f4 8px, #eef2f4 16px); border-radius: 8px; min-height: 80px; color: var(--muted); font-size: 12px; }
 .mslot.has .pic { background: #fff; } .mslot .pic img { max-width: 100%; max-height: 90px; object-fit: contain; }
 .mslot .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+/* report template designer (migration 074) */
+.rt-design { display: flex; flex-direction: column; gap: 10px; }
+.rt-row { display: flex; flex-wrap: wrap; gap: 14px; }
+.rt-row .field { min-width: 180px; flex: 1 1 180px; }
+.rt-block { border: 1px solid #d5dcd8; border-radius: 6px; padding: 8px 10px; background: #fff; }
+.rt-block.fixed { background: #f4f6f5; }
+.rt-bhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rt-bbtn { margin-left: auto; display: flex; gap: 4px; }
+.rt-ticks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.rt-swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.rt-sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #9aa5a0; cursor: pointer; padding: 0; }
+.rt-sw.on { box-shadow: 0 0 0 3px #1d2329; }
+.rt-narrow { max-width: 160px; margin-top: 4px; }

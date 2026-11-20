@@ -10,7 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/** Lab setup (product name, lab images, report templates): same paths and answers as the Node backend. */
+/** Lab setup (product name, lab images, report templates are ReportTemplateController): same paths and answers as the Node backend. */
 @RestController
 public class LabSetupController {
     private final LabSetupService setup;
@@ -44,12 +44,6 @@ public class LabSetupController {
 
     @GetMapping("/api/sites/{id}/media-current")
     public Object current(@PathVariable String id, @RequestParam Map<String, String> q) { return setup.current(id, q); }
-
-    @GetMapping("/api/report-templates")
-    public Object templates(HttpServletRequest req) { return setup.templates(ctx(req, null)); }
-
-    @PostMapping("/api/report-templates")
-    public Object saveTemplates(HttpServletRequest req, @RequestBody(required = false) Map<String, Object> b) { return setup.saveTemplates(ctx(req, b), body(b)); }
 
     private static RequestContext ctx(HttpServletRequest req, Map<String, Object> body) { return RequestContext.of(req, body); }
 

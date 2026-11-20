@@ -139,7 +139,7 @@ public class CoaService {
             sampleId));
         out.put("changes", db.rows("""
             SELECT a.changed_at, a.changed_fields, a.reason, u.full_name FROM audit_log a JOIN app_user u ON u.id = a.changed_by
-             WHERE a.table_name = 'sample' AND a.record_id = ?::uuid AND a.action = 'UPDATE' AND NOT a.changed_fields ? 'logged_at' ORDER BY a.changed_at DESC LIMIT 20""", sampleId));
+             WHERE a.table_name = 'sample' AND a.record_id = ?::uuid AND a.action = 'UPDATE' AND NOT jsonb_exists(a.changed_fields, 'logged_at') ORDER BY a.changed_at DESC LIMIT 20""", sampleId));
         out.put("batches", db.rows("""
             SELECT DISTINCT b.id, b.batch_code, b.status::text AS status, t.test_name FROM batch_entry e JOIN test_batch b ON b.id = e.batch_id
               JOIN requested_test rt ON rt.id = e.requested_test_id JOIN test t ON t.id = rt.test_id WHERE rt.sample_id = ?::uuid ORDER BY b.batch_code""", sampleId));
